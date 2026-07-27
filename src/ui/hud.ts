@@ -37,7 +37,6 @@ export class Hud {
       <div id="orders"></div>
       <div id="log"></div>
       <div id="notice"></div>
-      <div id="help" class="panel"></div>
       <div id="banner"><div class="card"></div></div>
     `;
     this.stats = root.querySelector("#stats")!;
@@ -46,7 +45,6 @@ export class Hud {
     this.notice = root.querySelector("#notice")!;
     this.banner = root.querySelector("#banner")!;
     this.connectionNode = this.stats.querySelector(".connection");
-    root.querySelector("#help")!.innerHTML = HELP;
   }
 
   update(world: World, connection?: Connection): void {
@@ -156,8 +154,7 @@ export class Hud {
     const html = `
       <h1>Day ${world.day} closed</h1>
       <p>$${world.money} earned &middot; ${world.served} served &middot; ${world.lost} walked out</p>
-      <p>Face an appliance and press <kbd>Space</kbd> / <kbd>A</kbd> to pick it up, again to drop it.</p>
-      <p>Press <kbd>Enter</kbd> / <kbd>Y</kbd> to open for day ${world.day + 1}, or <kbd>Esc</kbd> / <kbd>Start</kbd> for the menu.</p>
+      <p>Rearrange the kitchen, then open for day ${world.day + 1}.</p>
     `;
     if (card.innerHTML !== html) card.innerHTML = html;
   }
@@ -169,9 +166,3 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-const HELP = `
-  <div><b>P1</b> <kbd>WASD</kbd> move &middot; <kbd>Space</kbd> grab/place &middot; <kbd>F</kbd> hold to chop &middot; <kbd>Esc</kbd> menu</div>
-  <div><b>P2</b> <kbd>&larr;&uarr;&darr;&rarr;</kbd> move &middot; <kbd>,</kbd> grab/place &middot; <kbd>.</kbd> hold to chop</div>
-  <div><b>Gamepad</b> stick move &middot; <kbd>A</kbd> grab/place &middot; <kbd>X</kbd> hold to chop &middot; <kbd>Start</kbd> menu &mdash; press any button to join</div>
-  <div><kbd>P</kbd> add a local player &middot; <kbd>Shift</kbd>+<kbd>P</kbd> remove one</div>
-`;

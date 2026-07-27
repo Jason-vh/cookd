@@ -111,6 +111,18 @@ else join.show();
 
 let previousNav: MenuNav = { up: false, down: false, confirm: false, menu: false, back: false };
 
+/**
+ * Is the menu key held down *right now*, tracked across the open/closed
+ * boundary.
+ *
+ * Opening and closing used to use separate edge detectors — one against the
+ * menu's own nav state, one against gameplay input — and holding `Esc` for two
+ * frames closed the menu and immediately reopened it. One key, one latch: it
+ * has to be released before it can act again, whichever side of the boundary
+ * we are on.
+ */
+let menuKeyDown = false;
+
 function openMenu(): void {
   menu.show(game.world);
   previousNav = { ...previousNav, menu: true, confirm: true, back: true };
@@ -175,10 +187,13 @@ function frame(now: number): void {
 
   if (menu.isOpen) {
     const nav = input.pollMenu();
-    if ((nav.menu && !previousNav.menu) || (nav.back && !previousNav.back)) closeMenu();
+    const closing = nav.menu || nav.back;
+    if (closing && !menuKeyDown) closeMenu();
     else if (nav.up && !previousNav.up) menu.move(-1);
     else if (nav.down && !previousNav.down) menu.move(1);
     else if (nav.confirm && !previousNav.confirm) runMenuAction();
+    // Carried across the open/closed boundary — see `menuKeyDown`.
+    menuKeyDown = closing;
     previousNav = nav;
     menu.sync(game.world);
   }
@@ -197,10 +212,13 @@ function frame(now: number): void {
     if (menu.isOpen || menuWasOpen) return idleInputs();
 
     const polled = input.poll(game.localIds);
-    if (game.localIds.some((id) => polled[id]?.menu)) {
+    const pressed = game.localIds.some((id) => polled[id]?.menu);
+    if (pressed && !menuKeyDown) {
+      menuKeyDown = true;
       openMenu();
       return idleInputs();
     }
+    menuKeyDown = pressed;
     return polled;
   };
 

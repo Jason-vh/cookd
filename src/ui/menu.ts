@@ -32,11 +32,6 @@ export class PauseMenu {
       <div class="card">
         <h1 data-title>Paused</h1>
         <ul data-list></ul>
-        <div class="legend">
-          <div><kbd>&uarr;</kbd><kbd>&darr;</kbd> / stick &middot; select</div>
-          <div><kbd>Space</kbd> / <kbd>A</kbd> &middot; confirm</div>
-          <div><kbd>Esc</kbd> / <kbd>Start</kbd> / <kbd>B</kbd> &middot; close</div>
-        </div>
       </div>
     `;
     this.title = root.querySelector("[data-title]")!;

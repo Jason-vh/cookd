@@ -206,21 +206,7 @@ body {
 
 /* --- controls help -------------------------------------------------------- */
 
-#help {
-  grid-column: 1 / span 2;
-  grid-row: 3;
-  justify-self: start;
-  font-size: 12px;
-  color: var(--dim);
-  line-height: 1.7;
-  /* Fades back once players have had a chance to read it. */
-  animation: help-fade 1s ease-out 14s forwards;
-}
 
-#help:hover {
-  animation: none;
-  opacity: 1;
-}
 
 @keyframes help-fade {
   to {
@@ -228,17 +214,6 @@ body {
   }
 }
 
-kbd {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  padding: 1px 6px;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text);
-}
 
 /* --- build-phase banner --------------------------------------------------- */
 
@@ -348,15 +323,6 @@ kbd {
   opacity: 0.75;
 }
 
-#menu .legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--dim);
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-}
 
 
 #notice {

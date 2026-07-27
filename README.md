@@ -527,6 +527,11 @@ same.
   chefs, and there was no way to remove them short of everyone leaving. Anything
   that *creates* something should need an actual act, and anything that creates
   should have an undo (`Shift`+`P`).
+- **One key, one latch.** Opening and closing the menu used separate edge
+  detectors — one against the menu's own nav state, one against gameplay
+  input — so *holding* `Esc` closed the menu and immediately reopened it. Any
+  control that toggles across a state boundary needs a single release-latch
+  spanning both sides, not an edge detector on each.
 - **Poll input once per _tick_, never once per frame.** A frame can legitimately
   run zero ticks (120Hz display, 60Hz simulation), and `InputManager` clears its
   "pressed since last poll" buffer every time it is asked — so polling per frame
