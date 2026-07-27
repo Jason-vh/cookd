@@ -76,6 +76,9 @@ export class InputManager {
   private pressedSincePoll = new Set<string>();
   /** Gamepad index -> the player id it drives. */
   private padToPlayer = new Map<number, number>();
+  /** A join has been asked for and not yet answered. See `bindGamepads`. */
+  private awaitingSeat = false;
+  private lastLocalCount = -1;
   private inputs: Inputs = {};
   /** Set for one poll when the "add local player" key is pressed. */
   private addPlayerRequested = false;
@@ -127,6 +130,12 @@ export class InputManager {
    * different chefs.
    */
   bindGamepads(local: number[], addPlayer: () => number | null): void {
+    // The roster changed, so any request we were waiting on has been answered.
+    if (local.length !== this.lastLocalCount) {
+      this.lastLocalCount = local.length;
+      this.awaitingSeat = false;
+    }
+
     const pads = navigator.getGamepads?.() ?? [];
     for (const pad of pads) {
       if (!pad || this.padToPlayer.has(pad.index)) continue;
@@ -141,13 +150,21 @@ export class InputManager {
       }
 
       // Creating a *new* chef needs an actual press. Merely being plugged in is
-      // not a request to play: plug in three controllers and you would arrive
-      // to four cooks standing in the kitchen, three of them nobody's. This is
-      // also what the on-screen help has always promised — "press any button
-      // to join".
+      // not a request to play, and it is what the on-screen help has always
+      // promised — "press any button to join".
       if (!isPadActive(pad)) continue;
+
+      // Online, joining is a *request*: the server owns player ids, so
+      // `addPlayer` returns null and the answer arrives a round trip later.
+      // Until then this pad still has no seat, so without this latch it asks
+      // again on every single frame — about eleven times across a 180ms link,
+      // each one creating a chef. One controller was enough to fill a kitchen.
+      if (this.awaitingSeat) continue;
       const id = addPlayer();
-      if (id === null) continue;
+      if (id === null) {
+        this.awaitingSeat = true;
+        continue;
+      }
       this.padToPlayer.set(pad.index, id);
     }
   }

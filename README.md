@@ -47,11 +47,17 @@ the server too if you want online play.
 **Press any button to join.** The first pad picks up player 1; any further pad
 creates a new chef when *it* is used (up to 4).
 
-That last part was assumed rather than checked, and it was wrong. Browsers do
-hide gamepads until one is touched, but touching one can reveal every pad
-connected — so a player who opened the game with three controllers plugged in
-arrived to four cooks, three of them nobody's. Being plugged in is not a request
-to play; creating a chef now takes real input from that specific pad.
+A single controller once produced **four** chefs, and the reason is worth
+keeping. Online, `addLocalPlayer` is a *request*: the server owns player ids, so
+it returns nothing and the answer arrives a round trip later. Until then the pad
+still had no seat, so the binding code asked again — on every frame, about
+eleven times across a 180ms link, each one creating a cook. It was capped only
+by the four-players-per-connection limit.
+
+Offline it never happened, because a local `Host` hands back an id immediately.
+That is the shape of this whole class of bug: **anything that becomes
+asynchronous when it goes online needs a latch, or the frame loop will do it as
+many times as latency allows.**
 
 ### How to play
 
@@ -522,11 +528,15 @@ same.
 
 ### Gotchas discovered the hard way
 
-- **A connected gamepad is not a player.** Binding a seat on connection rather
-  than on a button press meant three controllers on the desk became three extra
-  chefs, and there was no way to remove them short of everyone leaving. Anything
-  that *creates* something should need an actual act, and anything that creates
-  should have an undo (`Shift`+`P`).
+- **A request that takes a round trip needs a latch.** Asking the server for a
+  new player returned nothing until the answer came back, so the frame loop
+  asked again, and again — one controller filled a four-player kitchen in under
+  a second. The offline path returned an id immediately and never showed it.
+  Test the *online* shape of anything that changes shape online.
+- **A connected gamepad is not a player either.** Binding a seat on connection
+  rather than on a button press would hand a chef to a controller nobody had
+  touched. Anything that creates should need an actual act — and have an undo
+  (`Shift`+`P`).
 - **One key, one latch.** Opening and closing the menu used separate edge
   detectors — one against the menu's own nav state, one against gameplay
   input — so *holding* `Esc` closed the menu and immediately reopened it. Any
