@@ -41,11 +41,17 @@ the server too if you want online play.
 | Open the next day | `Y` (north) | `Enter` | `Enter` |
 | Pause menu | `Start` | `Esc` | `Esc` |
 | Close the menu | `B` (east) or `Start` | `Esc` or `Backspace` | — |
-| Add a local player | — | `P` | — |
+| Add a local player | press any button | `P` | — |
+| Remove a local player | — | `Shift`+`P` | — |
 
-Gamepads are only visible to the browser after a button press — **press any
-button to join**. The first pad joins player 1; each additional pad creates a
-new chef (up to 4).
+**Press any button to join.** The first pad picks up player 1; any further pad
+creates a new chef when *it* is used (up to 4).
+
+That last part was assumed rather than checked, and it was wrong. Browsers do
+hide gamepads until one is touched, but touching one can reveal every pad
+connected — so a player who opened the game with three controllers plugged in
+arrived to four cooks, three of them nobody's. Being plugged in is not a request
+to play; creating a chef now takes real input from that specific pad.
 
 ### How to play
 
@@ -516,6 +522,11 @@ same.
 
 ### Gotchas discovered the hard way
 
+- **A connected gamepad is not a player.** Binding a seat on connection rather
+  than on a button press meant three controllers on the desk became three extra
+  chefs, and there was no way to remove them short of everyone leaving. Anything
+  that *creates* something should need an actual act, and anything that creates
+  should have an undo (`Shift`+`P`).
 - **Poll input once per _tick_, never once per frame.** A frame can legitimately
   run zero ticks (120Hz display, 60Hz simulation), and `InputManager` clears its
   "pressed since last poll" buffer every time it is asked — so polling per frame
