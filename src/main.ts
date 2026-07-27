@@ -167,6 +167,11 @@ function frame(now: number): void {
   input.bindGamepads(game.localIds, () => game.addLocalPlayer(identity.name));
   input.releaseGamepads(game.localIds);
   if (input.consumeAddPlayerRequest()) game.addLocalPlayer(identity.name);
+  if (input.consumeDropPlayerRequest() && game.localIds.length > 1) {
+    // Never drop the last one — you would be left watching a kitchen you
+    // cannot reach into.
+    game.removeLocalPlayer(game.localIds[game.localIds.length - 1]!);
+  }
 
   if (menu.isOpen) {
     const nav = input.pollMenu();

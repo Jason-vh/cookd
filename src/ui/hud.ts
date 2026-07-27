@@ -173,5 +173,5 @@ const HELP = `
   <div><b>P1</b> <kbd>WASD</kbd> move &middot; <kbd>Space</kbd> grab/place &middot; <kbd>F</kbd> hold to chop &middot; <kbd>Esc</kbd> menu</div>
   <div><b>P2</b> <kbd>&larr;&uarr;&darr;&rarr;</kbd> move &middot; <kbd>,</kbd> grab/place &middot; <kbd>.</kbd> hold to chop</div>
   <div><b>Gamepad</b> stick move &middot; <kbd>A</kbd> grab/place &middot; <kbd>X</kbd> hold to chop &middot; <kbd>Start</kbd> menu &mdash; press any button to join</div>
-  <div><kbd>P</kbd> add a local player</div>
+  <div><kbd>P</kbd> add a local player &middot; <kbd>Shift</kbd>+<kbd>P</kbd> remove one</div>
 `;

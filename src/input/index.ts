@@ -79,10 +79,19 @@ export class InputManager {
   private inputs: Inputs = {};
   /** Set for one poll when the "add local player" key is pressed. */
   private addPlayerRequested = false;
+  /** Set for one poll when the "drop a local player" key is pressed. */
+  private dropPlayerRequested = false;
 
   constructor() {
     window.addEventListener("keydown", (e) => {
-      if (e.code === "KeyP" && !e.repeat) this.addPlayerRequested = true;
+      if (e.code === "KeyP" && !e.repeat) {
+        // Shift+P drops the last one. Adding a player needed an undo: a stray
+        // press, or a controller claiming a seat you did not mean to fill,
+        // otherwise left a chef standing in the kitchen with no way to remove
+        // it short of everyone reloading.
+        if (e.shiftKey) this.dropPlayerRequested = true;
+        else this.addPlayerRequested = true;
+      }
       this.keys.add(e.code);
       this.pressedSincePoll.add(e.code);
       if (SWALLOWED.has(e.code)) e.preventDefault();
@@ -95,6 +104,12 @@ export class InputManager {
   }
 
   /** True once per press of the "add a keyboard player" key. */
+  consumeDropPlayerRequest(): boolean {
+    const requested = this.dropPlayerRequested;
+    this.dropPlayerRequested = false;
+    return requested;
+  }
+
   consumeAddPlayerRequest(): boolean {
     const requested = this.addPlayerRequested;
     this.addPlayerRequested = false;
@@ -117,7 +132,21 @@ export class InputManager {
       if (!pad || this.padToPlayer.has(pad.index)) continue;
       const taken = new Set(this.padToPlayer.values());
       const free = local.find((id) => !taken.has(id));
-      const id = free ?? addPlayer();
+
+      // A pad with a seat going spare takes it silently — it just picks up a
+      // chef that already exists.
+      if (free !== undefined) {
+        this.padToPlayer.set(pad.index, free);
+        continue;
+      }
+
+      // Creating a *new* chef needs an actual press. Merely being plugged in is
+      // not a request to play: plug in three controllers and you would arrive
+      // to four cooks standing in the kitchen, three of them nobody's. This is
+      // also what the on-screen help has always promised — "press any button
+      // to join".
+      if (!isPadActive(pad)) continue;
+      const id = addPlayer();
       if (id === null) continue;
       this.padToPlayer.set(pad.index, id);
     }
@@ -240,6 +269,12 @@ export class InputManager {
  * Quantised so identical stick positions produce identical floats on every
  * machine — a prerequisite for deterministic lockstep netcode later.
  */
+/** True when a pad is being *used*, not merely connected. */
+function isPadActive(pad: Gamepad): boolean {
+  if (pad.buttons.some((button) => button.pressed)) return true;
+  return pad.axes.some((axis) => Math.abs(axis) > 0.5);
+}
+
 function clampMove(input: PlayerInput): void {
   const mag = Math.hypot(input.move.x, input.move.y);
   if (mag > 1) {
