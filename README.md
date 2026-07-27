@@ -528,6 +528,13 @@ same.
 
 ### Gotchas discovered the hard way
 
+- **Never hand two worlds the same arrays.** The client applies each frame to
+  the world it *draws* and the world it *predicts* in. Assigning `frame.orders`
+  to both made them the same array, and the prediction world's `step()` — which
+  spawns orders, logs events and queues effects — wrote straight into what the
+  HUD was rendering. Order tickets flashed into the list and vanished a frame
+  later. It got worse with latency, because more unacknowledged input means more
+  ticks replayed, so more chances to invent one. `applyFrame` copies now.
 - **A request that takes a round trip needs a latch.** Asking the server for a
   new player returned nothing until the answer came back, so the frame loop
   asked again, and again — one controller filled a four-player kitchen in under

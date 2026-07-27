@@ -220,9 +220,15 @@ export function applyFrame(world: World, frame: Frame): void {
   world.money = frame.money;
   world.served = frame.served;
   world.lost = frame.lost;
-  world.orders = frame.orders;
-  world.events = frame.events;
-  world.effects = frame.effects;
+  // Copied, never aliased. One frame is applied to two worlds — the one being
+  // drawn and the one predicting local chefs — and the prediction world's
+  // `step()` spawns orders, logs events and queues effects. Sharing the arrays
+  // let it write straight into what the HUD was rendering: order tickets
+  // flashed into the list and vanished a frame later, worse the higher the
+  // latency, because more unacknowledged input means more ticks replayed.
+  world.orders = frame.orders.map((order) => ({ ...order }));
+  world.events = frame.events.map((event) => ({ ...event }));
+  world.effects = frame.effects.map((effect) => ({ ...effect }));
 
   // Absent from the frame means idle, so everything is cleared first and the
   // busy ones are painted back on top.

@@ -155,6 +155,7 @@ export class Hud {
       <h1>Day ${world.day} closed</h1>
       <p>$${world.money} earned &middot; ${world.served} served &middot; ${world.lost} walked out</p>
       <p>Rearrange the kitchen, then open for day ${world.day + 1}.</p>
+      <p class="banner-keys"><span>Enter</span> <span>Y</span> or the pause menu</p>
     `;
     if (card.innerHTML !== html) card.innerHTML = html;
   }

@@ -327,3 +327,64 @@ describe("what is worth saving", () => {
     expect(saveSignature(a.world)).toBe(saveSignature(b.world));
   });
 });
+
+describe("frames must not be shared between worlds", () => {
+  /**
+   * The client applies each frame to *two* worlds: the one it draws, and the
+   * one it predicts its own chefs in. Handing both the same arrays meant the
+   * prediction world's `step()` — which spawns orders, logs events and queues
+   * effects — was writing straight into what the HUD was rendering.
+   *
+   * The symptom was an order ticket flashing into the list and vanishing on the
+   * next frame, and it got worse with latency: more unacknowledged input means
+   * more prediction ticks replayed, so more chances to invent an order.
+   */
+  test("applying one frame to two worlds does not alias their state", () => {
+    const host = new Host();
+    host.join("Ann");
+    host.world.orders.push({ id: 1, recipeId: "salad", remaining: 30, patience: 60 });
+
+    const frame = encodeFrame(host.world, host.acks);
+    const drawn = new Host().world;
+    const predicted = new Host().world;
+    applyLayout(drawn, encodeLayout(host.world));
+    applyLayout(predicted, encodeLayout(host.world));
+    applyFrame(drawn, frame);
+    applyFrame(predicted, frame);
+
+    const before = {
+      orders: drawn.orders.length,
+      events: drawn.events.length,
+      effects: drawn.effects.length,
+    };
+
+    // Whatever the prediction world does to itself must stay there.
+    predicted.orders.push({ id: 2, recipeId: "fries", remaining: 10, patience: 55 });
+    predicted.events.push({ text: "speculative", ttl: 1 });
+    predicted.effects.push({ id: 900, ttl: 1, kind: "served", playerId: 0, amount: 99 });
+
+    expect(drawn.orders.length).toBe(before.orders);
+    expect(drawn.events.length).toBe(before.events);
+    expect(drawn.effects.length).toBe(before.effects);
+  });
+
+  test("a predicted tick cannot invent an order in the world being drawn", () => {
+    const host = new Host();
+    const id = host.join("Ann");
+    const frame = encodeFrame(host.world, host.acks);
+
+    const drawn = new Host().world;
+    const predicted = new Host();
+    applyLayout(drawn, encodeLayout(host.world));
+    applyFrame(drawn, frame);
+    applyFrame(predicted.world, frame);
+
+    // Replay a second of input, exactly as reconciliation does on a slow link.
+    predicted.world.nextOrderIn = 0.05;
+    for (let i = 0; i < 60; i++) predicted.advance(1 / 60);
+
+    expect(predicted.world.orders.length).toBeGreaterThan(0);
+    expect(drawn.orders.length).toBe(0);
+    void id;
+  });
+});
