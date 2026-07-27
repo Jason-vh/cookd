@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cookd-production
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DEPLOY_DIR: /home/exedev/apps/cookd
+
+jobs:
+  deploy:
+    name: Deploy to exe.dev VM
+    runs-on: [self-hosted, linux, cookd-prod]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Write production env file
+        run: |
+          cat > .env.production <<EOF
+          COOKD_APP_HOST_PORT=3010
+          COMPOSE_PROJECT_NAME=cookd
+          EOF
+
+      - name: Copy checkout to stable deploy directory
+        run: |
+          rm -rf "$DEPLOY_DIR.tmp"
+          mkdir -p "$DEPLOY_DIR.tmp"
+          cp -a . "$DEPLOY_DIR.tmp/"
+          rm -rf "$DEPLOY_DIR"
+          mv "$DEPLOY_DIR.tmp" "$DEPLOY_DIR"
+
+      - name: Deploy with Docker Compose
+        run: |
+          cd "$DEPLOY_DIR"
+          docker compose --env-file .env.production up -d --build --remove-orphans
+          docker compose --env-file .env.production ps
+
+      - name: Reload Caddy (picks up deploy/caddy.snippet)
+        run: |
+          sudo /usr/bin/caddy validate --config /etc/caddy/Caddyfile
+          sudo /usr/bin/systemctl reload caddy
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3010/health > /dev/null; then
+              echo "cookd is up"
+              curl -fsS http://127.0.0.1:3010/health
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "cookd did not come up in 20s" >&2
+          cd "$DEPLOY_DIR" && docker compose --env-file .env.production logs --tail=50
+          exit 1

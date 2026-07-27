@@ -1,0 +1,480 @@
+/**
+ * HUD styling, matched to the "soft miniature diorama" art direction:
+ * warm-dark translucent panels, generous rounding, soft shadows, and colour
+ * reserved for information that changes (timers, money, urgency).
+ */
+:root {
+  --panel: rgba(30, 25, 19, 0.76);
+  --panel-solid: rgba(36, 30, 23, 0.93);
+  --border: rgba(255, 255, 255, 0.09);
+  --shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+  --text: #f5efe4;
+  --dim: #b1a695;
+  --good: #8fc47f;
+  --warn: #e6c069;
+  --bad: #cb6a4c;
+  --money: #edc47e;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #23201a;
+  font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Avenir Next", system-ui, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px) saturate(1.2);
+}
+
+/* --- stats ---------------------------------------------------------------- */
+
+#stats {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  display: flex;
+  gap: 22px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+
+#stats .big {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+#stats [data-money] {
+  color: var(--money);
+}
+
+#stats [data-lost] {
+  color: var(--bad);
+}
+
+#stats .label {
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: block;
+  margin-bottom: 1px;
+}
+
+/* --- order tickets -------------------------------------------------------- */
+
+#orders {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  justify-self: end;
+  width: 258px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.order {
+  position: relative;
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px 10px 15px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: ticket-in 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+
+/* Urgency accent down the left edge, so a glance is enough. */
+.order::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent, var(--good));
+}
+
+@keyframes ticket-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px) scale(0.96);
+  }
+}
+
+.order .name {
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.order .name span:last-child {
+  color: var(--money);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.order .steps {
+  color: var(--dim);
+  font-size: 11px;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.order .bar {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.order .bar > div {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent, var(--good));
+  transition: width 0.12s linear;
+}
+
+/* --- event log ------------------------------------------------------------ */
+
+#log {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: end;
+  justify-self: start;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dim);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+}
+
+#log > div {
+  animation: log-in 0.2s ease-out;
+}
+
+@keyframes log-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* --- controls help -------------------------------------------------------- */
+
+#help {
+  grid-column: 1 / span 2;
+  grid-row: 3;
+  justify-self: start;
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.7;
+  /* Fades back once players have had a chance to read it. */
+  animation: help-fade 1s ease-out 14s forwards;
+}
+
+#help:hover {
+  animation: none;
+  opacity: 1;
+}
+
+@keyframes help-fade {
+  to {
+    opacity: 0.22;
+  }
+}
+
+kbd {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* --- build-phase banner --------------------------------------------------- */
+
+#banner {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: start center;
+  padding-top: 88px;
+  pointer-events: none;
+}
+
+#banner.show {
+  display: grid;
+}
+
+#banner .card {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 22px 34px;
+  text-align: center;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  animation: ticket-in 0.35s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+
+#banner h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+#banner p {
+  margin: 5px 0;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+/* --- pause menu ----------------------------------------------------------- */
+
+#menu {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  background: rgba(20, 16, 12, 0.45);
+  backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+
+#menu.show {
+  display: grid;
+}
+
+#menu .card {
+  min-width: 340px;
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px 26px 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  animation: ticket-in 0.22s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+
+#menu h1 {
+  margin: 0 0 16px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+#menu ul {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#menu li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+#menu li.selected {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+#menu li em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--dim);
+  opacity: 0.75;
+}
+
+#menu .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--dim);
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+
+#notice {
+  position: absolute;
+  left: 24px;
+  bottom: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #f0b24a;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+/* --- connection badge ------------------------------------------------------ */
+
+.connection {
+  align-self: center;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8d8f9c;
+}
+.connection.online { color: #8fd694; }
+.connection.connecting { color: #f0b24a; }
+.connection.offline { color: #e2584b; }
+.connection:empty { display: none; }
+
+/* --- join screen ----------------------------------------------------------- */
+
+#join {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 13, 18, 0.82);
+  backdrop-filter: blur(6px);
+  z-index: 40;
+}
+#join.open { display: flex; }
+
+.join-card {
+  width: 320px;
+  padding: 28px 30px 24px;
+  border-radius: 18px;
+  background: #191b22;
+  border: 1px solid #2c2f3a;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  color: #e8e6e1;
+}
+.join-card h1 {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: -0.02em;
+}
+.join-sub {
+  margin: 4px 0 20px;
+  color: #8d8f9c;
+  font-size: 13px;
+}
+.join-card label {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8d8f9c;
+}
+.join-card input,
+.join-card select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #343846;
+  background: #11131a;
+  color: #e8e6e1;
+  font: inherit;
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: normal;
+  box-sizing: border-box;
+}
+.join-card input:focus,
+.join-card select:focus {
+  outline: none;
+  border-color: #6f8fd6;
+}
+#join-room { text-transform: uppercase; letter-spacing: 0.14em; }
+
+.join-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.join-card button {
+  flex: 1;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid #343846;
+  background: #22252f;
+  color: #e8e6e1;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.join-card button.primary {
+  background: #3f6f52;
+  border-color: #4e8a66;
+}
+.join-card button:hover { filter: brightness(1.12); }
+
+.join-hint {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: #6f717d;
+  line-height: 1.5;
+}

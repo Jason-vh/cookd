@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      COOKD_SAVE_DIR: /app/saves
+    volumes:
+      # Kitchens survive deploys. Every push rebuilds the container, and a
+      # bind-free named volume is the difference between "your layout is still
+      # there" and "everyone starts again on Tuesday".
+      - cookd-saves:/app/saves
+    ports:
+      - "127.0.0.1:${COOKD_APP_HOST_PORT:-3010}:3000"
+    networks:
+      - apps-net
+
+volumes:
+  cookd-saves:
+
+networks:
+  apps-net:
+    external: true

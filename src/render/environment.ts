@@ -1,0 +1,450 @@
+import * as THREE from "three";
+import type { Biome, PropKind, ScatterEntry } from "../data/biomes";
+import { cylinder, mesh, roundedBox, sphere } from "./primitives";
+
+/**
+ * Everything outside the kitchen walls: sky, sunlight, ground, the patio the
+ * kitchen stands on, and the props scattered around it.
+ *
+ * All of it is driven by a `Biome` from `data/biomes.ts`, so a new location is
+ * a data entry plus (at most) a new prop builder in `PROPS` below.
+ *
+ * Scatter uses a **seeded** RNG, not `Math.random()`: the park must look
+ * identical on every load, and identical on every client once there is online
+ * multiplayer.
+ */
+
+export type EnvironmentBounds = {
+  /** Kitchen footprint in tiles. */
+  width: number;
+  height: number;
+};
+
+export function createEnvironment(
+  scene: THREE.Scene,
+  biome: Biome,
+  bounds: EnvironmentBounds,
+): void {
+  const cx = bounds.width / 2;
+  const cz = bounds.height / 2;
+  const groundY = -biome.patio.lift;
+
+  scene.background = skyTexture(biome);
+  scene.fog = new THREE.Fog(biome.fog.color, biome.fog.near, biome.fog.far);
+
+  addLights(scene, biome, bounds, cx, cz);
+  addGround(scene, biome, cx, cz, groundY);
+  addPatio(scene, biome, bounds, cx, cz, groundY);
+  if (biome.path) addPath(scene, biome, bounds, groundY);
+  addScatter(scene, biome, bounds, cx, cz, groundY);
+}
+
+// --- lighting ----------------------------------------------------------------
+
+function addLights(
+  scene: THREE.Scene,
+  biome: Biome,
+  bounds: EnvironmentBounds,
+  cx: number,
+  cz: number,
+): void {
+  const azimuth = (biome.sun.azimuth * Math.PI) / 180;
+  const elevation = (biome.sun.elevation * Math.PI) / 180;
+  const distance = 18;
+
+  const sun = new THREE.DirectionalLight(biome.sun.color, biome.sun.intensity);
+  sun.position.set(
+    cx + Math.cos(azimuth) * Math.cos(elevation) * distance,
+    Math.sin(elevation) * distance,
+    cz + Math.sin(azimuth) * Math.cos(elevation) * distance,
+  );
+  sun.target.position.set(cx, 0, cz);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0006;
+  sun.shadow.normalBias = 0.02;
+
+  // Cover the kitchen plus a margin so nearby trees cast onto the patio, but
+  // no more than that: every extra unit costs shadow-map resolution.
+  const reach = Math.max(bounds.width, bounds.height) * 0.72 + 6;
+  const shadowCam = sun.shadow.camera;
+  shadowCam.left = -reach;
+  shadowCam.right = reach;
+  shadowCam.top = reach;
+  shadowCam.bottom = -reach;
+  shadowCam.near = 1;
+  shadowCam.far = distance * 2.4;
+  shadowCam.updateProjectionMatrix();
+  scene.add(sun, sun.target);
+
+  const fill = new THREE.DirectionalLight(biome.fill.color, biome.fill.intensity);
+  fill.position.set(cx - 10, 7, cz - 8);
+  scene.add(fill);
+
+  scene.add(
+    new THREE.HemisphereLight(biome.ambient.sky, biome.ambient.ground, biome.ambient.intensity),
+  );
+}
+
+// --- ground and patio --------------------------------------------------------
+
+function addGround(
+  scene: THREE.Scene,
+  biome: Biome,
+  cx: number,
+  cz: number,
+  groundY: number,
+): void {
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(180, 180),
+    new THREE.MeshStandardMaterial({
+      map: groundTexture(biome),
+      roughness: 0.95,
+      metalness: 0,
+    }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(cx, groundY, cz);
+  ground.receiveShadow = true;
+  scene.add(ground);
+}
+
+/** The raised paved platform the kitchen is built on. */
+function addPatio(
+  scene: THREE.Scene,
+  biome: Biome,
+  bounds: EnvironmentBounds,
+  cx: number,
+  cz: number,
+  groundY: number,
+): void {
+  const over = biome.patio.overhang;
+  const w = bounds.width + over * 2;
+  const d = bounds.height + over * 2;
+  const thickness = biome.patio.lift + 0.3;
+
+  const slab = mesh(roundedBox(w, thickness, d, 0.14), biome.patio.edge, "stone");
+  slab.position.set(cx, groundY + thickness / 2 - 0.3, cz);
+  scene.add(slab);
+
+  // A trim course just under the lip reads as coping stones and stops the
+  // patio from looking like one extruded block.
+  const trim = mesh(roundedBox(w + 0.12, 0.1, d + 0.12, 0.04), biome.patio.trim, "stone");
+  trim.position.set(cx, -0.06, cz);
+  scene.add(trim);
+}
+
+/** Paving slabs leading away from the serving side — where customers arrive. */
+function addPath(
+  scene: THREE.Scene,
+  biome: Biome,
+  bounds: EnvironmentBounds,
+  groundY: number,
+): void {
+  const path = biome.path!;
+  const random = mulberry32(0x9a7d);
+  for (let i = 0; i < path.count; i++) {
+    const slab = mesh(roundedBox(0.9, 0.09, 0.8, 0.05), path.color, "stone");
+    slab.position.set(
+      -1.4 - i * 1.25,
+      groundY + 0.05,
+      bounds.height / 2 + (random() - 0.5) * 1.6 + i * 0.35,
+    );
+    slab.rotation.y = (random() - 0.5) * 0.5;
+    scene.add(slab);
+  }
+}
+
+// --- props -------------------------------------------------------------------
+
+type PropBuilder = (biome: Biome, random: () => number) => THREE.Object3D;
+
+const PROPS: Record<PropKind, PropBuilder> = {
+  tree: (biome, random) => tree(biome, random, biome.foliage),
+  blossom: (biome, random) => tree(biome, random, biome.blossom),
+  bush: (biome, random) => {
+    const group = new THREE.Group();
+    const color = pick(biome.foliage, random);
+    for (let i = 0; i < 3; i++) {
+      const blob = mesh(sphere(0.34 + random() * 0.16, 12), color, "cloth");
+      blob.position.set((random() - 0.5) * 0.5, 0.26 + random() * 0.12, (random() - 0.5) * 0.5);
+      blob.scale.set(1, 0.82, 1);
+      group.add(blob);
+    }
+    return group;
+  },
+  rock: (biome, random) => {
+    const group = new THREE.Group();
+    const stone = mesh(sphere(0.26 + random() * 0.1, 10), biome.rock, "stone");
+    stone.scale.set(1.2, 0.62 + random() * 0.25, 1);
+    stone.rotation.y = random() * Math.PI;
+    stone.position.y = 0.12;
+    group.add(stone);
+    return group;
+  },
+  flowers: (biome, random) => {
+    const group = new THREE.Group();
+    const color = pick(biome.flowers, random);
+    for (let i = 0; i < 3 + Math.floor(random() * 3); i++) {
+      const stem = mesh(cylinder(0.012, 0.012, 0.16, 5), 0x4f8f3a, "cloth");
+      const x = (random() - 0.5) * 0.4;
+      const z = (random() - 0.5) * 0.4;
+      stem.position.set(x, 0.08, z);
+      group.add(stem);
+      const head = mesh(sphere(0.05, 8), color, "cloth");
+      head.position.set(x, 0.18, z);
+      head.scale.set(1, 0.7, 1);
+      group.add(head);
+    }
+    return group;
+  },
+  tuft: (biome, random) => {
+    const group = new THREE.Group();
+    const color = pick(biome.foliage, random);
+    for (let i = 0; i < 3; i++) {
+      const blade = mesh(roundedBox(0.05, 0.2, 0.05, 0.02), color, "cloth");
+      blade.position.set((random() - 0.5) * 0.2, 0.1, (random() - 0.5) * 0.2);
+      blade.rotation.set((random() - 0.5) * 0.5, random() * 3, (random() - 0.5) * 0.5);
+      group.add(blade);
+    }
+    return group;
+  },
+  // Foreshadows the dining room: these are where customers will eventually sit.
+  picnic: (biome, random) => {
+    const group = new THREE.Group();
+    const timber = biome.timber;
+
+    const top = mesh(roundedBox(1.6, 0.1, 0.82, 0.04), timber, "wood");
+    top.position.y = 0.72;
+    group.add(top);
+
+    for (const x of [-0.62, 0.62]) {
+      for (const z of [-0.3, 0.3]) {
+        const leg = mesh(roundedBox(0.1, 0.72, 0.1, 0.035), timber, "wood");
+        leg.position.set(x, 0.36, z);
+        group.add(leg);
+      }
+    }
+
+    for (const side of [-1, 1]) {
+      const bench = mesh(roundedBox(1.6, 0.08, 0.34, 0.035), timber, "wood");
+      bench.position.set(0, 0.42, side * 0.72);
+      group.add(bench);
+      for (const x of [-0.62, 0.62]) {
+        const leg = mesh(roundedBox(0.08, 0.42, 0.08, 0.03), timber, "wood");
+        leg.position.set(x, 0.21, side * 0.72);
+        group.add(leg);
+      }
+    }
+
+    group.rotation.y = random() * Math.PI * 2;
+    return group;
+  },
+};
+
+function tree(biome: Biome, random: () => number, palette: number[]): THREE.Object3D {
+  const group = new THREE.Group();
+  const height = 1.3 + random() * 0.9;
+
+  const trunk = mesh(cylinder(0.11, 0.17, height, 8), biome.trunk, "wood");
+  trunk.position.y = height / 2;
+  group.add(trunk);
+
+  const color = pick(palette, random);
+  const crown = 3 + Math.floor(random() * 2);
+  for (let i = 0; i < crown; i++) {
+    const radius = 0.5 + random() * 0.35;
+    const blob = mesh(sphere(radius, 14), color, "cloth");
+    blob.position.set(
+      (random() - 0.5) * 0.7,
+      height + 0.15 + (random() - 0.3) * 0.5,
+      (random() - 0.5) * 0.7,
+    );
+    blob.scale.set(1, 0.88, 1);
+    group.add(blob);
+  }
+  return group;
+}
+
+/**
+ * Ground footprint of each prop, in tiles. Used to keep props from growing
+ * through each other — a bush sprouting out of a picnic table breaks the
+ * illusion instantly.
+ *
+ * These are deliberately smaller than the visual silhouette: tree canopies and
+ * bush tops are *allowed* to overlap, which looks natural. It is the bases that
+ * must not collide.
+ */
+const FOOTPRINT: Record<PropKind, number> = {
+  tree: 0.55,
+  blossom: 0.5,
+  bush: 0.6,
+  rock: 0.45,
+  picnic: 1.35,
+  flowers: 0.28,
+  tuft: 0.14,
+};
+
+type Placed = { x: number; z: number; radius: number };
+
+function addScatter(
+  scene: THREE.Scene,
+  biome: Biome,
+  bounds: EnvironmentBounds,
+  cx: number,
+  cz: number,
+  groundY: number,
+): void {
+  const random = mulberry32(0x5eed);
+  // Keep props off the patio and out of the immediate approach to it.
+  const halfW = bounds.width / 2 + biome.patio.overhang;
+  const halfD = bounds.height / 2 + biome.patio.overhang;
+  const placed: Placed[] = [];
+
+  // Largest props first: they are the hardest to fit, and everything else can
+  // then arrange itself around them.
+  const order = [...biome.scatter].sort((a, b) => FOOTPRINT[b.kind] - FOOTPRINT[a.kind]);
+
+  for (const entry of order) {
+    const build = PROPS[entry.kind];
+    for (let i = 0; i < entry.count; i++) {
+      const spot = findSpot(random, entry, halfW, halfD, placed);
+      if (!spot) continue;
+      placed.push({ x: spot.x, z: spot.z, radius: FOOTPRINT[entry.kind] });
+      const prop = build(biome, random);
+      prop.position.set(cx + spot.x, groundY, cz + spot.z);
+      prop.rotation.y += random() * Math.PI * 2;
+      const scale = entry.scale[0] + random() * (entry.scale[1] - entry.scale[0]);
+      prop.scale.multiplyScalar(scale);
+      prop.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          child.castShadow = entry.kind !== "tuft";
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(prop);
+    }
+  }
+}
+
+/**
+ * Rejection sampling: anywhere in the ring, but never on the patio and never
+ * overlapping a prop that is already there.
+ */
+function findSpot(
+  random: () => number,
+  entry: ScatterEntry,
+  halfW: number,
+  halfD: number,
+  placed: Placed[],
+): { x: number; z: number } | null {
+  const radius = FOOTPRINT[entry.kind];
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const angle = random() * Math.PI * 2;
+    const distance = entry.minDistance + random() * (entry.maxDistance - entry.minDistance);
+    const x = Math.cos(angle) * distance;
+    const z = Math.sin(angle) * distance;
+
+    const clearance = entry.kind === "tuft" || entry.kind === "flowers" ? 0.6 : 1.4;
+    if (Math.abs(x) < halfW + clearance && Math.abs(z) < halfD + clearance) continue;
+
+    if (placed.some((other) => overlaps(x, z, radius, other))) continue;
+    return { x, z };
+  }
+  return null;
+}
+
+function overlaps(x: number, z: number, radius: number, other: Placed): boolean {
+  const minimum = radius + other.radius;
+  const dx = x - other.x;
+  const dz = z - other.z;
+  return dx * dx + dz * dz < minimum * minimum;
+}
+
+// --- generated textures ------------------------------------------------------
+
+function skyTexture(biome: Biome): THREE.Texture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 4;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+  gradient.addColorStop(0, biome.sky.top);
+  gradient.addColorStop(0.55, biome.sky.middle);
+  gradient.addColorStop(1, biome.sky.horizon);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 4, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/** Blotchy grass: flat colour would read as plastic under this much sunlight. */
+function groundTexture(biome: Biome): THREE.Texture {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const random = mulberry32(0x6ea55);
+
+  ctx.fillStyle = hex(biome.ground.base);
+  ctx.fillRect(0, 0, size, size);
+
+  for (const [color, count, radius] of [
+    [biome.ground.patch, 46, 22],
+    [biome.ground.accent, 38, 15],
+  ] as const) {
+    ctx.fillStyle = hex(color);
+    ctx.globalAlpha = 0.32;
+    for (let i = 0; i < count; i++) {
+      ctx.beginPath();
+      ctx.ellipse(
+        random() * size,
+        random() * size,
+        radius * (0.4 + random()),
+        radius * (0.4 + random()),
+        random() * Math.PI,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+  }
+
+  ctx.globalAlpha = 0.06;
+  for (let i = 0; i < 2600; i++) {
+    ctx.fillStyle = i % 2 ? "#ffffff" : "#000000";
+    ctx.fillRect(random() * size, random() * size, 2, 2);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(45, 45);
+  texture.anisotropy = 8;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// --- helpers -----------------------------------------------------------------
+
+function pick<T>(values: readonly T[], random: () => number): T {
+  return values[Math.floor(random() * values.length)]!;
+}
+
+function hex(color: number): string {
+  return `#${color.toString(16).padStart(6, "0")}`;
+}
+
+/** Same PRNG as the simulation, so scattered scenery is reproducible. */
+function mulberry32(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}

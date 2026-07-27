@@ -1,0 +1,6 @@
+# cookd — the game socket and the client share one origin, so one route covers
+# both. Caddy proxies WebSocket upgrades transparently; nothing extra needed.
+@cookd host cookd.vhtm.eu
+handle @cookd {
+	reverse_proxy 127.0.0.1:3010
+}
