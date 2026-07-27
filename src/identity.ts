@@ -21,8 +21,6 @@ export type Identity = {
    * seat, not a person, and the worst it can do is take back your own cook.
    */
   token: string;
-  /** Players sharing this keyboard/gamepads. */
-  players: number;
   /** Last room joined, so a bare URL returns you to your friends. */
   room: string;
 };
@@ -31,7 +29,7 @@ function newToken(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const FALLBACK: Identity = { name: "", token: "", players: 1, room: "" };
+const FALLBACK: Identity = { name: "", token: "", room: "" };
 
 export function loadIdentity(): Identity {
   try {
@@ -41,7 +39,6 @@ export function loadIdentity(): Identity {
     return {
       name: typeof parsed.name === "string" ? parsed.name.slice(0, 16) : "",
       token: typeof parsed.token === "string" && parsed.token ? parsed.token : newToken(),
-      players: Math.min(4, Math.max(1, Number(parsed.players) || 1)),
       room: typeof parsed.room === "string" ? parsed.room : "",
     };
   } catch {

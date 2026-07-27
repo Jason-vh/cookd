@@ -410,14 +410,10 @@ kbd {
   color: #e8e6e1;
 }
 .join-card h1 {
-  margin: 0;
+  /* The tagline used to supply this gap; it carries its own now. */
+  margin: 0 0 22px;
   font-size: 34px;
   letter-spacing: -0.02em;
-}
-.join-sub {
-  margin: 4px 0 20px;
-  color: #8d8f9c;
-  font-size: 13px;
 }
 .join-card label {
   display: block;

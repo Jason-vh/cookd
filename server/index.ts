@@ -117,6 +117,14 @@ function sanitiseName(raw: string): string {
   return raw.trim().replace(/\s+/g, " ").slice(0, 16);
 }
 
+/**
+ * Name the nth chef on one connection: the first is just you, the rest are
+ * numbered. Two cooks called "Jorick" standing next to each other helps nobody.
+ */
+function seatName(base: string, index: number): string {
+  return index === 0 ? base : `${base} ${index + 1}`;
+}
+
 function broadcast(room: Room, message: ServerMessage): void {
   const payload = JSON.stringify(message);
   for (const client of room.clients) client.socket.send(payload);
@@ -294,7 +302,7 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
         const wanted = Math.min(MAX_PER_CONNECTION, Math.max(1, message.players));
         for (let i = client.players.length; i < wanted; i++) {
           if (room.host.playerCount >= MAX_PLAYERS_PER_ROOM) break;
-          client.players.push(room.host.join(wanted > 1 ? `${name} ${i + 1}` : name));
+          client.players.push(room.host.join(seatName(name, i)));
         }
         // Being let in with no chef is worse than being turned away: the client
         // would sit there showing "online" with nobody to control and never
@@ -341,7 +349,8 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
             break;
           }
           if (client.players.length >= MAX_PER_CONNECTION) break;
-          const id = room.host.join(sanitiseName(message.name) || client.name);
+          const base = sanitiseName(message.name) || client.name;
+          const id = room.host.join(seatName(base, client.players.length));
           client.players.push(id);
           send(client, { t: "joined", id });
           break;

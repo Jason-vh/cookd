@@ -61,12 +61,14 @@ function useGame(next: Game): void {
 let onlineSince = 0;
 let wantedPlayers = 1;
 
-function goOnline(room: string, name: string, players: number): void {
-  saveIdentity({ ...identity, name, players, room });
+function goOnline(room: string, name: string): void {
+  saveIdentity({ ...identity, name, room });
   if (location.hash.replace("#", "") !== room) history.replaceState(null, "", `#${room}`);
-  wantedPlayers = players;
+  // Always one chef to start with. More join by pressing `P` or picking up a
+  // controller, which is how a second player actually turns up.
+  wantedPlayers = 1;
   onlineSince = performance.now();
-  useGame(new NetGame(socketUrl(), room, name, players, identity.token));
+  useGame(new NetGame(socketUrl(), room, name, 1, identity.token));
 }
 
 /**
@@ -96,10 +98,10 @@ const join = new JoinScreen(document.querySelector<HTMLElement>("#join")!, {
   identity,
   room: roomFromUrl,
   offline: forceLocal,
-  onPlayLocal: (players) => {
-    useGame(new LocalGame(null, players));
+  onPlayLocal: () => {
+    useGame(new LocalGame(null, 1));
   },
-  onPlayOnline: (room, name, players) => goOnline(room, name, players),
+  onPlayOnline: (room, name) => goOnline(room, name),
 });
 
 if (forceLocal) join.hide();

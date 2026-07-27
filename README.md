@@ -176,8 +176,14 @@ the moment someone uses its code and is kept warm for ten minutes after the last
 person leaves, so refreshing your browser doesn't wipe the kitchen.
 
 Any number of players can share one browser — gamepads and the two keyboard
-schemes work exactly as they do offline. A connection owns its players and may
-only move those; a buggy client cannot drive someone else's cook around.
+schemes work exactly as they do offline. You join with one chef; more appear by
+pressing `P` or picking up a controller, which is how couch co-op actually
+starts. The join screen deliberately does **not** ask how many of you there are:
+it made you answer a question about a game you had not seen yet, and the answer
+was already changeable at any moment.
+
+A connection owns its players and may only move those; a buggy client cannot
+drive someone else's cook around.
 
 ### One `Host`, two places to run it
 
