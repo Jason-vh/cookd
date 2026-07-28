@@ -209,12 +209,21 @@ function claimTable(world: World, reachable: Set<number>): Appliance | null {
   return best;
 }
 
-/** The seat a customer would use at this table, if the door can reach one. */
+/** Every chair at this table the door can actually reach. */
+function reachableSeats(world: World, tile: Vec2, reachable: Set<number>): Vec2[] {
+  return seatsAround(world, tile).filter((seat) =>
+    reachable.has(tileIndex(world, seat.x, seat.y)),
+  );
+}
+
+/**
+ * Is there anywhere to sit at this table? Deliberately does **not** consume
+ * randomness: it is asked speculatively, of every table, on every tick somebody
+ * is queuing at the door. Burning the RNG stream on a question would make the
+ * answer depend on how many tables happen to exist.
+ */
 function pickSeat(world: World, tile: Vec2, reachable: Set<number>): Vec2 | null {
-  for (const seat of seatsAround(world, tile)) {
-    if (reachable.has(tileIndex(world, seat.x, seat.y))) return seat;
-  }
-  return null;
+  return reachableSeats(world, tile, reachable)[0] ?? null;
 }
 
 function seat(
@@ -223,7 +232,11 @@ function seat(
   table: Appliance,
   reachable: Set<number>,
 ): void {
-  const seat = pickSeat(world, table.tile, reachable);
+  // Which chair is a coin toss, drawn once, here — the only place a seat is
+  // actually taken. A fixed side made a full dining room look choreographed,
+  // every customer at the same o'clock of their own table.
+  const options = reachableSeats(world, table.tile, reachable);
+  const seat = options[Math.floor(random(world) * options.length)];
   if (!seat) return;
   customer.table = table.id;
   customer.seat = seat;

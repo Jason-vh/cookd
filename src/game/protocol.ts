@@ -88,6 +88,8 @@ export type FrameCustomer = {
   recipeId: string;
   remaining: number;
   patience: number;
+  /** Seconds left in the current timed state — what empties a plate as it is eaten. */
+  timer: number;
 };
 
 export type Frame = {
@@ -173,6 +175,7 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
       recipeId: customer.recipeId,
       remaining: customer.remaining,
       patience: customer.patience,
+      timer: customer.timer,
     })),
     events: world.events,
     effects: world.effects,
@@ -277,7 +280,7 @@ export function applyFrame(world: World, frame: Frame): void {
     seat: null,
     recipeId: customer.recipeId,
     path: [],
-    timer: 0,
+    timer: customer.timer,
     remaining: customer.remaining,
     patience: customer.patience,
     tip: 0,

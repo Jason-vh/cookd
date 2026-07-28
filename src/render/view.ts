@@ -4,8 +4,8 @@ import { applianceDef } from "../data/appliances";
 import { specKey } from "../sim/items";
 import { DT } from "../sim/step";
 import { canPlace, targetTile } from "../sim/systems/interaction";
-import { CUSTOMER_SPEED, unreachableTables } from "../sim/systems/customers";
-import type { Appliance, ChefMotion, Item, Motion, World } from "../sim/types";
+import { CUSTOMER_SPEED, EAT_TIME, unreachableTables } from "../sim/systems/customers";
+import type { Appliance, ChefMotion, Customer, Item, Motion, World } from "../sim/types";
 import { PLAYER_SPEED, applianceAtTile, playerById } from "../sim/world";
 import { biome as lookupBiome } from "../data/biomes";
 import { PALETTE } from "./palette";
@@ -61,6 +61,8 @@ export class View {
   private tips = new Map<number, { object: THREE.Object3D; alpha: number }>();
   /** Tables the dining room cannot reach, recomputed only in the build phase. */
   private stranded = new Set<number>();
+  /** Table id -> how much of the meal on it is left, 1..0. */
+  private eatingTables = new Map<number, number>();
   private highlights = new Map<number, THREE.Mesh>();
   private liveItems = new Set<number>();
   private clock = new THREE.Clock();
@@ -660,12 +662,22 @@ export class View {
       person.slump += (impatient - person.slump) * Math.min(1, dt * 2);
       const slump = person.slump * person.slump;
 
-      person.body.position.y = (seated ? 0.06 : 0.28) + Math.abs(Math.sin(person.phase * 2)) * 0.05 * speed;
+      // Seated is *higher* than standing, not lower: the hips land on the chair
+      // rather than on the floor. Getting this backwards put every customer's
+      // head level with the tabletop, where it read as a lump behind the plate
+      // instead of as a person waiting for it.
+      person.body.position.y =
+        (seated ? SEAT_HEIGHT : 0.28) + Math.abs(Math.sin(person.phase * 2)) * 0.05 * speed;
       person.body.position.z = 0;
       person.body.rotation.x = 0.14 * speed + slump * 0.34;
       person.head.rotation.x = -0.08 * speed + slump * 0.3;
+      // Only the eating pose squashes the head; everything else must put it
+      // back, or one meal would leave a customer dented for the rest of the day.
+      person.head.scale.set(1, 1, 1);
 
-      if (seated) {
+      if (customer.state === "eating") {
+        this.poseEating(person, customer, time);
+      } else if (seated) {
         // Knees up, hands resting on the table edge, sinking as patience goes.
         person.legL.rotation.x = -1.35;
         person.legR.rotation.x = -1.35;
@@ -685,6 +697,49 @@ export class View {
         person.head.rotation.y = 0;
       }
     }
+  }
+
+  /**
+   * Eating: fork up, bite, chew, repeat.
+   *
+   * Dwell time is a throughput constraint — a table is occupied for as long as
+   * somebody is sitting at it — so "still eating" has to be legible from the
+   * other side of the kitchen, and legible as *progress* rather than as an
+   * idle. Hence a cycle with a clear beat rather than a loop of noise: the arm
+   * arriving at the mouth is the moment the eye catches, and the chewing after
+   * it is what stops the pose reading as frozen between bites.
+   *
+   * Driven by wall clock rather than by the meal timer, offset per customer, so
+   * a full dining room never chews in unison.
+   */
+  private poseEating(person: ChefParts, customer: Customer, time: number): void {
+    // A bob, not a mime. An earlier version raised a fork to the mouth on a
+    // proper bite cycle, and almost none of it survived the trip to the screen:
+    // a customer faces their table, which from a fixed camera means facing
+    // away, so the entire performance happened behind their own back. What
+    // does read at this size is the head — it is the biggest thing on them and
+    // the only part clear of the tabletop.
+    //
+    // `abs(sin)` rather than a sine: the bounce off the bottom is what makes it
+    // munching rather than nodding.
+    const munch = Math.abs(Math.sin(time * MUNCH_RATE + customer.id));
+
+    person.legL.rotation.x = -1.35;
+    person.legR.rotation.x = -1.35;
+
+    person.body.rotation.x = 0.16 + munch * 0.06;
+    person.body.position.y = SEAT_HEIGHT - munch * 0.014;
+    person.head.rotation.x = 0.08 + munch * 0.34;
+    person.head.rotation.y = 0;
+    // A little squash on the way down. Cartoon licence, and it is what stops
+    // the bob reading as a stiff hinge.
+    person.head.scale.set(1 + munch * 0.07, 1 - munch * 0.09, 1 + munch * 0.07);
+
+    // Both hands stay on the table, out of the way of the one part that reads.
+    person.armL.rotation.x = -0.95;
+    person.armR.rotation.x = -0.95;
+    person.armL.rotation.z = 0.22;
+    person.armR.rotation.z = -0.22;
   }
 
   // --- tables ----------------------------------------------------------------
@@ -783,6 +838,13 @@ export class View {
   private syncItems(world: World, alpha: number): void {
     this.liveItems.clear();
 
+    // How much of each meal is left, so the plate can empty as it is eaten.
+    this.eatingTables.clear();
+    for (const customer of world.customers) {
+      if (customer.state !== "eating" || customer.table === null) continue;
+      this.eatingTables.set(customer.table, Math.max(0, Math.min(1, customer.timer / EAT_TIME)));
+    }
+
     for (const appliance of world.appliances.values()) {
       if (!appliance.item || appliance.heldBy !== null) continue;
       const height = applianceDef(appliance.kind).height;
@@ -795,6 +857,9 @@ export class View {
       // Food squashes on the beat, so the work reads even when the chef is
       // hidden behind the counter they're working at.
       animateWorkedItem(object, appliance, this.clock.elapsedTime);
+      // ...and shrinks as it is eaten, so the dirty plate that follows is the
+      // end of something you watched happen rather than a swap.
+      setPlateFullness(object, this.eatingTables.get(appliance.id) ?? 1);
     }
 
     for (const player of world.players) {
@@ -880,6 +945,34 @@ export class View {
 }
 
 const WORLD_POS = new THREE.Vector3();
+
+/**
+ * Hip height of a seated customer, a touch below the chair seat in
+ * `buildTable` so they settle into it rather than hover.
+ */
+const SEAT_HEIGHT = 0.3;
+
+
+/**
+ * Radians per second of the eating bob. Offset per customer by their id, so a
+ * full dining room never munches in unison.
+ */
+const MUNCH_RATE = 4.6;
+
+/**
+ * Shrink the food on a plate without shrinking the plate.
+ *
+ * The plate model keeps its contents in their own group precisely so this can
+ * happen: scaling the whole object would shrink the crockery too, which reads
+ * as the plate receding rather than the meal going down.
+ */
+function setPlateFullness(object: THREE.Object3D, fullness: number): void {
+  const contents = object.userData.contents as THREE.Object3D | undefined;
+  if (!contents) return;
+  // Never quite to nothing: what is left becomes the crumbs on the dirty plate
+  // a moment later, and food that vanished first would break that handover.
+  contents.scale.setScalar(0.22 + 0.78 * fullness);
+}
 
 /**
  * Per-motion reaction of the food itself. Chopped food is struck, kneaded food

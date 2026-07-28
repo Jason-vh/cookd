@@ -438,7 +438,12 @@ const plate: Builder = (parent, item, y) => {
     }
   }
 
-  for (const child of item.contents) addModel(parent, child, y + 0.03);
+  // Contents go in their own group so the meal can be emptied without the
+  // crockery going with it — see `setPlateFullness` in view.ts.
+  const contents = new THREE.Group();
+  for (const child of item.contents) addModel(contents, child, y + 0.03);
+  parent.add(contents);
+  parent.userData.contents = contents;
 };
 
 /** Anything burnt collapses to the same charred lump — a clear, readable fail. */

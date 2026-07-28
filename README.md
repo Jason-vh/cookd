@@ -504,6 +504,18 @@ Supporting decisions:
   and never a moment's doubt about who works here. Their colours are
   deliberately a softer, cooler family than the four chef colours, so the people
   you control stay the brightest people on screen.
+- **Animate the part the camera can see.** Eating was first built properly: a
+  fork raised to the mouth on a bite cycle, a hold at the top, chewing after.
+  Almost none of it reached the screen. Somebody at a table faces the table,
+  which from a fixed camera means facing away, so the whole performance played
+  out behind their own back — the same trap the chop animation had already hit
+  and solved by flaring the elbows clear of the silhouette. Here even that was
+  not enough, and the answer was to stop miming: a head bob, the largest part of
+  them and the only one reliably clear of the tabletop. Cheaper, and it reads
+  from across the room.
+- **A seated customer sits *higher* than a standing one.** Their hips land on
+  the chair, not on the floor. Getting that backwards put every head level with
+  the tabletop, where a customer read as a lump behind their own plate.
 
 ### Biomes
 
@@ -1023,7 +1035,11 @@ Two of those timers are load-bearing:
 
 - **Dwell time is a throughput constraint.** A table is occupied while somebody
    eats it, so fast service means more covers per day. Table turnover became an
-   economic concept without a single new UI element.
+   economic concept without a single new UI element. It is legible without a
+   gauge, too: the customer bobs over the plate and the **food on it shrinks as
+   they get through it**, so the dirty plate at the end is something you watched
+   happen rather than a swap. That is why the plate model keeps its contents in
+   a group of their own — emptying the meal must not shrink the crockery.
 - **The door queue is the overflow valve.** A short tolerated wait smooths
    spikes; somebody walking away from a full door is the visible cost of not
    having built enough tables.
@@ -1031,6 +1047,14 @@ Two of those timers are load-bearing:
 Patience only starts draining when the order appears, not when the customer
 arrives. The walk in is a beat of calm, and the number in `data/recipes.ts`
 still means what it says.
+
+**Which chair is a coin toss**, drawn once, at the moment a seat is actually
+taken. A fixed preference order made a full dining room look choreographed —
+four customers sitting at the same o'clock of their own tables. The draw lives
+in `seat()` and nowhere else on purpose: "is there a chair free here?" is asked
+speculatively, of every table, on every tick somebody is queuing at the door,
+and spending the seeded RNG on a *question* would make the answer depend on how
+many tables happened to exist.
 
 ### Say yes, and let the failure be visible
 

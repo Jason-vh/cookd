@@ -86,11 +86,13 @@ function unwind(world: World, cameFrom: Map<number, number>, goal: number): Vec2
 }
 
 /**
- * Walkable tiles beside an appliance, nearest-to-the-door first.
+ * Walkable tiles beside an appliance — the chairs somebody could sit in.
  *
- * Order matters and must be deterministic: it is what decides which side of a
- * table a customer sits on, and two clients disagreeing about that would show
- * one player a customer sitting where another sees an empty chair.
+ * Always built in the same order, which matters even though the choice between
+ * them is random: the caller picks with `random(world)`, and a shuffled
+ * candidate list would make that pick depend on iteration order rather than on
+ * the seeded stream. Two clients disagreeing about which chair is taken would
+ * show one player a customer sitting where another sees an empty seat.
  */
 export function seatsAround(world: World, tile: Vec2): Vec2[] {
   const seats: Vec2[] = [];
