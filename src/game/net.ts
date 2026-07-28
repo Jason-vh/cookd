@@ -1,7 +1,7 @@
 import { LEVEL } from "../data/level";
 import { DT, step } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
-import { createWorld, emptyInput } from "../sim/world";
+import { createWorld, emptyInput, isIdleInput } from "../sim/world";
 import type { Game } from "./game";
 import type { MenuAction } from "./host";
 import {
@@ -91,6 +91,12 @@ export class NetGame implements Game {
   private prediction: World;
   private history: { seq: number; inputs: Inputs }[] = [];
   private seq = 0;
+  /**
+   * Whether the last input we actually sent was an idle one. Reset whenever the
+   * set of local chefs changes, so the next tick restates the whole payload for
+   * its new shape rather than leaving a freshly joined seat unmentioned.
+   */
+  private sentIdle = false;
   private accumulator = 0;
 
   /** Smoothed-away difference between where we predicted and where we are. */
@@ -191,6 +197,7 @@ export class NetGame implements Game {
         this.wantedPlayers = message.you.length;
         this.buffer.length = 0;
         this.history.length = 0;
+        this.sentIdle = false;
         this.error.clear();
         this.seq = 0;
         this.started = false;
@@ -207,6 +214,9 @@ export class NetGame implements Game {
         break;
       case "joined":
         if (!this.localIds.includes(message.id)) this.localIds.push(message.id);
+        // A new seat changes the shape of the input payload, so the next tick
+        // has to state it in full even if everyone is standing still.
+        this.sentIdle = false;
         break;
       case "pong":
         this.ping = Date.now() - message.sent;
@@ -312,10 +322,23 @@ export class NetGame implements Game {
     //    replayed when the server's answer arrives.
     const mine: Inputs = {};
     for (const id of this.localIds) mine[id] = inputs[id] ?? emptyInput();
-    this.seq++;
-    this.history.push({ seq: this.seq, inputs: structuredClone(mine) as Inputs });
-    while (this.history.length > HISTORY) this.history.shift();
-    this.send({ t: "input", seq: this.seq, inputs: mine as Record<number, PlayerInput> });
+
+    // Standing still is not news. The server's queue already starves gracefully
+    // by holding the last input it was given (see `Host.nextInputs`), so once we
+    // have told it we are idle, repeating that 60 times a second only restates
+    // it. A stationary chef also cannot drift apart: the server integrates the
+    // same zero velocity we do, so there is nothing to reconcile.
+    //
+    // Only *runs* of idle collapse. The first idle tick after moving is still
+    // sent, because that one is the instruction to stop.
+    const idle = Object.values(mine).every((input) => !input || isIdleInput(input));
+    if (!idle || !this.sentIdle) {
+      this.seq++;
+      this.history.push({ seq: this.seq, inputs: structuredClone(mine) as Inputs });
+      while (this.history.length > HISTORY) this.history.shift();
+      this.send({ t: "input", seq: this.seq, inputs: mine as Record<number, PlayerInput> });
+      this.sentIdle = idle;
+    }
     step(this.prediction, mine);
 
     // 2. The playout clock walks forward one tick and samples the timeline.
@@ -398,6 +421,7 @@ export class NetGame implements Game {
   removeLocalPlayer(id: number): void {
     this.send({ t: "leave", id });
     this.localIds = this.localIds.filter((other) => other !== id);
+    this.sentIdle = false;
     this.error.delete(id);
   }
 

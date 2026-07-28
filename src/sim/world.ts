@@ -11,6 +11,24 @@ export function emptyInput(): PlayerInput {
   return { move: { x: 0, y: 0 }, grab: false, use: false, start: false, menu: false };
 }
 
+/**
+ * Nothing held, nothing pressed — a chef standing still.
+ *
+ * Movement is compared against exactly zero rather than a threshold because the
+ * input layer has already applied its stick deadzone by the time an input gets
+ * here, so a resting controller reports a true zero.
+ */
+export function isIdleInput(input: PlayerInput): boolean {
+  return (
+    input.move.x === 0 &&
+    input.move.y === 0 &&
+    !input.grab &&
+    !input.use &&
+    !input.start &&
+    !input.menu
+  );
+}
+
 export function tileIndex(world: World, x: number, y: number): number {
   return y * world.width + x;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Host } from "./host";
 import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutSignature } from "./protocol";
-import { PLAYER_SPEED, emptyInput } from "../sim/world";
+import { PLAYER_SPEED, emptyInput, isIdleInput } from "../sim/world";
 import { saveSignature } from "../save";
 import type { PlayerInput } from "../sim/types";
 
@@ -316,6 +316,49 @@ describe("what is worth saving", () => {
     const afterDay = saveSignature(host.world);
     appliance.tile = { x: appliance.tile.x, y: appliance.tile.y + 1 };
     expect(saveSignature(host.world)).not.toBe(afterDay);
+  });
+
+  /**
+   * `NetGame` stops sending while a chef stands still, which is only safe
+   * because a starved queue holds the last input it was given. These pin that
+   * down from the server's side: silence must mean "carry on", and carrying on
+   * from idle must mean staying put.
+   */
+  test("silence after an idle input leaves a chef exactly where it was", () => {
+    const host = new Host();
+    const id = host.join("Ann");
+    host.enqueue(id, 1, move(1));
+    for (let i = 0; i < 30; i++) host.advance(1 / 60);
+
+    // One idle input, then nothing at all for a second — the client has gone
+    // quiet because there is nothing to say.
+    host.enqueue(id, 2, emptyInput());
+    host.advance(1 / 60);
+    const settled = { ...host.world.players[0]!.pos };
+    for (let i = 0; i < 60; i++) host.advance(1 / 60);
+
+    expect(host.world.players[0]!.pos).toEqual(settled);
+  });
+
+  test("silence after a moving input keeps the chef moving", () => {
+    const host = new Host();
+    const id = host.join("Ann");
+    host.enqueue(id, 1, move(1));
+    host.advance(1 / 60);
+    const after = host.world.players[0]!.pos.x;
+
+    // A dropped packet should read as lag, not as a stumble.
+    for (let i = 0; i < 30; i++) host.advance(1 / 60);
+    expect(host.world.players[0]!.pos.x).toBeGreaterThan(after);
+  });
+
+  test("idle is exactly zero, so it is detectable without a threshold", () => {
+    expect(isIdleInput(emptyInput())).toBe(true);
+    expect(isIdleInput(move(1))).toBe(false);
+    expect(isIdleInput({ ...emptyInput(), grab: true })).toBe(false);
+    expect(isIdleInput({ ...emptyInput(), menu: true })).toBe(false);
+    // A stick nudged inside its deadzone has already been zeroed upstream.
+    expect(isIdleInput({ ...emptyInput(), move: { x: 0.0001, y: 0 } })).toBe(false);
   });
 
   test("a kitchen nobody touched is identical to a fresh one, so it is never written", () => {
