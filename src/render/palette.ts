@@ -52,8 +52,6 @@ export const PALETTE = {
   crateTop: 0x87683f,
   crateTrim: 0x765a37,
   ceramic: 0xf1ece0,
-  serving: 0x6f968b,
-  servingTop: 0x93c0b1,
   bin: 0x4a453e,
   brass: 0xc9a86b,
 

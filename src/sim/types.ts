@@ -43,7 +43,6 @@ export type ApplianceKind =
   | "oven"
   | "crate"
   | "plates"
-  | "serving"
   | "bin"
   | "table";
 

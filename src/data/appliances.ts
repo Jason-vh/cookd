@@ -26,7 +26,6 @@ export const APPLIANCES: Record<ApplianceKind, ApplianceDef> = {
   oven: { stations: ["bake"], speed: 1, kind: "oven", label: "Oven", color: 0x6f7076, height: 0.9, acceptsItems: true, movable: true, price: 80 },
   crate: { stations: [], speed: 1, kind: "crate", label: "Crate", color: 0x7a5c3c, height: 0.7, acceptsItems: false, movable: true, price: 10 },
   plates: { stations: [], speed: 1, kind: "plates", label: "Plate stack", color: 0xbfc7cf, height: 0.7, acceptsItems: false, movable: true, price: 20 },
-  serving: { stations: [], speed: 1, kind: "serving", label: "Pass", color: 0x3f8f6f, height: 0.75, acceptsItems: true, movable: false, price: 0 },
   // A table is an appliance like any other: it accepts a plate, so delivery is
   // the place verb players already know. Its price is what the build phase
   // charges for order capacity.

@@ -5,7 +5,7 @@ import { DT, step } from "./step";
 import { unreachableTables } from "./systems/customers";
 import { specKey } from "./items";
 import type { Customer, Player, PlayerInput, World } from "./types";
-import { applianceAtTile, createWorld, emptyInput } from "./world";
+import { applianceAtTile, createWorld, emptyInput, isSolid } from "./world";
 
 /**
  * These tests drive the simulation exactly like a player would — through
@@ -506,19 +506,36 @@ describe("the dining room", () => {
     takeFrom(world, COUNTER);
   }
 
-  test("the pass holds a plate instead of swallowing it", () => {
+  test("the pass is two ordinary counters standing in the dividing wall", () => {
     const world = makeWorld();
+    const pass = applianceAtTile(world, PASS[0], PASS[1])!;
+    expect(pass.kind).toBe("counter");
+
+    // It used to be a hatch food disappeared through, and then briefly a kind
+    // of its own that did nothing. It is a place, not an object: put a plate
+    // down from the kitchen side, pick it up from the dining side.
     takeFrom(world, PLATES);
     putOn(world, PASS, -1, 0);
-
-    // It used to be a hatch that food disappeared through. Now it is a counter
-    // between two rooms: you put a plate down on it, and someone picks it up.
     expect(world.players[0]!.carried).toBeNull();
-    expect(applianceAtTile(world, PASS[0], PASS[1])!.item?.base).toBe("plate");
+    expect(pass.item?.base).toBe("plate");
     expect(world.served).toBe(0);
 
     takeFrom(world, PASS, -1, 0);
     expect(world.players[0]!.carried?.base).toBe("plate");
+  });
+
+  test("lifting the pass widens the opening between the two rooms", () => {
+    const world = makeWorld();
+    world.dayTime = 0.05;
+    hold(world, 0.2, null);
+    expect(world.phase).toBe("build");
+
+    // The wall between kitchen and dining room is now a decision, not a fixed
+    // feature: the counters in it can be carried away like any other.
+    expect(isSolid(world, PASS[0], PASS[1])).toBe(true);
+    face(world.players[0]!, PASS[0], PASS[1], -1, 0);
+    press(world, "grab");
+    expect(isSolid(world, PASS[0], PASS[1])).toBe(false);
   });
 
   test("a customer walks in, sits down and asks for something", () => {

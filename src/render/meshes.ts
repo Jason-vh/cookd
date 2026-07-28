@@ -135,8 +135,6 @@ function bodyLook(kind: Appliance["kind"]): [number, SurfaceName] {
       return [PALETTE.steel, "enamel"];
     case "crate":
       return [PALETTE.crate, "wood"];
-    case "serving":
-      return [PALETTE.serving, "enamel"];
     case "bin":
       return [PALETTE.bin, "enamel"];
     default:
@@ -152,8 +150,6 @@ function topLook(kind: Appliance["kind"]): [number, SurfaceName] | null {
       return [PALETTE.woodTop, "wood"];
     case "crate":
       return [PALETTE.crateTop, "wood"];
-    case "serving":
-      return [PALETTE.servingTop, "enamel"];
     case "oven":
       return [PALETTE.ovenGlass, "enamel"];
     case "fryer":
@@ -246,14 +242,6 @@ function addDetails(group: THREE.Group, appliance: Appliance, h: number): void {
       }
       break;
     }
-
-    case "serving": {
-      const bell = mesh(sphere(0.19), PALETTE.ceramic, "enamel");
-      bell.scale.set(1, 0.6, 1);
-      bell.position.y = h + 0.1;
-      group.add(bell);
-      break;
-    }
     default:
       break;
   }
@@ -315,8 +303,6 @@ function labelFor(appliance: Appliance): string | null {
       return "Fryer";
     case "oven":
       return "Oven";
-    case "serving":
-      return "Pass";
     case "bin":
       return "Bin";
     case "table":

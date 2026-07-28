@@ -5,13 +5,20 @@ import type { ApplianceKind, ItemSpec, Vec2 } from "../sim/types";
  *
  *   #  wall            =  counter        B  chopping board
  *   F  fryer           O  oven           P  plate stack
- *   S  pass            X  bin            .  floor
- *   T  table           D  door           t/l/c/p  crates: tomato / lettuce / cheese / potato
+ *   X  bin             .  floor          T  table
+ *   D  door            t/l/c/p  crates: tomato / lettuce / cheese / potato
  *   f/w                crates: flour / water
  *
  * One grid, one collision system: the dining room is simply the western half
- * of the same rectangle. The pass (`S`) sits in the dividing wall, with a gap
- * beside it so a chef can walk round rather than only slide plates across.
+ * of the same rectangle.
+ *
+ * The **pass** is not an appliance kind — it is two ordinary counters standing
+ * in the dividing wall. It used to be its own thing back when food vanished
+ * through it, and when that stopped being true the kind was left describing
+ * nothing: a counter you could not chop on and could not move. What matters is
+ * the *place*, not the object, and as counters those two tiles are something
+ * players can have an opinion about: lift them for a wide opening between the
+ * rooms, or fill the gap beside them for a single narrow one.
  */
 export type LevelDef = {
   name: string;
@@ -44,7 +51,6 @@ export const LEGEND: Record<string, TileSpec> = {
   F: { kind: "appliance", appliance: "fryer" },
   O: { kind: "appliance", appliance: "oven" },
   P: { kind: "appliance", appliance: "plates", source: { base: "plate", processes: [] } },
-  S: { kind: "appliance", appliance: "serving" },
   X: { kind: "appliance", appliance: "bin" },
   T: { kind: "appliance", appliance: "table" },
   D: { kind: "door" },
@@ -60,14 +66,15 @@ export const LEVEL: LevelDef = {
   name: "Park Kitchen",
   biome: "park",
   dayLength: 150,
-  // Dining room (x 0..6) | pass and dividing wall (x 7) | kitchen (x 8..19).
+  // Dining room (x 0..6) | dividing wall, walk-through gap and pass (x 7) |
+  // kitchen (x 8..19).
   rows: [
     "####################",
     "#......#tlcfwpP===X#",
     "#.T..T.#...........#",
     "#........=B=.......#",
-    "D......S...........O",
-    "#......S...........O",
+    "D......=...........O",
+    "#......=...........O",
     "#.T..T.#.=B=.......#",
     "#......#.......===F#",
     "####################",

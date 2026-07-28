@@ -82,8 +82,8 @@ The white square in front of your chef is what you'll interact with.
 6. **Take it to the table that ordered it.** Customers walk in through the park
    gate, sit down, and a bubble appears over their table showing the dish they
    want and a ring counting down their patience. Placing the plate on that
-   table feeds them. The green **pass** in the dividing wall is a counter, not
-   a chute — one player can plate and slide, another can run.
+   table feeds them. The two counters in the dividing wall are the **pass** —
+   one player can plate and slide, another can run.
 7. When they finish eating they leave behind a **dirty plate and a tip**. Pick
    the plate up and the tip is yours; carry it to the plate stack to wash it.
    A table with a plate still on it cannot be sat at, so clearing up *is* the
@@ -479,7 +479,7 @@ Supporting decisions:
 - **Ingredients are modelled, not symbolised.** See below.
 - **Silhouette over labels.** Each appliance carries a small identifying detail
   (a knife on the board, an oil basin on the fryer, a glass door on the oven, a
-  cloche on the pass), and crates show a 3D sample of their ingredient.
+  a lid on the bin), and crates show a 3D sample of their ingredient.
   Text labels are **contextual** — only the appliance a chef is facing is named.
   A world full of floating text destroys the diorama illusion.
 - **Animation beats geometry.** The chef is simple shapes with clear
@@ -904,23 +904,34 @@ Kitchens are authored as ASCII so layouts stay readable and diffable
 #......#tlcfwpP===X#
 #.T..T.#...........#
 #........=B=.......#
-D......S...........O
-#......S...........O
+D......=...........O
+#......=...........O
 #.T..T.#.=B=.......#
 #......#.......===F#
 ####################
 ```
 
 `#` wall · `.` floor · `D` door · `T` table · `=` counter · `B` board ·
-`F` fryer · `O` oven · `P` plate stack · `S` pass · `X` bin ·
+`F` fryer · `O` oven · `P` plate stack · `X` bin ·
 `t l c f w p` ingredient crates (tomato, lettuce, cheese, flour, water, potato).
 
 The dining room is the western half of the **same grid** — one rectangle, one
-collision system, no new concepts. The two `S` tiles are the pass, and the gap
-beside them at `(7,3)` is how a chef walks round it. That gap is deliberate:
-the pass lets one player plate-and-slide while another runs food, but nobody is
-*forced* through a bottleneck, so roles stay something a group discovers rather
-than something the level imposes.
+collision system, no new concepts.
+
+**The pass is a place, not an appliance.** Those two `=` tiles at `x = 7` are
+ordinary counters that happen to stand in the dividing wall, and the gap beside
+them at `(7,3)` is how a chef walks round. There *was* a `serving` kind: it made
+sense when food vanished through a hatch, and when that stopped being true it
+was left describing nothing — a counter you could not chop on and could not
+move, painted a special colour that promised a rule which no longer existed.
+Deleting it cost nothing and bought a decision: the divider is now something
+players can rearrange, lifting the counters for a wide opening between the rooms
+or filling the gap for a single narrow one.
+
+What the place does earn is the co-op shape. A surface at the boundary lets one
+player plate-and-slide while another runs food, but the gap means nobody is
+*forced* through a bottleneck — so cook, runner and busser stay things a group
+discovers rather than roles the level assigns.
 
 Dough is **made, not found**: flour + water. An ingredient that arrives ready to
 use is a crate that exists only to be walked to, and the pizza's first step now
