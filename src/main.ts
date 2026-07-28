@@ -222,7 +222,7 @@ function frame(now: number): void {
 
   if (join.isOpen) {
     join.poll(input);
-    if (shouldRender(now)) view.render(game.world, game.alpha);
+    if (shouldRender(now)) view.render(game.world, game.alpha, game.localIds);
     return;
   }
 
@@ -274,7 +274,7 @@ function frame(now: number): void {
 
   game.update(elapsed, poll);
   menuWasOpen = menu.isOpen;
-  if (shouldRender(now)) view.render(game.world, game.alpha);
+  if (shouldRender(now)) view.render(game.world, game.alpha, game.localIds);
   hud.update(game.world, { status: game.status, ping: game.ping, room: game.status === "local" ? "" : roomOf() });
 }
 

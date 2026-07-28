@@ -18,8 +18,9 @@ import { LAYER, setLayer } from "./layers";
  *
  * Drawn as a shader on a quad rather than as geometry, because the fill is a
  * single uniform — no geometry rebuild per frame, one draw call per appliance.
- * The camera never rotates, so the quad is oriented to it once at build time
- * and stays facing it forever.
+ * The quad is turned to face the camera every frame it is visible: that is one
+ * quaternion copy per busy appliance, and it means the dial survives the camera
+ * gaining a yaw control later without silently going edge-on.
  */
 
 const VERTEX = /* glsl */ `
@@ -89,8 +90,10 @@ export type DialState = {
 export class Dial {
   readonly object: THREE.Mesh;
   private readonly uniforms;
+  private readonly camera: THREE.Camera;
 
   constructor(camera: THREE.Camera, radius = 0.3) {
+    this.camera = camera;
     this.uniforms = {
       uProgress: { value: 0 },
       uColor: { value: linear(0x8fd694) },
@@ -111,13 +114,15 @@ export class Dial {
       }),
     );
     this.object.renderOrder = 12;
-    this.object.quaternion.copy(camera.quaternion);
     setLayer(this.object, LAYER.UI);
   }
 
   apply(state: DialState): void {
     this.object.visible = state.alpha > 0.002;
     if (!this.object.visible) return;
+    // Appliances never rotate, so the camera's world orientation is also the
+    // right local one. Revisit if a rotating parent ever holds a dial.
+    this.object.quaternion.copy(this.camera.quaternion);
     this.uniforms.uProgress.value = state.progress;
     this.uniforms.uColor.value.copy(linear(state.color));
     this.uniforms.uAlpha.value = state.alpha;

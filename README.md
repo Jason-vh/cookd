@@ -151,6 +151,7 @@ src/
   identity.ts          what this *browser* remembers: your name, your seat count
   render/
     view.ts            three.js scene, camera, animation, reconciliation
+    camera.ts          the 3/4 ortho framing, and how it follows the local chefs
     environment.ts     biome rendering: sky, sun, ground, patio, scattered props
     bubble.ts          the order floating over a table: dish model + patience ring
     meshes.ts          appliances, walls, chefs, customers, labels, highlights
@@ -182,10 +183,10 @@ The things that made that possible:
 - the sim advances in exact `1/60s` ticks, decoupled from frame rate;
 - no wall-clock time, no DOM, no `performance.now()` inside `sim/`.
 
-**Three.js with an orthographic camera, not 2D sprites.** A fixed 3/4 ortho
-camera reads as isometric while remaining real 3D, so depth sorting is free and
-primitive shapes give a coherent look with zero art. Swapping in real models
-later touches only `render/meshes.ts`.
+**Three.js with an orthographic camera, not 2D sprites.** A 3/4 ortho camera at
+a fixed angle reads as isometric while remaining real 3D, so depth sorting is
+free and primitive shapes give a coherent look with zero art. Swapping in real
+models later touches only `render/meshes.ts`.
 
 **Tile-aligned kitchen, free-moving players.** Appliances snap to a grid (which
 makes the build phase and pathing trivial), while chefs are circles moving
@@ -652,10 +653,31 @@ These cost real debugging time and will bite again:
   per-player inputs as gameplay, so in a one-player game the arrow keys (which
   belong to player 2) did nothing. `InputManager.pollMenu()` reads every
   keyboard scheme and every pad at once, regardless of who is bound to what.
-- **Don't hand-tune the camera's view size.** The frustum is fitted by
-  projecting the kitchen's bounding-box corners into camera space
-  (`View.frameCamera`), so framing stays correct for any kitchen shape and any
-  window aspect ratio.
+- **Don't hand-tune the camera's view size.** Everything in `render/camera.ts`
+  is computed by projecting world points into camera space — the kitchen's
+  bounding-box corners for the limits, the local chefs for the target — so
+  framing stays correct for any kitchen shape, any window aspect ratio and any
+  camera angle.
+- **Framing the whole kitchen was correct and unreadable.** A 20x9 grid on a
+  16:9 screen leaves a chef about eighty pixels tall and the food they carry far
+  smaller, which is the thing you are actually tracking. The camera now sizes
+  itself to a fixed world height (`FOLLOW_HALF_HEIGHT`, ~2x closer) and follows
+  the players this browser drives.
+- **Couch co-op shares one camera, so the camera has to give.** Two local chefs
+  at opposite ends of the kitchen cannot both be centred, so the view zooms out
+  until it holds them both — at worst reaching the old whole-kitchen framing,
+  which makes the previous behaviour a special case rather than a mode. The pan
+  is quick and the zoom deliberately slow: a view size that reacts as fast as
+  players separate and rejoin is nauseating.
+- **A following camera must not pan off the diorama.** The view rect is clamped
+  inside the kitchen's bounds, so hugging a wall never fills half the screen
+  with empty park.
+- **The art still assumes one camera angle.** `KitchenCamera.setYaw` works and
+  the framing maths is orientation-agnostic, but turning the camera would expose
+  what the art takes for granted: the walls nearest the camera are built as a low
+  lip so they don't occlude the kitchen (`View.buildKitchenShell`), ovens only
+  wear glass doors on their two visible sides (`render/meshes.ts`), and the sun
+  is fixed. Rotation is a lighting and modelling job, not a camera one.
 
 ### Feedback: showing what the sim knows
 
@@ -702,7 +724,9 @@ even if you were watching another chef at the time.
 
 It's drawn as a shader on a quad rather than as geometry, because the fill is a
 single uniform — no geometry rebuild per frame, one draw call per appliance. The
-camera never rotates, so the quad is oriented to it once at build time.
+quad is turned to face the camera on every frame it is visible: one quaternion
+copy per busy appliance, and the dial cannot go edge-on if the camera ever gains
+a yaw control.
 
 Unattended appliances advertise themselves instead: a frying basket bobs and its
 oil boils and brightens, and an oven's window glows with an uneven ember heat.
@@ -1081,8 +1105,9 @@ What changed:
 - **static scenery is baked into one mesh per material** at startup
   (`render/merge.ts`). Authoring still builds loose parts — a tree is a trunk
   and four blobs — and only what reaches the scene changes. The trade is
-  per-object frustum culling, which a fixed orthographic camera framing the
-  whole diorama never wanted anyway;
+  per-object frustum culling, which was worth nothing when the camera framed the
+  whole diorama, and is worth little now it follows: the park is a handful of
+  batched draws either way;
 - **grass stopped being expensive.** `roundedBox` subdivides into a 7×7×7 grid
   to carry its corner radius: 588 triangles, which is right for an oven door and
   absurd for a blade of grass four pixels wide. 780 blades were 459k of the

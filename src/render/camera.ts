@@ -1,0 +1,236 @@
+import * as THREE from "three";
+import { LAYER } from "./layers";
+
+/**
+ * The kitchen camera: a 3/4 orthographic view that follows the local chefs.
+ *
+ * It used to frame the whole kitchen at once, which is correct and unreadable —
+ * a 20x9 grid on a 16:9 screen leaves every chef about eighty pixels tall, and
+ * the food they are carrying (the thing you are actually tracking) far smaller
+ * than that. So the frustum is now sized to a *fixed world height* and slid to
+ * keep the local players inside it.
+ *
+ * Two rules keep that from becoming a nuisance:
+ *
+ *  - **Couch co-op shares one camera.** Two local chefs at opposite ends of the
+ *    kitchen cannot both be centred, so the view zooms out until it holds them
+ *    both, up to the old whole-kitchen framing. Nobody is ever off-screen, and
+ *    when the players are together you get the close view.
+ *  - **It never pans off the diorama.** The view rect is clamped inside the
+ *    kitchen's bounds, so the frame is always full of kitchen rather than
+ *    drifting into empty park when somebody hugs a wall.
+ *
+ * Everything is computed in *camera space* by projecting world points through
+ * the inverse camera matrix. That is what makes the whole thing orientation
+ * agnostic: fitting, clamping and panning never mention world x/z, so changing
+ * `setYaw` is enough to spin the kitchen without touching any of the maths.
+ */
+
+/** Where the camera sits relative to the point it looks at. */
+const ORBIT = {
+  /** Horizontal distance from the pivot. */
+  radius: Math.hypot(13, 15),
+  /** Height above the pivot, which fixes the pitch of the 3/4 angle. */
+  height: 17,
+  /** Chef eye-line-ish, so the kitchen sits in the middle of the frame. */
+  pivotY: 0.4,
+};
+
+/** The 3/4 angle the kitchen art is authored for. See README: rotating the
+ * camera past this needs the wall lip and appliance detailing to follow. */
+const DEFAULT_YAW = Math.atan2(13, 15);
+
+/**
+ * Half the vertical size of the followed view, in world units.
+ *
+ * The whole-kitchen framing is ~10.25 by the same measure, so this is a little
+ * over 2x zoom. It is the one number to turn if the game feels too near or too
+ * far; everything else adapts to it.
+ */
+const FOLLOW_HALF_HEIGHT = 5.5;
+
+/** Breathing room around the followed chefs, so nobody hugs the screen edge. */
+const FOLLOW_PADDING = 2.6;
+
+/** Breathing room around the kitchen when the whole thing is in frame. */
+const BOUNDS_MARGIN = 2.2;
+
+/** Torso height: following the feet makes the camera sit unhelpfully low. */
+const TARGET_HEIGHT = 0.9;
+
+/**
+ * Easing rates, in "e-folds per second". The pan is quick enough to feel
+ * attached to the chef; the zoom is deliberately slower, because a view size
+ * that reacts as fast as the players separate and rejoin is nauseating.
+ */
+const PAN_RATE = 7;
+const ZOOM_RATE = 3;
+
+/** A rectangle in camera space: what the orthographic frustum is. */
+type Rect = { minX: number; maxX: number; minY: number; maxY: number };
+
+/** A point to keep in frame, in world space. */
+export type FollowTarget = { x: number; z: number };
+
+export class KitchenCamera {
+  readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 120);
+
+  private readonly bounds: THREE.Box3;
+  private readonly pivot = new THREE.Vector3();
+  /** World -> camera space. Rebuilt only when the camera itself moves. */
+  private readonly toCamera = new THREE.Matrix4();
+  /** The kitchen's bounds in camera space, plus margin: the panning limit. */
+  private limit: Rect = { minX: -1, maxX: 1, minY: -1, maxY: 1 };
+  private yaw = DEFAULT_YAW;
+  private aspect = 1;
+  /** Smoothed frustum: centre and half-height in camera space. Null until the
+   * first update, which snaps rather than easing in from nowhere. */
+  private view: { x: number; y: number; halfH: number } | null = null;
+  private readonly scratch = new THREE.Vector3();
+
+  /** @param bounds world-space box the camera must never show past. */
+  constructor(bounds: THREE.Box3) {
+    this.bounds = bounds;
+    this.pivot.set(
+      (bounds.min.x + bounds.max.x) / 2,
+      ORBIT.pivotY,
+      (bounds.min.z + bounds.max.z) / 2,
+    );
+    // The main camera sees everything; only the ambient-occlusion pass gets a
+    // restricted view (see render/post.ts).
+    this.camera.layers.enable(LAYER.UI);
+    this.place();
+  }
+
+  /**
+   * Turn the camera around the kitchen. Nothing here objects to it, but the
+   * *art* currently assumes one angle — see the wall lip in `View` and the
+   * one-sided appliance detailing in `meshes.ts` — so it stays fixed for now.
+   */
+  setYaw(yaw: number): void {
+    if (yaw === this.yaw) return;
+    this.yaw = yaw;
+    this.place();
+    // Camera-space coordinates mean something different now; the old smoothed
+    // rect would send the view sliding across the kitchen.
+    this.view = null;
+  }
+
+  setAspect(aspect: number): void {
+    this.aspect = aspect;
+  }
+
+  /**
+   * Frame `targets`, easing from wherever the view was. With no targets — the
+   * join screen, or a spectator — it falls back to the whole kitchen.
+   */
+  update(targets: readonly FollowTarget[], dt: number): void {
+    const wanted = this.fit(targets.length ? this.project(targets) : this.limit);
+
+    if (!this.view) this.view = wanted;
+    else {
+      this.view.x += (wanted.x - this.view.x) * ease(PAN_RATE, dt);
+      this.view.y += (wanted.y - this.view.y) * ease(PAN_RATE, dt);
+      this.view.halfH += (wanted.halfH - this.view.halfH) * ease(ZOOM_RATE, dt);
+    }
+
+    // Clamped *after* easing, not before: the eased half-height decides how far
+    // the centre may travel, so a view still zooming out would otherwise be
+    // allowed to overshoot the kitchen for a few frames.
+    const halfH = this.view.halfH;
+    const halfW = halfH * this.aspect;
+    const x = clampSpan(this.view.x, halfW, this.limit.minX, this.limit.maxX);
+    const y = clampSpan(this.view.y, halfH, this.limit.minY, this.limit.maxY);
+
+    this.camera.left = x - halfW;
+    this.camera.right = x + halfW;
+    this.camera.top = y + halfH;
+    this.camera.bottom = y - halfH;
+    this.camera.updateProjectionMatrix();
+  }
+
+  /** Position the camera on its orbit and cache what depends on where it is. */
+  private place(): void {
+    this.camera.position.set(
+      this.pivot.x + Math.sin(this.yaw) * ORBIT.radius,
+      this.pivot.y + ORBIT.height,
+      this.pivot.z + Math.cos(this.yaw) * ORBIT.radius,
+    );
+    this.camera.lookAt(this.pivot);
+    this.camera.updateMatrixWorld();
+    this.toCamera.copy(this.camera.matrixWorld).invert();
+
+    // The kitchen's eight bounding-box corners, projected. Doing it this way
+    // (rather than a hand-tuned view size) keeps the framing correct for any
+    // kitchen shape and any camera angle.
+    const corner = new THREE.Vector3();
+    const box: Rect = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+    for (let i = 0; i < 8; i++) {
+      corner
+        .set(
+          i & 1 ? this.bounds.max.x : this.bounds.min.x,
+          i & 2 ? this.bounds.max.y : this.bounds.min.y,
+          i & 4 ? this.bounds.max.z : this.bounds.min.z,
+        )
+        .applyMatrix4(this.toCamera);
+      grow(box, corner.x, corner.y);
+    }
+    this.limit = {
+      minX: box.minX - BOUNDS_MARGIN,
+      maxX: box.maxX + BOUNDS_MARGIN,
+      minY: box.minY - BOUNDS_MARGIN,
+      maxY: box.maxY + BOUNDS_MARGIN,
+    };
+  }
+
+  /** Bounding rect of the follow targets, in camera space. */
+  private project(targets: readonly FollowTarget[]): Rect {
+    const box: Rect = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+    for (const target of targets) {
+      this.scratch.set(target.x, TARGET_HEIGHT, target.z).applyMatrix4(this.toCamera);
+      grow(box, this.scratch.x, this.scratch.y);
+    }
+    return box;
+  }
+
+  /**
+   * Size a frustum around `box`: never tighter than the follow zoom, never
+   * wider than the whole kitchen, and always the right shape for the window.
+   */
+  private fit(box: Rect): { x: number; y: number; halfH: number } {
+    const needed = Math.max(
+      (box.maxY - box.minY) / 2 + FOLLOW_PADDING,
+      ((box.maxX - box.minX) / 2 + FOLLOW_PADDING) / this.aspect,
+    );
+    const widest = Math.max(
+      (this.limit.maxY - this.limit.minY) / 2,
+      (this.limit.maxX - this.limit.minX) / 2 / this.aspect,
+    );
+    return {
+      x: (box.minX + box.maxX) / 2,
+      y: (box.minY + box.maxY) / 2,
+      halfH: Math.min(Math.max(FOLLOW_HALF_HEIGHT, needed), widest),
+    };
+  }
+}
+
+/** Frame-rate independent easing: the fraction to move this frame. */
+function ease(rate: number, dt: number): number {
+  return 1 - Math.exp(-rate * dt);
+}
+
+/**
+ * Keep a span of `half` either side of `centre` inside [`min`, `max`], or
+ * centre it when it simply does not fit.
+ */
+function clampSpan(centre: number, half: number, min: number, max: number): number {
+  if (half * 2 >= max - min) return (min + max) / 2;
+  return Math.min(Math.max(centre, min + half), max - half);
+}
+
+function grow(box: Rect, x: number, y: number): void {
+  box.minX = Math.min(box.minX, x);
+  box.maxX = Math.max(box.maxX, x);
+  box.minY = Math.min(box.minY, y);
+  box.maxY = Math.max(box.maxY, y);
+}

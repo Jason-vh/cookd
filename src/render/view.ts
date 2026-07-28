@@ -11,7 +11,7 @@ import { biome as lookupBiome } from "../data/biomes";
 import { PALETTE } from "./palette";
 import { createEnvironment } from "./environment";
 import { mergeStatic } from "./merge";
-import { LAYER } from "./layers";
+import { KitchenCamera, type FollowTarget } from "./camera";
 import { Dial } from "./dial";
 import { Bubble } from "./bubble";
 import { setGhost, setGhostOpacity } from "./ghost";
@@ -46,6 +46,7 @@ import { createPost, postEnabled, type Post } from "./post";
 export class View {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.OrthographicCamera;
+  private rig: KitchenCamera;
   private renderer: THREE.WebGLRenderer;
   private post: Post | null = null;
   private grade: { saturation: number; warmth: number; lift: number };
@@ -73,8 +74,8 @@ export class View {
   private heldState: Record<number, { alpha: number; x: number; z: number; pop: number; started: boolean }> = {};
   /** This frame's delta, shared by everything that eases. */
   private frameDt = 1 / 60;
-  /** World-space bounds the camera must keep in frame. */
-  private bounds: THREE.Box3;
+  /** Reused every frame so following allocates nothing. */
+  private followTargets: FollowTarget[] = [];
 
   constructor(canvas: HTMLCanvasElement, world: World, biomeId: string) {
     const biome = lookupBiome(biomeId);
@@ -88,18 +89,16 @@ export class View {
 
     const cx = world.width / 2;
     const cz = world.height / 2;
-    this.bounds = new THREE.Box3(
-      new THREE.Vector3(-0.4, -1.4, -0.4),
-      new THREE.Vector3(world.width + 0.4, 2.0, world.height + 0.4),
-    );
 
-    // Fixed orthographic camera at a 3/4 angle: real 3D, isometric read.
-    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 120);
-    // The main camera sees everything; only the ambient-occlusion pass gets a
-    // restricted view (see render/post.ts).
-    this.camera.layers.enable(LAYER.UI);
-    this.camera.position.set(cx + 13, 17, cz + 15);
-    this.camera.lookAt(cx, 0.4, cz);
+    // Orthographic at a 3/4 angle: real 3D, isometric read. It follows the
+    // local chefs and never shows past these bounds — see render/camera.ts.
+    this.rig = new KitchenCamera(
+      new THREE.Box3(
+        new THREE.Vector3(-0.4, -1.4, -0.4),
+        new THREE.Vector3(world.width + 0.4, 2.0, world.height + 0.4),
+      ),
+    );
+    this.camera = this.rig.camera;
 
     // Sky, sunlight, ground and scenery all come from the biome.
     this.setupImageBasedLighting(biome.environmentIntensity);
@@ -172,7 +171,7 @@ export class View {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h, false);
-    this.frameCamera(w / h);
+    this.rig.setAspect(w / h);
 
     if (postEnabled() && !this.post) {
       this.post = createPost(this.renderer, this.scene, this.camera, this.grade);
@@ -181,50 +180,11 @@ export class View {
   }
 
   /**
-   * Fit the orthographic frustum to the kitchen's bounding box by projecting
-   * its eight corners into camera space. Doing it this way (rather than a
-   * hand-tuned "view size") means the framing stays correct for any kitchen
-   * shape and any window aspect ratio, with a consistent margin around it.
+   * `localIds` are the players this browser drives; the camera follows them and
+   * ignores everyone else, so an online kitchen does not drag your view across
+   * the room every time a stranger walks off.
    */
-  private frameCamera(aspect: number): void {
-    // A little breathing room so the surrounding biome is visible.
-    const margin = 2.2;
-    this.camera.updateMatrixWorld();
-    const toCamera = new THREE.Matrix4().copy(this.camera.matrixWorld).invert();
-
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    const corner = new THREE.Vector3();
-    for (let i = 0; i < 8; i++) {
-      corner.set(
-        i & 1 ? this.bounds.max.x : this.bounds.min.x,
-        i & 2 ? this.bounds.max.y : this.bounds.min.y,
-        i & 4 ? this.bounds.max.z : this.bounds.min.z,
-      );
-      corner.applyMatrix4(toCamera);
-      minX = Math.min(minX, corner.x);
-      maxX = Math.max(maxX, corner.x);
-      minY = Math.min(minY, corner.y);
-      maxY = Math.max(maxY, corner.y);
-    }
-
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    let halfW = (maxX - minX) / 2 + margin;
-    let halfH = (maxY - minY) / 2 + margin;
-    if (halfW / halfH < aspect) halfW = halfH * aspect;
-    else halfH = halfW / aspect;
-
-    this.camera.left = centerX - halfW;
-    this.camera.right = centerX + halfW;
-    this.camera.top = centerY + halfH;
-    this.camera.bottom = centerY - halfH;
-    this.camera.updateProjectionMatrix();
-  }
-
-  render(world: World, alpha: number): void {
+  render(world: World, alpha: number, localIds: readonly number[] = []): void {
     const dt = Math.min(0.1, this.clock.getDelta());
     this.frameDt = dt;
     this.syncEffects(world, dt);
@@ -234,9 +194,27 @@ export class View {
     this.syncTables(world, dt);
     this.syncItems(world, alpha);
     this.syncHighlights(world);
+    this.rig.update(this.followPoints(world, alpha, localIds), dt);
 
     if (this.post) this.post.render();
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * Where the local chefs are *this frame*. Interpolated with the same `alpha`
+   * the chefs themselves are drawn at, or the camera would chase a body that is
+   * 60Hz-steppy while the body it is chasing is smooth.
+   */
+  private followPoints(world: World, alpha: number, localIds: readonly number[]): FollowTarget[] {
+    this.followTargets.length = 0;
+    for (const player of world.players) {
+      if (!localIds.includes(player.id)) continue;
+      this.followTargets.push({
+        x: lerp(player.prevPos.x, player.pos.x, alpha),
+        z: lerp(player.prevPos.y, player.pos.y, alpha),
+      });
+    }
+    return this.followTargets;
   }
 
   // --- appliances ------------------------------------------------------------
