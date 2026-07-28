@@ -9,6 +9,7 @@ import { PLAYER_SPEED, applianceAtTile, playerById } from "../sim/world";
 import { biome as lookupBiome } from "../data/biomes";
 import { PALETTE } from "./palette";
 import { createEnvironment } from "./environment";
+import { mergeStatic } from "./merge";
 import { LAYER } from "./layers";
 import { Dial } from "./dial";
 import { setGhost, setGhostOpacity } from "./ghost";
@@ -109,8 +110,15 @@ export class View {
     pmrem.dispose();
   }
 
-  /** The kitchen itself: its paved floor and its walls. */
+  /**
+   * The kitchen itself: its paved floor and its walls.
+   *
+   * Walls are fixed by the level and the floor never moves, so the whole shell
+   * is baked down to one draw call per material alongside the scenery.
+   */
   private buildKitchenShell(world: World, cx: number, cz: number): void {
+    const shell = new THREE.Group();
+
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(world.width, world.height),
       new THREE.MeshStandardMaterial({
@@ -122,7 +130,7 @@ export class View {
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(cx, 0.004, cz);
     floor.receiveShadow = true;
-    this.scene.add(floor);
+    shell.add(floor);
 
     for (let y = 0; y < world.height; y++) {
       for (let x = 0; x < world.width; x++) {
@@ -132,9 +140,11 @@ export class View {
         const near = x === world.width - 1 || y === world.height - 1;
         const wall = buildWall(near ? 0.26 : 1.1);
         wall.position.set(x + 0.5, 0, y + 0.5);
-        this.scene.add(wall);
+        shell.add(wall);
       }
     }
+
+    this.scene.add(...mergeStatic(shell));
   }
 
   resize(): void {

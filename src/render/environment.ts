@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { Biome, PropKind, ScatterEntry } from "../data/biomes";
-import { cylinder, mesh, roundedBox, sphere } from "./primitives";
+import { box, cylinder, mesh, roundedBox, sphere } from "./primitives";
+import { mergeStatic } from "./merge";
 
 /**
  * Everything outside the kitchen walls: sky, sunlight, ground, the patio the
@@ -12,6 +13,9 @@ import { cylinder, mesh, roundedBox, sphere } from "./primitives";
  * Scatter uses a **seeded** RNG, not `Math.random()`: the park must look
  * identical on every load, and identical on every client once there is online
  * multiplayer.
+ *
+ * None of it moves, so it is authored as loose parts and then baked into one
+ * mesh per material on the way into the scene — see `merge.ts`.
  */
 
 export type EnvironmentBounds = {
@@ -33,10 +37,15 @@ export function createEnvironment(
   scene.fog = new THREE.Fog(biome.fog.color, biome.fog.near, biome.fog.far);
 
   addLights(scene, biome, bounds, cx, cz);
-  addGround(scene, biome, cx, cz, groundY);
-  addPatio(scene, biome, bounds, cx, cz, groundY);
-  if (biome.path) addPath(scene, biome, bounds, groundY);
-  addScatter(scene, biome, bounds, cx, cz, groundY);
+
+  // Everything past this point is scenery: built into a scratch group, then
+  // collapsed into a handful of draw calls before it reaches the scene.
+  const scenery = new THREE.Group();
+  addGround(scenery, biome, cx, cz, groundY);
+  addPatio(scenery, biome, bounds, cx, cz, groundY);
+  if (biome.path) addPath(scenery, biome, bounds, groundY);
+  addScatter(scenery, biome, bounds, cx, cz, groundY);
+  scene.add(...mergeStatic(scenery));
 }
 
 // --- lighting ----------------------------------------------------------------
@@ -89,7 +98,7 @@ function addLights(
 // --- ground and patio --------------------------------------------------------
 
 function addGround(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   biome: Biome,
   cx: number,
   cz: number,
@@ -111,7 +120,7 @@ function addGround(
 
 /** The raised paved platform the kitchen is built on. */
 function addPatio(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   biome: Biome,
   bounds: EnvironmentBounds,
   cx: number,
@@ -136,7 +145,7 @@ function addPatio(
 
 /** Paving slabs leading away from the serving side — where customers arrive. */
 function addPath(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   biome: Biome,
   bounds: EnvironmentBounds,
   groundY: number,
@@ -202,7 +211,9 @@ const PROPS: Record<PropKind, PropBuilder> = {
     const group = new THREE.Group();
     const color = pick(biome.foliage, random);
     for (let i = 0; i < 3; i++) {
-      const blade = mesh(roundedBox(0.05, 0.2, 0.05, 0.02), color, "cloth");
+      // Unbevelled: a blade is a few pixels wide, so the rounding is invisible
+      // and there are 780 of them.
+      const blade = mesh(box(0.05, 0.2, 0.05), color, "cloth");
       blade.position.set((random() - 0.5) * 0.2, 0.1, (random() - 0.5) * 0.2);
       blade.rotation.set((random() - 0.5) * 0.5, random() * 3, (random() - 0.5) * 0.5);
       group.add(blade);
@@ -288,7 +299,7 @@ const FOOTPRINT: Record<PropKind, number> = {
 type Placed = { x: number; z: number; radius: number };
 
 function addScatter(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   biome: Biome,
   bounds: EnvironmentBounds,
   cx: number,

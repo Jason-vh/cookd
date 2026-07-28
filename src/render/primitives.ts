@@ -28,6 +28,19 @@ export function roundedBox(w: number, h: number, d: number, radius = 0.06): THRE
   return cached(`box:${w},${h},${d},${r}`, () => new RoundedBoxGeometry(w, h, d, 3, r));
 }
 
+/**
+ * A plain, unbevelled box — for parts too small for a bevel to survive to the
+ * screen.
+ *
+ * `roundedBox` subdivides into a 7x7x7 grid to carry its corner radius, which
+ * is 588 triangles. That is the right price for an oven door and an absurd one
+ * for a blade of grass four pixels wide; 780 blades were most of the scene's
+ * geometry. Rule 1 of the art style still holds where it can be seen.
+ */
+export function box(w: number, h: number, d: number): THREE.BufferGeometry {
+  return cached(`raw:${w},${h},${d}`, () => new THREE.BoxGeometry(w, h, d));
+}
+
 export function sphere(radius: number, segments = 20): THREE.BufferGeometry {
   return cached(`sph:${radius},${segments}`, () =>
     new THREE.SphereGeometry(radius, segments, Math.round(segments * 0.7)),

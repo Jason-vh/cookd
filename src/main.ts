@@ -160,12 +160,30 @@ function runMenuAction(): void {
 
 // --- loop --------------------------------------------------------------------
 
+/**
+ * Render at most 60 times a second.
+ *
+ * `requestAnimationFrame` runs at the display's refresh rate, so on a 120 Hz
+ * laptop panel the game was drawing every frame twice over — twice the draw
+ * calls, twice the shadow map, twice the post-processing chain — to show the
+ * same thing. The simulation is a fixed 60 Hz timestep either way, so the extra
+ * frames only ever re-interpolated a chef between two positions they were
+ * already being drawn between.
+ *
+ * The 2 ms tolerance matters: a 60 Hz display delivers frames a hair under
+ * 16.67 ms apart, and without slack every other one would miss the budget and
+ * halve the game to 30 fps.
+ */
+const FRAME_BUDGET = 1000 / 60 - 2;
+
 let last = performance.now();
 let menuWasOpen = false;
 
 function frame(now: number): void {
   requestAnimationFrame(frame);
-  const elapsed = Math.min(0.25, (now - last) / 1000);
+  const since = now - last;
+  if (since < FRAME_BUDGET) return;
+  const elapsed = Math.min(0.25, since / 1000);
   last = now;
 
   fallbackIfUnreachable(now);
