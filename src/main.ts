@@ -176,6 +176,38 @@ function runMenuAction(): void {
  */
 const FRAME_BUDGET = 1000 / 60 - 2;
 
+/**
+ * A window you are not looking at still gets `requestAnimationFrame` at the full
+ * refresh rate. Chrome throttles a *hidden* or fully occluded tab, but not one
+ * that has merely lost focus — so a kitchen sitting visible in the corner of the
+ * screen while you work in another window kept drawing 60 complete frames a
+ * second, post-processing and all.
+ *
+ * Only drawing is throttled. `game.update` keeps its cadence because online it
+ * is also what sends this client's inputs to the server, and a client that goes
+ * quiet for a few seconds is one that has to noisily catch up when it returns.
+ * Skipping the draw is free; skipping the tick is not.
+ */
+const UNFOCUSED_RENDER_FPS = 10;
+
+let focused = true;
+window.addEventListener("blur", () => {
+  focused = false;
+});
+window.addEventListener("focus", () => {
+  focused = true;
+});
+
+let lastRender = 0;
+
+/** True at most `UNFOCUSED_RENDER_FPS` times a second while unfocused. */
+function shouldRender(now: number): boolean {
+  if (focused) return true;
+  if (now - lastRender < 1000 / UNFOCUSED_RENDER_FPS) return false;
+  lastRender = now;
+  return true;
+}
+
 let last = performance.now();
 let menuWasOpen = false;
 
@@ -190,7 +222,7 @@ function frame(now: number): void {
 
   if (join.isOpen) {
     join.poll(input);
-    view.render(game.world, game.alpha);
+    if (shouldRender(now)) view.render(game.world, game.alpha);
     return;
   }
 
@@ -242,7 +274,7 @@ function frame(now: number): void {
 
   game.update(elapsed, poll);
   menuWasOpen = menu.isOpen;
-  view.render(game.world, game.alpha);
+  if (shouldRender(now)) view.render(game.world, game.alpha);
   hud.update(game.world, { status: game.status, ping: game.ping, room: game.status === "local" ? "" : roomOf() });
 }
 
