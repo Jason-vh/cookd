@@ -191,9 +191,21 @@ models later touches only `render/meshes.ts`.
 **Tile-aligned kitchen, free-moving players.** Appliances snap to a grid (which
 makes the build phase and pathing trivial), while chefs are circles moving
 continuously with per-axis collision resolution so they slide along counters.
+The pathing half of that claim came due when customers arrived, and it held:
+routing a customer to a chair is a flood fill over tiles, and because the grid
+only changes in the build phase, a route cannot go stale while it is walked.
 
-**DOM for UI.** Order tickets, timers and text are things browsers are already
-excellent at. WebGL text is a trap.
+**DOM for chrome, the scene for anything about a place.** Timers, money and
+the event log are things browsers are excellent at, and WebGL text is a trap.
+But an order belongs to a *table*, and the moment we tried to say that in the
+corner of the screen we were describing a location instead of pointing at one.
+The rule that fell out: if a piece of UI is about somewhere in the room, it
+lives in the room — which is why the order list is gone and the bubbles are
+drawn in the 3D scene, out of one cached model and one shader quad each.
+
+The rule costs something, and the cost was taken on purpose: a camera that does
+not frame the whole kitchen can leave the only copy of an order off-screen. See
+the gotcha under *Feedback* before applying this to anything else.
 
 ## Multiplayer
 
@@ -1147,7 +1159,9 @@ next step — not a different language.
 `src/sim/sim.test.ts` drives the game the way a player does — by feeding
 `PlayerInput` into `step()` — which is only possible because the sim is pure.
 The tests cover the full pizza pipeline end to end, hold-to-chop semantics,
-burning, collision regressions, and the day/build loop.
+burning, collision regressions, the day/build loop, and the dining room —
+seating, delivery, the wrong dish, tips, bussing, walkouts, a walled-off room
+and the closing beat.
 
 `src/game/host.test.ts` covers the multiplayer machinery **without a socket in
 sight**: stable ids across a departure, what happens to what a leaver was
