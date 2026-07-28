@@ -672,15 +672,17 @@ These cost real debugging time and will bite again:
 - **A following camera must not pan off the diorama.** The view rect is clamped
   inside the kitchen's bounds, so hugging a wall never fills half the screen
   with empty park.
-- **Zooming in put the order bubbles off-screen — unresolved.** The bubble over
-  a table *is* the ticket, and the HUD's order list was deleted because of it.
-  That held while the camera framed the whole kitchen; it does not hold now. A
-  chef at the fryer in the south-east corner cannot see any of the four tables,
-  so during a rush there is currently nothing on screen that says what was
-  ordered. The fix belongs to the bubble, not the camera: clamp an off-screen
-  bubble to the edge of the frame, pointing at the table it belongs to, so it
-  still answers "what" and "how far" from anywhere in the kitchen. Bringing the
-  ticket list back would only re-split the attention it was deleted to unsplit.
+- **Order bubbles can now be off-screen, and that is the trade we took.** The
+  bubble over a table *is* the ticket, and the HUD's order list was deleted
+  because of it. That worked partly because the camera framed the whole kitchen:
+  a chef at the fryer in the south-east corner can no longer see any of the four
+  tables. Accepted deliberately — walking to the pass to see what is waiting is
+  the same trip you were going to make anyway, and it puts the dining room back
+  in view on the way. If it ever stops feeling like a rhythm and starts feeling
+  like a blind spot, the fix belongs to the bubble rather than the camera: clamp
+  an off-screen one to the edge of the frame, pointing at its table, so it still
+  answers "what" and "how far" from anywhere. Bringing the ticket list back would
+  only re-split the attention it was deleted to unsplit.
 - **The art still assumes one camera angle.** `KitchenCamera.setYaw` works and
   the framing maths is orientation-agnostic, but turning the camera would expose
   what the art takes for granted: the walls nearest the camera are built as a low
