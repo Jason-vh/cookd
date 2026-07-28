@@ -15,9 +15,10 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
  * Nothing out here does move, so it is baked once at startup. Authoring is
  * untouched; only the shape of what reaches the scene changes.
  *
- * The trade is per-object frustum culling, which this game does not want
- * anyway: the camera is fixed and orthographic and frames the entire diorama,
- * so nothing is ever off-screen to cull.
+ * The trade is per-object frustum culling, which was worth nothing when the
+ * camera framed the entire diorama and is worth little now it follows the
+ * chefs: the park is a handful of batched draws either way, and a merged batch
+ * spans the whole scene so it could never be culled anyway.
  */
 export function mergeStatic(root: THREE.Object3D): THREE.Mesh[] {
   root.updateMatrixWorld(true);
