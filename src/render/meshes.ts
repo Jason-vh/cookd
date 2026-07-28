@@ -32,6 +32,8 @@ export function buildAppliance(appliance: Appliance): THREE.Object3D {
   // silhouette instead — see buildBin.
   if (appliance.kind === "bin") {
     group.add(buildBin(group, h));
+  } else if (appliance.kind === "table") {
+    buildTable(group, h);
   } else {
     const [bodyColor, bodySurface] = bodyLook(appliance.kind);
     const body = mesh(roundedBox(w, h, w, 0.07), bodyColor, bodySurface);
@@ -68,6 +70,58 @@ export function buildAppliance(appliance: Appliance): THREE.Object3D {
   }
 
   return group;
+}
+
+/**
+ * A round cafe table with four chairs, replacing the body a generic appliance
+ * would otherwise get.
+ *
+ * The chairs are the point. `MAX_ACTIVE_ORDERS` used to be a constant; now it
+ * is furniture a player buys and places, and furniture has to *look* like
+ * capacity from across the room. Four of them also promise the parties that
+ * come later without needing them to exist yet.
+ */
+function buildTable(group: THREE.Group, h: number): void {
+  const top = mesh(cylinder(0.42, 0.4, 0.07), PALETTE.woodTop, "wood");
+  top.position.y = h;
+  group.add(top);
+
+  const stem = mesh(cylinder(0.07, 0.09, h), PALETTE.steelDark, "paintedMetal");
+  stem.position.y = h / 2;
+  group.add(stem);
+
+  const foot = mesh(cylinder(0.24, 0.26, 0.05), PALETTE.steelDark, "paintedMetal");
+  foot.position.y = 0.025;
+  group.add(foot);
+
+  // One chair per side, tucked under the overhang so they never spill into a
+  // neighbouring tile and confuse what is walkable.
+  for (let i = 0; i < 4; i++) {
+    const angle = (i * Math.PI) / 2;
+    const chair = new THREE.Group();
+    chair.position.set(Math.sin(angle) * 0.42, 0, Math.cos(angle) * 0.42);
+    chair.rotation.y = angle;
+
+    const seat = mesh(roundedBox(0.26, 0.05, 0.26, 0.02), PALETTE.wood, "wood");
+    seat.position.y = h * 0.62;
+    chair.add(seat);
+
+    const back = mesh(roundedBox(0.26, 0.22, 0.04, 0.02), PALETTE.wood, "wood");
+    back.position.set(0, h * 0.62 + 0.13, 0.11);
+    chair.add(back);
+
+    for (const [lx, lz] of [
+      [-0.1, -0.1],
+      [0.1, -0.1],
+      [-0.1, 0.1],
+      [0.1, 0.1],
+    ] as const) {
+      const leg = mesh(cylinder(0.017, 0.017, h * 0.62), PALETTE.crateTrim, "wood");
+      leg.position.set(lx, (h * 0.62) / 2, lz);
+      chair.add(leg);
+    }
+    group.add(chair);
+  }
 }
 
 function bodyLook(kind: Appliance["kind"]): [number, SurfaceName] {
@@ -262,9 +316,11 @@ function labelFor(appliance: Appliance): string | null {
     case "oven":
       return "Oven";
     case "serving":
-      return "Serve";
+      return "Pass";
     case "bin":
       return "Bin";
+    case "table":
+      return "Table";
     default:
       return null;
   }
@@ -288,6 +344,29 @@ export function buildWall(height: number): THREE.Object3D {
   return group;
 }
 
+/**
+ * The way in: two posts and a lintel where a wall tile would otherwise be.
+ *
+ * The tile itself stays walkable — this is scenery around a hole, not a wall
+ * with a hole in it — so customers stream through the middle of it and the
+ * paving outside leads straight to it.
+ */
+export function buildDoorway(): THREE.Object3D {
+  const group = new THREE.Group();
+  // Flush with the wall it interrupts, so it reads as a gate in a wall rather
+  // than a structure standing next to one.
+  const height = 1.1;
+  for (const z of [-0.42, 0.42]) {
+    const post = mesh(roundedBox(1, height, 0.16, 0.04), PALETTE.wall, "enamel");
+    post.position.set(0, height / 2, z);
+    group.add(post);
+  }
+  const lintel = mesh(roundedBox(1.04, 0.14, 1.04, 0.04), PALETTE.wallTrim, "enamel");
+  lintel.position.y = height + 0.07;
+  group.add(lintel);
+  return group;
+}
+
 // --- chefs -------------------------------------------------------------------
 
 export type ChefParts = {
@@ -308,10 +387,28 @@ export type ChefParts = {
  */
 export function buildChef(index: number): ChefParts {
   const color = PALETTE.chefs[index % PALETTE.chefs.length]!;
+  return buildPerson(color, "chef");
+}
+
+/**
+ * A customer: the same articulated figure as a chef, minus the uniform.
+ *
+ * Sharing the rig is what makes them read as the same kind of creature in the
+ * same world, and it means the walk cycle, the lean and the squash all work on
+ * them for free. The toque and the apron are what say "staff", so those are the
+ * only things a customer loses — at a glance across the room, who works here is
+ * never in question.
+ */
+export function buildCustomer(index: number): ChefParts {
+  const color = PALETTE.customers[index % PALETTE.customers.length]!;
+  return buildPerson(color, "customer");
+}
+
+function buildPerson(color: number, role: "chef" | "customer"): ChefParts {
   const root = new THREE.Group();
   // Chefs are drawn slightly larger than life against the kitchen: readability
   // of who is where beats strict scale accuracy (Overcooked does the same).
-  root.scale.setScalar(1.12);
+  root.scale.setScalar(role === "chef" ? 1.12 : 1.06);
 
   const body = new THREE.Group();
   body.position.y = 0.28;
@@ -321,10 +418,12 @@ export function buildChef(index: number): ChefParts {
   torso.position.y = 0.2;
   body.add(torso);
 
-  // Apron: a lighter panel on the chest so the chef has a clear front.
-  const apron = mesh(roundedBox(0.26, 0.3, 0.06, 0.04), PALETTE.chefWhites, "cloth");
-  apron.position.set(0, 0.17, 0.15);
-  body.add(apron);
+  if (role === "chef") {
+    // Apron: a lighter panel on the chest so the chef has a clear front.
+    const apron = mesh(roundedBox(0.26, 0.3, 0.06, 0.04), PALETTE.chefWhites, "cloth");
+    apron.position.set(0, 0.17, 0.15);
+    body.add(apron);
+  }
 
   const head = new THREE.Group();
   head.position.y = 0.46;
@@ -334,13 +433,20 @@ export function buildChef(index: number): ChefParts {
   skull.scale.set(1, 0.96, 0.94);
   head.add(skull);
 
-  const hatBrim = mesh(cylinder(0.155, 0.155, 0.08), PALETTE.chefWhites, "cloth");
-  hatBrim.position.y = 0.14;
-  head.add(hatBrim);
-  const hatPuff = mesh(sphere(0.15), PALETTE.chefWhites, "cloth");
-  hatPuff.scale.set(1, 0.85, 1);
-  hatPuff.position.y = 0.24;
-  head.add(hatPuff);
+  if (role === "chef") {
+    const hatBrim = mesh(cylinder(0.155, 0.155, 0.08), PALETTE.chefWhites, "cloth");
+    hatBrim.position.y = 0.14;
+    head.add(hatBrim);
+    const hatPuff = mesh(sphere(0.15), PALETTE.chefWhites, "cloth");
+    hatPuff.scale.set(1, 0.85, 1);
+    hatPuff.position.y = 0.24;
+    head.add(hatPuff);
+  } else {
+    const hair = mesh(sphere(0.155), PALETTE.hair, "cloth");
+    hair.scale.set(1.03, 0.72, 1.0);
+    hair.position.y = 0.06;
+    head.add(hair);
+  }
 
   const nose = mesh(sphere(0.035), PALETTE.skin, "cloth");
   nose.position.set(0, -0.01, 0.15);
@@ -369,7 +475,8 @@ export function buildChef(index: number): ChefParts {
   const makeLeg = (x: number): THREE.Object3D => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 0.02, 0);
-    const limb = mesh(roundedBox(0.12, 0.2, 0.12, 0.05), PALETTE.chefWhites, "cloth");
+    const trousers = role === "chef" ? PALETTE.chefWhites : PALETTE.customerLegs;
+    const limb = mesh(roundedBox(0.12, 0.2, 0.12, 0.05), trousers, "cloth");
     limb.position.y = -0.1;
     const shoe = mesh(roundedBox(0.14, 0.08, 0.19, 0.035), 0x3a3d47, "cloth");
     shoe.position.set(0, -0.2, 0.03);
@@ -394,6 +501,33 @@ export function buildChef(index: number): ChefParts {
   };
 }
 
+
+// --- tips --------------------------------------------------------------------
+
+/**
+ * The little stack of coins a happy customer leaves behind.
+ *
+ * Small, but it is the whole reason bussing is a decision rather than a chore:
+ * it has to be visible from across the dining room, so it is shiny and it
+ * turns. Anything subtler and clearing tables goes back to being a toll.
+ */
+export function buildTipStack(): THREE.Object3D {
+  const group = new THREE.Group();
+  for (let i = 0; i < 4; i++) {
+    const radius = 0.115 - i * 0.008;
+    const coin = mesh(cylinder(radius, radius, 0.03, 16), PALETTE.coin, "metal");
+    coin.position.set(i === 3 ? 0.025 : 0, 0.016 + i * 0.029, i === 3 ? 0.018 : 0);
+    coin.rotation.y = i * 0.4;
+    group.add(coin);
+  }
+  // One fallen on its edge against the stack: the silhouette that says "coins"
+  // rather than "small cylinder".
+  const leaning = mesh(cylinder(0.105, 0.105, 0.03, 16), PALETTE.coinEdge, "metal");
+  leaning.position.set(-0.14, 0.105, 0.04);
+  leaning.rotation.set(Math.PI / 2, 0, 0.3);
+  group.add(leaning);
+  return group;
+}
 
 // --- tile highlight ----------------------------------------------------------
 

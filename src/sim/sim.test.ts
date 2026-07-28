@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "../data/level";
+import { RECIPE_BY_ID } from "../data/recipes";
 import { DT, step } from "./step";
+import { unreachableTables } from "./systems/customers";
 import { specKey } from "./items";
-import type { Player, PlayerInput, World } from "./types";
+import type { Customer, Player, PlayerInput, World } from "./types";
 import { applianceAtTile, createWorld, emptyInput } from "./world";
 
 /**
@@ -11,8 +13,17 @@ import { applianceAtTile, createWorld, emptyInput } from "./world";
  * They double as executable documentation of the recipe pipeline.
  */
 
+/**
+ * A kitchen with the door closed.
+ *
+ * Customers arrive on their own now, and a test about chopping a tomato should
+ * not be at the mercy of who walked in while it ran. Tests that *are* about the
+ * dining room open the door again by setting `nextArrivalIn`.
+ */
 function makeWorld(): World {
-  return createWorld(LEVEL, 1);
+  const world = createWorld(LEVEL, 1);
+  world.nextArrivalIn = Infinity;
+  return world;
 }
 
 function idle(): PlayerInput[] {
@@ -47,19 +58,48 @@ function hold(world: World, seconds: number, button: "use" | null = "use"): void
 
 // Tile coordinates from data/level.ts
 const CRATE = {
-  tomato: [1, 1],
-  lettuce: [2, 1],
-  cheese: [3, 1],
-  flour: [4, 1],
-  water: [5, 1],
-  potato: [6, 1],
+  tomato: [8, 1],
+  lettuce: [9, 1],
+  cheese: [10, 1],
+  flour: [11, 1],
+  water: [12, 1],
+  potato: [13, 1],
 } as const;
-const PLATES = [7, 1] as const;
-const BOARD = [3, 3] as const;
-const COUNTER = [2, 3] as const;
-const OVEN = [12, 4] as const;
-const FRYER = [11, 7] as const;
-const SERVING = [0, 4] as const;
+const PLATES = [14, 1] as const;
+const BOARD = [10, 3] as const;
+const COUNTER = [9, 3] as const;
+const OVEN = [19, 4] as const;
+const FRYER = [18, 7] as const;
+const PASS = [7, 4] as const;
+/** A table in the dining room, approached from the tile above it. */
+const TABLE = [5, 2] as const;
+
+/**
+ * Sit somebody at a table with an order already placed — the state the delivery
+ * rules care about, without walking them in from the park first.
+ */
+function seatCustomer(world: World, recipeId: string, tile = TABLE): Customer {
+  const table = applianceAtTile(world, tile[0], tile[1])!;
+  const recipe = RECIPE_BY_ID.get(recipeId)!;
+  const seat = { x: tile[0] + 1, y: tile[1] };
+  const customer: Customer = {
+    id: world.nextId++,
+    state: "ordering",
+    pos: { x: seat.x + 0.5, y: seat.y + 0.5 },
+    prevPos: { x: seat.x + 0.5, y: seat.y + 0.5 },
+    facing: { x: -1, y: 0 },
+    table: table.id,
+    seat,
+    recipeId,
+    path: [],
+    timer: 0,
+    remaining: recipe.patience,
+    patience: recipe.patience,
+    tip: 0,
+  };
+  world.customers.push(customer);
+  return customer;
+}
 
 function takeFrom(world: World, tile: readonly [number, number], dx = 0, dy = -1): void {
   face(world.players[0]!, tile[0], tile[1], dx, dy);
@@ -207,7 +247,7 @@ describe("kitchen basics", () => {
 
   test("food that combines with nothing sits alongside, and cannot be served", () => {
     const world = makeWorld();
-    world.orders = [{ id: 1, recipeId: "salad", remaining: 60, patience: 60 }];
+    seatCustomer(world, "salad");
     takeFrom(world, CRATE.tomato);
     takeFrom(world, PLATES); // raw tomato on a plate
     takeFrom(world, CRATE.cheese); // cheese doesn't combine with raw tomato
@@ -216,9 +256,10 @@ describe("kitchen basics", () => {
     takeFrom(world, COUNTER);
     expect(world.players[0]!.carried!.contents.length).toBe(2);
 
-    putOn(world, SERVING, -1, 0);
+    putOn(world, TABLE, 0, 1);
     expect(world.served).toBe(0);
-    expect(world.players[0]!.carried).not.toBeNull();
+    // Nothing is refused: the plate is on the table, it is simply not dinner.
+    expect(applianceAtTile(world, TABLE[0], TABLE[1])!.item).not.toBeNull();
   });
 
   test("one chop for a salad, two for sauce — releasing is what stops it", () => {
@@ -259,7 +300,7 @@ describe("kitchen basics", () => {
     // eject them sideways out of the kitchen.
     const world = makeWorld();
     const player = world.players[0]!;
-    player.pos.x = 1.33;
+    player.pos.x = 8.33;
     player.pos.y = 2.32; // pressed flush against the crate row
 
     const inputs = idle();
@@ -267,7 +308,7 @@ describe("kitchen basics", () => {
     for (let i = 0; i < 60; i++) step(world, inputs);
 
     expect(player.pos.y).toBeCloseTo(2.32, 6);
-    expect(player.pos.x).toBeGreaterThan(4);
+    expect(player.pos.x).toBeGreaterThan(11);
     expect(player.pos.x).toBeLessThan(world.width);
   });
 
@@ -334,9 +375,9 @@ describe("kitchen basics", () => {
 });
 
 describe("the pizza pipeline", () => {
-  test("flour + water -> knead -> sauce -> cheese -> bake -> plate -> serve", () => {
+  test("flour + water -> knead -> sauce -> cheese -> bake -> plate -> deliver", () => {
     const world = makeWorld();
-    world.orders = [{ id: 999, recipeId: "pizza", remaining: 95, patience: 95 }];
+    const diner = seatCustomer(world, "pizza");
 
     // Dough is made from base ingredients: carry flour to the water crate and
     // the source combines straight into your hands.
@@ -384,11 +425,11 @@ describe("the pizza pipeline", () => {
     expect(specKey(plated.contents[0]!)).toBe("pizza|sauced,topped,baked");
 
     takeFrom(world, COUNTER);
-    putOn(world, SERVING, -1, 0);
+    putOn(world, TABLE, 0, 1);
 
     expect(world.served).toBe(1);
-    expect(world.orders.some((o) => o.id === 999)).toBe(false);
-    expect(world.money).toBeGreaterThanOrEqual(16);
+    expect(diner.state).toBe("eating");
+    expect(world.money).toBe(16);
   });
 
   test("a burnt pizza cannot be plated", () => {
@@ -402,9 +443,9 @@ describe("the pizza pipeline", () => {
     expect(counter.item!.processes).toContain("burnt");
   });
 
-  test("serving still requires the plate to hold what was ordered", () => {
+  test("delivery still requires the plate to hold what was ordered", () => {
     const world = makeWorld();
-    world.orders = [{ id: 42, recipeId: "salad", remaining: 60, patience: 60 }];
+    const diner = seatCustomer(world, "salad");
 
     // A plate of raw tomato is now legal to assemble, but nobody ordered it.
     takeFrom(world, CRATE.tomato);
@@ -412,11 +453,10 @@ describe("the pizza pipeline", () => {
     takeFrom(world, PLATES);
     putOn(world, COUNTER);
     takeFrom(world, COUNTER);
-    putOn(world, SERVING, -1, 0);
+    putOn(world, TABLE, 0, 1);
 
     expect(world.served).toBe(0);
-    expect(world.orders).toHaveLength(1);
-    expect(world.players[0]!.carried?.base).toBe("plate");
+    expect(diner.state).toBe("ordering");
   });
 });
 
@@ -433,13 +473,218 @@ describe("day loop", () => {
     expect(board.heldBy).toBe(0);
     expect(applianceAtTile(world, BOARD[0], BOARD[1])).toBeNull();
 
-    // Drop it one tile to the left, on what used to be a counter-free floor.
-    face(world.players[0]!, 6, 3, 0, -1);
+    // Drop it one tile to the right, on what used to be counter-free floor.
+    face(world.players[0]!, 13, 3, 0, -1);
     press(world, "grab");
-    expect(applianceAtTile(world, 6, 3)!.id).toBe(board.id);
+    expect(applianceAtTile(world, 13, 3)!.id).toBe(board.id);
 
     press(world, "start");
     expect(world.phase).toBe("service");
     expect(world.day).toBe(2);
+  });
+});
+
+/**
+ * The dining room, which is the order queue made physical: capacity is chairs,
+ * patience is a person, and a lost order is somebody standing up and leaving.
+ */
+describe("the dining room", () => {
+  /** Build the salad the seated customer is waiting for, and hold it. */
+  function makeSalad(world: World): void {
+    takeFrom(world, CRATE.lettuce);
+    putOn(world, BOARD);
+    chopOn(world, BOARD, 2.1);
+    takeFrom(world, BOARD);
+    putOn(world, COUNTER);
+    takeFrom(world, CRATE.tomato);
+    putOn(world, BOARD);
+    chopOn(world, BOARD, 2.1);
+    takeFrom(world, BOARD);
+    putOn(world, COUNTER); // combines into a salad
+    takeFrom(world, PLATES);
+    putOn(world, COUNTER); // plate the salad
+    takeFrom(world, COUNTER);
+  }
+
+  test("the pass holds a plate instead of swallowing it", () => {
+    const world = makeWorld();
+    takeFrom(world, PLATES);
+    putOn(world, PASS, -1, 0);
+
+    // It used to be a hatch that food disappeared through. Now it is a counter
+    // between two rooms: you put a plate down on it, and someone picks it up.
+    expect(world.players[0]!.carried).toBeNull();
+    expect(applianceAtTile(world, PASS[0], PASS[1])!.item?.base).toBe("plate");
+    expect(world.served).toBe(0);
+
+    takeFrom(world, PASS, -1, 0);
+    expect(world.players[0]!.carried?.base).toBe("plate");
+  });
+
+  test("a customer walks in, sits down and asks for something", () => {
+    const world = makeWorld();
+    world.nextArrivalIn = 0;
+    hold(world, 12, null);
+
+    const customer = world.customers[0]!;
+    expect(customer.table).not.toBeNull();
+    expect(customer.state).toBe("ordering");
+    // They are sitting beside their table, not standing in the doorway.
+    const table = world.appliances.get(customer.table!)!;
+    const distance = Math.hypot(
+      customer.pos.x - (table.tile.x + 0.5),
+      customer.pos.y - (table.tile.y + 0.5),
+    );
+    expect(distance).toBeLessThan(1.1);
+  });
+
+  test("the wrong dish sits on the table and can be taken back", () => {
+    const world = makeWorld();
+    const diner = seatCustomer(world, "pizza");
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+
+    // No refusal, no penalty: the plate is just on the table, and the bubble
+    // still says pizza.
+    expect(diner.state).toBe("ordering");
+    expect(world.served).toBe(0);
+    expect(applianceAtTile(world, TABLE[0], TABLE[1])!.item).not.toBeNull();
+
+    takeFrom(world, TABLE, 0, 1);
+    expect(world.players[0]!.carried?.base).toBe("plate");
+    expect(applianceAtTile(world, TABLE[0], TABLE[1])!.item).toBeNull();
+  });
+
+  test("delivery pays the reward now and leaves the tip on the table", () => {
+    const world = makeWorld();
+    const diner = seatCustomer(world, "salad");
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+
+    const table = applianceAtTile(world, TABLE[0], TABLE[1])!;
+    expect(diner.state).toBe("eating");
+    expect(world.money).toBe(8); // the base reward, and only that
+    expect(diner.tip).toBeGreaterThan(0);
+    expect(table.tip).toBe(0); // not until they leave
+
+    // They eat, then go — leaving the plate and the tip behind. (They are still
+    // walking to the door: leaving the room is not instant either.)
+    hold(world, 13, null);
+    expect(diner.state).toBe("leaving");
+    expect(table.item!.processes).toContain("dirty");
+    expect(table.tip).toBeGreaterThan(0);
+  });
+
+  test("bussing the plate collects the tip, and the stack washes it", () => {
+    const world = makeWorld();
+    seatCustomer(world, "salad");
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+    hold(world, 13, null);
+
+    const table = applianceAtTile(world, TABLE[0], TABLE[1])!;
+    const tip = table.tip;
+    const before = world.money;
+
+    takeFrom(world, TABLE, 0, 1);
+    expect(world.money).toBe(before + tip);
+    expect(table.tip).toBe(0);
+    expect(world.players[0]!.carried!.processes).toContain("dirty");
+
+    putOn(world, PLATES);
+    expect(world.players[0]!.carried).toBeNull();
+  });
+
+  test("food already on the table is picked up when the order lands", () => {
+    const world = makeWorld();
+    const diner = seatCustomer(world, "salad");
+    makeSalad(world);
+
+    // Run the food over before they have decided — prepping ahead of a table
+    // that has only just sat down.
+    diner.state = "deciding";
+    diner.timer = 0.2;
+    putOn(world, TABLE, 0, 1);
+    expect(world.served).toBe(0);
+
+    hold(world, 0.4, null);
+    expect(world.customers[0]!.state).toBe("eating");
+    expect(world.served).toBe(1);
+  });
+
+  test("a dirty plate is not a workspace", () => {
+    const world = makeWorld();
+    const counter = applianceAtTile(world, COUNTER[0], COUNTER[1])!;
+    counter.item = { id: 1, base: "plate", processes: ["dirty"], contents: [] };
+
+    takeFrom(world, CRATE.tomato);
+    putOn(world, COUNTER);
+    expect(counter.item.contents).toHaveLength(0);
+    expect(world.players[0]!.carried?.base).toBe("tomato");
+  });
+
+  test("a table still holding a dirty plate cannot be sat at", () => {
+    const world = makeWorld();
+    for (const appliance of world.appliances.values()) {
+      if (appliance.kind !== "table") continue;
+      appliance.item = { id: appliance.id, base: "plate", processes: ["dirty"], contents: [] };
+    }
+    world.nextArrivalIn = 0;
+    hold(world, 6, null);
+
+    expect(world.customers).toHaveLength(1);
+    expect(world.customers[0]!.state).toBe("waiting");
+  });
+
+  test("patience runs out and the customer walks out", () => {
+    const world = makeWorld();
+    const diner = seatCustomer(world, "fries");
+    diner.remaining = 0.1;
+    hold(world, 0.3, null);
+
+    expect(diner.state).toBe("leaving");
+    expect(world.lost).toBe(1);
+  });
+
+  test("a dining room walled off from the door is reported, not silently broken", () => {
+    const world = makeWorld();
+    expect(unreachableTables(world)).toHaveLength(0);
+
+    // A player parks a counter in the doorway during the build phase — the
+    // mistake somebody will make in their first week.
+    const counter = applianceAtTile(world, COUNTER[0], COUNTER[1])!;
+    world.applianceAt[COUNTER[1] * world.width + COUNTER[0]] = 0;
+    counter.tile = { x: world.door.x + 1, y: world.door.y };
+    world.applianceAt[counter.tile.y * world.width + counter.tile.x] = counter.id;
+
+    expect(unreachableTables(world)).toHaveLength(4);
+
+    // Nobody can sit, so nobody does — they wait at the door and give up.
+    world.nextArrivalIn = 0;
+    hold(world, 6, null);
+    expect(world.customers[0]!.state).toBe("waiting");
+  });
+
+  test("the day does not end until the last customer has gone", () => {
+    const world = makeWorld();
+    const diner = seatCustomer(world, "salad");
+    world.dayTime = 0.05;
+    hold(world, 1, null);
+
+    // Closing time has passed, but somebody is still sitting there.
+    expect(world.phase).toBe("service");
+    expect(world.dayTime).toBeLessThan(0);
+
+    diner.remaining = 0.05;
+    hold(world, 6, null);
+    expect(world.phase).toBe("build");
+  });
+
+  test("arrivals stop before closing time", () => {
+    const world = makeWorld();
+    world.dayTime = 20; // inside the last-orders window
+    world.nextArrivalIn = 0;
+    hold(world, 5, null);
+    expect(world.customers).toHaveLength(0);
   });
 });

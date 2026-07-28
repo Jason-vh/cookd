@@ -4,6 +4,7 @@ import { applianceDef } from "../data/appliances";
 import { specKey } from "../sim/items";
 import { DT } from "../sim/step";
 import { canPlace, targetTile } from "../sim/systems/interaction";
+import { CUSTOMER_SPEED, unreachableTables } from "../sim/systems/customers";
 import type { Appliance, ChefMotion, Item, Motion, World } from "../sim/types";
 import { PLAYER_SPEED, applianceAtTile, playerById } from "../sim/world";
 import { biome as lookupBiome } from "../data/biomes";
@@ -12,6 +13,7 @@ import { createEnvironment } from "./environment";
 import { mergeStatic } from "./merge";
 import { LAYER } from "./layers";
 import { Dial } from "./dial";
+import { Bubble } from "./bubble";
 import { setGhost, setGhostOpacity } from "./ghost";
 import { Popups } from "./popups";
 import { buildItemModel } from "./models";
@@ -20,6 +22,9 @@ import {
   PLAYER_COLORS,
   buildAppliance,
   buildChef,
+  buildCustomer,
+  buildDoorway,
+  buildTipStack,
   makeNameTag,
   buildHighlight,
   buildWall,
@@ -48,6 +53,13 @@ export class View {
   private applianceObjects = new Map<number, THREE.Object3D>();
   private itemObjects = new Map<number, { object: THREE.Object3D; key: string }>();
   private chefs = new Map<number, ChefParts & { phase: number; pop: number; lastCarried: number; tag?: THREE.Sprite; tagName?: string; wasAway?: boolean }>();
+  private customers = new Map<number, ChefParts & { phase: number; slump: number }>();
+  /** Order bubble per table appliance id. */
+  private bubbles = new Map<number, Bubble>();
+  /** Tip coins per table appliance id, and how far they have risen into view. */
+  private tips = new Map<number, { object: THREE.Object3D; alpha: number }>();
+  /** Tables the dining room cannot reach, recomputed only in the build phase. */
+  private stranded = new Set<number>();
   private highlights = new Map<number, THREE.Mesh>();
   private liveItems = new Set<number>();
   private clock = new THREE.Clock();
@@ -134,7 +146,16 @@ export class View {
 
     for (let y = 0; y < world.height; y++) {
       for (let x = 0; x < world.width; x++) {
-        if (!world.tiles[y * world.width + x]?.wall) continue;
+        const tile = world.tiles[y * world.width + x];
+        if (tile?.door) {
+          // The gap customers arrive through. A frame around it is what stops it
+          // reading as a hole somebody forgot to wall up.
+          const frame = buildDoorway();
+          frame.position.set(x + 0.5, 0, y + 0.5);
+          shell.add(frame);
+          continue;
+        }
+        if (!tile?.wall) continue;
         // The two edges nearest the camera are a low lip, otherwise they would
         // occlude the kitchen.
         const near = x === world.width - 1 || y === world.height - 1;
@@ -209,6 +230,8 @@ export class View {
     this.syncEffects(world, dt);
     this.syncAppliances(world);
     this.syncChefs(world, alpha, dt);
+    this.syncCustomers(world, alpha, dt);
+    this.syncTables(world, dt);
     this.syncItems(world, alpha);
     this.syncHighlights(world);
 
@@ -415,6 +438,15 @@ export class View {
       if (cue.kind === "served") {
         const player = playerById(world, cue.playerId);
         if (player) this.popups.spawn(`+$${cue.amount}`, "#ffd479", player.pos.x, 1.5, player.pos.y);
+      } else if (cue.kind === "tipped") {
+        // A different colour from the delivery reward, because it is a
+        // different decision being paid for: coming back to clear the table.
+        const player = playerById(world, cue.playerId);
+        if (player) this.popups.spawn(`+$${cue.amount}`, "#b8e08a", player.pos.x, 1.5, player.pos.y);
+      } else if (cue.kind === "paid") {
+        this.popups.spawn(`+$${cue.amount}`, "#ffd479", cue.tile.x + 0.5, 1.5, cue.tile.y + 0.5);
+      } else if (cue.kind === "walkout") {
+        this.popups.spawn("walked out", "#e08a6f", cue.tile.x + 0.5, 1.3, cue.tile.y + 0.5);
       } else if (cue.kind === "binned") {
         const appliance = applianceAtTile(world, cue.tile.x, cue.tile.y);
         if (appliance) this.binOpen.set(appliance.id, 1);
@@ -582,6 +614,188 @@ export class View {
         chef.legL.rotation.x = 0;
         chef.legR.rotation.x = 0;
         break;
+      }
+    }
+  }
+
+  // --- customers -------------------------------------------------------------
+
+  /**
+   * Customers use the chef rig and the chef walk cycle, with two states of
+   * their own: **seated** (dropped onto the chair, knees forward, facing the
+   * table) and **impatient** (a slump that deepens as the ring runs down).
+   *
+   * The slump is the point of putting people in the room at all. A ticket going
+   * red is information; somebody sinking into their chair is the same
+   * information, readable from the fryer without looking away from it.
+   */
+  private syncCustomers(world: World, alpha: number, dt: number): void {
+    const live = new Set(world.customers.map((customer) => customer.id));
+    for (const [id, parts] of this.customers) {
+      if (live.has(id)) continue;
+      this.scene.remove(parts.root);
+      this.customers.delete(id);
+    }
+
+    const time = this.clock.elapsedTime;
+    for (const customer of world.customers) {
+      let person = this.customers.get(customer.id);
+      if (!person) {
+        // Indexed by id so the same customer keeps the same coat all visit, and
+        // two people arriving together rarely match.
+        const parts = buildCustomer(customer.id);
+        this.scene.add(parts.root);
+        person = { ...parts, phase: 0, slump: 0 };
+        this.customers.set(customer.id, person);
+      }
+
+      let x = lerp(customer.prevPos.x, customer.pos.x, alpha);
+      let z = lerp(customer.prevPos.y, customer.pos.y, alpha);
+      // The simulation seats people on the tile beside the table, because tiles
+      // are what it can reason about. The chair is half a tile in from there,
+      // so the drawing pulls them onto it — sitting a foot away from your own
+      // chair looks like a bug even when the rules are right.
+      const table = customer.table === null ? undefined : world.appliances.get(customer.table);
+      if (table && customer.state !== "arriving" && customer.state !== "leaving") {
+        x += (table.tile.x + 0.5 - x) * 0.42;
+        z += (table.tile.y + 0.5 - z) * 0.42;
+      }
+      person.root.position.set(x, 0, z);
+      person.root.rotation.y = Math.atan2(customer.facing.x, customer.facing.y);
+
+      const moved = Math.hypot(
+        customer.pos.x - customer.prevPos.x,
+        customer.pos.y - customer.prevPos.y,
+      );
+      const speed = Math.min(1, moved / (CUSTOMER_SPEED * DT));
+      person.phase += dt * (5 + 7 * speed);
+      const swing = Math.sin(person.phase * 2) * speed;
+
+      const seated =
+        customer.state === "deciding" ||
+        customer.state === "ordering" ||
+        customer.state === "eating";
+
+      // Impatience builds only while there is something to be impatient about.
+      const impatient =
+        customer.state === "ordering" ? 1 - Math.max(0, customer.remaining / customer.patience) : 0;
+      person.slump += (impatient - person.slump) * Math.min(1, dt * 2);
+      const slump = person.slump * person.slump;
+
+      person.body.position.y = (seated ? 0.06 : 0.28) + Math.abs(Math.sin(person.phase * 2)) * 0.05 * speed;
+      person.body.position.z = 0;
+      person.body.rotation.x = 0.14 * speed + slump * 0.34;
+      person.head.rotation.x = -0.08 * speed + slump * 0.3;
+
+      if (seated) {
+        // Knees up, hands resting on the table edge, sinking as patience goes.
+        person.legL.rotation.x = -1.35;
+        person.legR.rotation.x = -1.35;
+        person.armL.rotation.x = -0.9 + slump * 0.5;
+        person.armR.rotation.x = -0.9 + slump * 0.5;
+        person.armL.rotation.z = 0.2;
+        person.armR.rotation.z = -0.2;
+        // A restless glance around the room, faster the longer they have waited.
+        person.head.rotation.y = Math.sin(time * (0.7 + slump * 1.6) + customer.id) * 0.24 * (0.3 + slump);
+      } else {
+        person.legL.rotation.x = -swing * 0.85;
+        person.legR.rotation.x = swing * 0.85;
+        person.armL.rotation.x = swing * 0.8;
+        person.armR.rotation.x = -swing * 0.8;
+        person.armL.rotation.z = 0.08;
+        person.armR.rotation.z = -0.08;
+        person.head.rotation.y = 0;
+      }
+    }
+  }
+
+  // --- tables ----------------------------------------------------------------
+
+  /**
+   * What a table has to say: the order bubble above it, and the tip left on it.
+   *
+   * Both are keyed by appliance id and torn down when the appliance goes, which
+   * it can — a reset renumbers the kitchen and online the server can hand us a
+   * different layout entirely.
+   */
+  private syncTables(world: World, dt: number): void {
+    for (const [id, bubble] of this.bubbles) {
+      const object = this.applianceObjects.get(id);
+      if (object && world.appliances.get(id)?.kind === "table") continue;
+      if (object) bubble.dispose(object);
+      this.bubbles.delete(id);
+    }
+    for (const [id, tip] of this.tips) {
+      if (world.appliances.get(id)?.kind === "table") continue;
+      this.applianceObjects.get(id)?.remove(tip.object);
+      this.tips.delete(id);
+    }
+
+    // Recomputed only in the build phase: during service nothing can move, so
+    // the answer cannot change, and the flood fill would be pure waste.
+    if (world.phase === "build") {
+      this.stranded = new Set(unreachableTables(world).map((table) => table.id));
+    } else if (this.stranded.size > 0) {
+      this.stranded.clear();
+    }
+
+    for (const appliance of world.appliances.values()) {
+      if (appliance.kind !== "table") continue;
+      const object = this.applianceObjects.get(appliance.id);
+      if (!object) continue;
+
+      let bubble = this.bubbles.get(appliance.id);
+      if (!bubble) {
+        bubble = new Bubble(this.camera);
+        object.add(bubble.object);
+        this.bubbles.set(appliance.id, bubble);
+        // A table nobody can walk to is the one build-phase mistake that
+        // silently ends a run, so it is marked in the room rather than only
+        // mentioned in the log. Same red as a burning pan: this needs you.
+        const warning = buildHighlight(PALETTE.progressBurn);
+        // Above the tabletop, not under it: on the floor the table's own
+        // footprint hides most of the ring, which is a poor showing for the
+        // one marker that means "this will not work tomorrow".
+        warning.position.y = applianceDef("table").height + 0.14;
+        warning.scale.setScalar(1.15);
+        warning.visible = false;
+        object.add(warning);
+        object.userData.warning = warning;
+      }
+
+      const warning = object.userData.warning as THREE.Mesh | undefined;
+      if (warning) {
+        warning.visible = world.phase === "build" && this.stranded.has(appliance.id);
+        if (warning.visible) {
+          const material = warning.material as THREE.MeshBasicMaterial;
+          material.opacity = 0.62 + Math.sin(this.clock.elapsedTime * 5) * 0.3;
+        }
+      }
+      const customer =
+        world.customers.find((c) => c.table === appliance.id && c.state === "ordering") ?? null;
+      bubble.update(customer, dt);
+
+      // The tip rises out of the table when it appears and sinks away when
+      // collected, so money never simply blinks into or out of the room.
+      let tip = this.tips.get(appliance.id);
+      if (!tip) {
+        const coins = buildTipStack();
+        // Off to one side: the middle of the table belongs to the plate that
+        // has to be picked up with it.
+        coins.position.set(0.26, applianceDef("table").height + 0.04, -0.22);
+        coins.visible = false;
+        object.add(coins);
+        tip = { object: coins, alpha: 0 };
+        this.tips.set(appliance.id, tip);
+      }
+      const wanted = appliance.tip > 0 ? 1 : 0;
+      tip.alpha += (wanted - tip.alpha) * Math.min(1, dt * (wanted ? 11 : 7));
+      tip.object.visible = tip.alpha > 0.01;
+      if (tip.object.visible) {
+        const settle = tip.alpha * tip.alpha;
+        tip.object.scale.setScalar(settle);
+        tip.object.position.y = applianceDef("table").height + 0.04 + (1 - settle) * 0.12;
+        tip.object.rotation.y += dt * 0.8;
       }
     }
   }

@@ -1,6 +1,14 @@
 import { LEVEL } from "../data/level";
 import { addPlayer } from "../sim/world";
-import type { Appliance, Effect, Order, Phase, Player, PlayerInput, World } from "../sim/types";
+import type {
+  Appliance,
+  Customer,
+  Effect,
+  Phase,
+  Player,
+  PlayerInput,
+  World,
+} from "../sim/types";
 
 /**
  * What goes over the wire, and nothing else.
@@ -61,6 +69,25 @@ export type FrameAppliance = {
   motion: Appliance["motion"];
   heldBy: number | null;
   justFinished: boolean;
+  tip: number;
+};
+
+/**
+ * Customers are pure server entities — nobody predicts them — so they travel
+ * like remote chefs do: a position now, and enough state for the client to draw
+ * the right pose and the right bubble.
+ */
+export type FrameCustomer = {
+  id: number;
+  state: Customer["state"];
+  x: number;
+  y: number;
+  fx: number;
+  fy: number;
+  table: number | null;
+  recipeId: string;
+  remaining: number;
+  patience: number;
 };
 
 export type Frame = {
@@ -72,7 +99,7 @@ export type Frame = {
   money: number;
   served: number;
   lost: number;
-  orders: Order[];
+  customers: FrameCustomer[];
   events: World["events"];
   effects: Effect[];
   players: FramePlayer[];
@@ -135,7 +162,18 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
     money: world.money,
     served: world.served,
     lost: world.lost,
-    orders: world.orders,
+    customers: world.customers.map((customer) => ({
+      id: customer.id,
+      state: customer.state,
+      x: customer.pos.x,
+      y: customer.pos.y,
+      fx: customer.facing.x,
+      fy: customer.facing.y,
+      table: customer.table,
+      recipeId: customer.recipeId,
+      remaining: customer.remaining,
+      patience: customer.patience,
+    })),
     events: world.events,
     effects: world.effects,
     players: world.players.map((player) => ({
@@ -162,7 +200,8 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
           appliance.overcook > 0 ||
           appliance.motion !== null ||
           appliance.heldBy !== null ||
-          appliance.justFinished,
+          appliance.justFinished ||
+          appliance.tip > 0,
       )
       .map((appliance) => ({
         id: appliance.id,
@@ -172,6 +211,7 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
         motion: appliance.motion,
         heldBy: appliance.heldBy,
         justFinished: appliance.justFinished,
+        tip: appliance.tip,
       })),
     acks: Object.fromEntries(acks),
   };
@@ -202,6 +242,7 @@ export function applyLayout(world: World, layout: Layout): void {
       motion: null,
       heldBy: null,
       source: saved.source,
+      tip: 0,
     });
     world.applianceAt[saved.y * world.width + saved.x] = saved.id;
   }
@@ -222,11 +263,25 @@ export function applyFrame(world: World, frame: Frame): void {
   world.lost = frame.lost;
   // Copied, never aliased. One frame is applied to two worlds — the one being
   // drawn and the one predicting local chefs — and the prediction world's
-  // `step()` spawns orders, logs events and queues effects. Sharing the arrays
-  // let it write straight into what the HUD was rendering: order tickets
-  // flashed into the list and vanished a frame later, worse the higher the
-  // latency, because more unacknowledged input means more ticks replayed.
-  world.orders = frame.orders.map((order) => ({ ...order }));
+  // `step()` spawns customers, logs events and queues effects. Sharing the
+  // arrays let it write straight into what was being drawn: orders flashed
+  // into view and vanished a frame later, worse the higher the latency,
+  // because more unacknowledged input means more ticks replayed.
+  world.customers = frame.customers.map((customer) => ({
+    id: customer.id,
+    state: customer.state,
+    pos: { x: customer.x, y: customer.y },
+    prevPos: { x: customer.x, y: customer.y },
+    facing: { x: customer.fx, y: customer.fy },
+    table: customer.table,
+    seat: null,
+    recipeId: customer.recipeId,
+    path: [],
+    timer: 0,
+    remaining: customer.remaining,
+    patience: customer.patience,
+    tip: 0,
+  }));
   world.events = frame.events.map((event) => ({ ...event }));
   world.effects = frame.effects.map((effect) => ({ ...effect }));
 
@@ -239,6 +294,7 @@ export function applyFrame(world: World, frame: Frame): void {
     appliance.motion = null;
     appliance.heldBy = null;
     appliance.justFinished = false;
+    appliance.tip = 0;
     world.applianceAt[appliance.tile.y * world.width + appliance.tile.x] = appliance.id;
   }
   for (const snapshot of frame.appliances) {
@@ -250,6 +306,7 @@ export function applyFrame(world: World, frame: Frame): void {
     appliance.motion = snapshot.motion;
     appliance.heldBy = snapshot.heldBy;
     appliance.justFinished = snapshot.justFinished;
+    appliance.tip = snapshot.tip;
     // A held appliance is off the grid, or it would leave a solid phantom tile.
     if (snapshot.heldBy !== null) {
       world.applianceAt[appliance.tile.y * world.width + appliance.tile.x] = 0;

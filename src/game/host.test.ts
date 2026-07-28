@@ -3,7 +3,7 @@ import { Host } from "./host";
 import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutSignature } from "./protocol";
 import { PLAYER_SPEED, emptyInput, isIdleInput } from "../sim/world";
 import { saveSignature } from "../save";
-import type { PlayerInput } from "../sim/types";
+import type { Customer, PlayerInput } from "../sim/types";
 
 /**
  * These exercise the multiplayer machinery without a socket in sight. `Host` is
@@ -375,17 +375,17 @@ describe("frames must not be shared between worlds", () => {
   /**
    * The client applies each frame to *two* worlds: the one it draws, and the
    * one it predicts its own chefs in. Handing both the same arrays meant the
-   * prediction world's `step()` — which spawns orders, logs events and queues
-   * effects — was writing straight into what the HUD was rendering.
+   * prediction world's `step()` — which spawns customers, logs events and
+   * queues effects — was writing straight into what was being rendered.
    *
-   * The symptom was an order ticket flashing into the list and vanishing on the
-   * next frame, and it got worse with latency: more unacknowledged input means
-   * more prediction ticks replayed, so more chances to invent an order.
+   * The symptom was an order flashing into view and vanishing on the next
+   * frame, and it got worse with latency: more unacknowledged input means more
+   * prediction ticks replayed, so more chances to invent a customer.
    */
   test("applying one frame to two worlds does not alias their state", () => {
     const host = new Host();
     host.join("Ann");
-    host.world.orders.push({ id: 1, recipeId: "salad", remaining: 30, patience: 60 });
+    host.world.customers.push(customer(1, "salad"));
 
     const frame = encodeFrame(host.world, host.acks);
     const drawn = new Host().world;
@@ -396,22 +396,22 @@ describe("frames must not be shared between worlds", () => {
     applyFrame(predicted, frame);
 
     const before = {
-      orders: drawn.orders.length,
+      customers: drawn.customers.length,
       events: drawn.events.length,
       effects: drawn.effects.length,
     };
 
     // Whatever the prediction world does to itself must stay there.
-    predicted.orders.push({ id: 2, recipeId: "fries", remaining: 10, patience: 55 });
+    predicted.customers.push(customer(2, "fries"));
     predicted.events.push({ text: "speculative", ttl: 1 });
     predicted.effects.push({ id: 900, ttl: 1, kind: "served", playerId: 0, amount: 99 });
 
-    expect(drawn.orders.length).toBe(before.orders);
+    expect(drawn.customers.length).toBe(before.customers);
     expect(drawn.events.length).toBe(before.events);
     expect(drawn.effects.length).toBe(before.effects);
   });
 
-  test("a predicted tick cannot invent an order in the world being drawn", () => {
+  test("a predicted tick cannot invent a customer in the world being drawn", () => {
     const host = new Host();
     const id = host.join("Ann");
     const frame = encodeFrame(host.world, host.acks);
@@ -423,11 +423,30 @@ describe("frames must not be shared between worlds", () => {
     applyFrame(predicted.world, frame);
 
     // Replay a second of input, exactly as reconciliation does on a slow link.
-    predicted.world.nextOrderIn = 0.05;
+    predicted.world.nextArrivalIn = 0.05;
     for (let i = 0; i < 60; i++) predicted.advance(1 / 60);
 
-    expect(predicted.world.orders.length).toBeGreaterThan(0);
-    expect(drawn.orders.length).toBe(0);
+    expect(predicted.world.customers.length).toBeGreaterThan(0);
+    expect(drawn.customers.length).toBe(0);
     void id;
   });
 });
+
+/** A customer sitting at no table, which is all these tests need of one. */
+function customer(id: number, recipeId: string): Customer {
+  return {
+    id,
+    state: "ordering",
+    pos: { x: 1, y: 1 },
+    prevPos: { x: 1, y: 1 },
+    facing: { x: 1, y: 0 },
+    table: null,
+    seat: null,
+    recipeId,
+    path: [],
+    timer: 0,
+    remaining: 30,
+    patience: 60,
+    tip: 0,
+  };
+}

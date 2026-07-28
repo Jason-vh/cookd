@@ -92,6 +92,22 @@ export const PALETTE = {
   chefWhites: 0xf2ece0,
   skin: 0xe3bd97,
 
+  // --- customers ---
+  // Deliberately a *different* family from the chef colours: at a glance across
+  // the room, who works here must never be a question. Softer and cooler, so
+  // the four chef colours stay the brightest people on screen.
+  customers: [0xc7a98c, 0x8fa3ad, 0xb59aa8, 0x9fae8f, 0xc3b184, 0xa79bb5],
+  customerLegs: 0x7b7466,
+  hair: 0x4c4038,
+
+  // --- tips ---
+  coin: 0xd9b45c,
+  coinEdge: 0xbf9741,
+
+  // --- used crockery ---
+  plateDirty: 0xd8d2c4,
+  crumbs: 0xa8895f,
+
   // --- feedback ---
   progressGood: 0x8fc47f,
   progressBurn: 0xcb6a4c,

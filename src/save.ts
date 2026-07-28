@@ -105,6 +105,7 @@ export function restore(world: World, save: Save): boolean {
       motion: null,
       heldBy: null,
       source: saved.source ?? null,
+      tip: 0,
     });
     world.applianceAt[saved.y * world.width + saved.x] = id;
   }

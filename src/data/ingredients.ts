@@ -41,9 +41,12 @@ export const PROCESSES: Record<ProcessId, { name: string; color: number }> = {
   baked: { name: "Baked", color: 0xb06a2c },
   fried: { name: "Fried", color: 0xd79b2e },
   burnt: { name: "Burnt", color: 0x2b2b2b },
+  dirty: { name: "Dirty", color: 0x8a8377 },
 };
 
 export const BURNT: ProcessId = "burnt";
+/** What a customer leaves behind. Washing it is the plate stack's job (for now). */
+export const DIRTY: ProcessId = "dirty";
 
 export function ingredient(id: IngredientId): Ingredient {
   const found = INGREDIENTS[id];

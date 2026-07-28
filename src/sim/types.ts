@@ -44,7 +44,8 @@ export type ApplianceKind =
   | "crate"
   | "plates"
   | "serving"
-  | "bin";
+  | "bin"
+  | "table";
 
 /**
  * What work an appliance can do. Transforms are keyed by station rather than by
@@ -82,6 +83,13 @@ export type Appliance = {
   source: ItemSpec | null;
   /** Carried by a player during the build phase (tile is then unoccupied). */
   heldBy: number | null;
+  /**
+   * For tables: money a customer left behind, collected by whoever busses the
+   * dirty plate. Splitting payment this way is what stops clearing tables from
+   * being a chore — the tip is the reason to walk over, and the dirty plate
+   * comes along with it.
+   */
+  tip: number;
 };
 
 /** One transform, e.g. "chop a tomato at a prep station for 2s". */
@@ -115,11 +123,45 @@ export type Recipe = {
   reward: number;
 };
 
-export type Order = {
+/**
+ * Where a customer is in their visit.
+ *
+ *   arriving -> (seat claimed) -> deciding -> ordering -> eating -> leaving
+ *   arriving -> (no free table) -> waiting -> deciding | leaving
+ *
+ * The order *is* the customer: there is no separate ticket entity, so a lost
+ * order and a person walking out are necessarily the same event.
+ */
+export type CustomerState =
+  | "arriving"
+  | "waiting"
+  | "deciding"
+  | "ordering"
+  | "eating"
+  | "leaving";
+
+export type Customer = {
   id: number;
+  state: CustomerState;
+  pos: Vec2;
+  /** Position at the start of the current tick, for render interpolation. */
+  prevPos: Vec2;
+  facing: Vec2;
+  /** Table appliance id, claimed on arrival so two customers never race for it. */
+  table: number | null;
+  /** Tile the customer stands on while seated, beside their table. */
+  seat: Vec2 | null;
+  /** What they will ask for, decided before they sit down. */
   recipeId: string;
+  /** Tile centres still to walk through. */
+  path: Vec2[];
+  /** Seconds left in the current timed state (deciding / eating / waiting). */
+  timer: number;
+  /** Only counts down while `ordering`. */
   remaining: number;
   patience: number;
+  /** Earned on delivery, left on the table when they go. */
+  tip: number;
 };
 
 /**
@@ -170,13 +212,19 @@ export type Player = {
 export type Tile = {
   /** true for the outer shell; walls are solid and can never hold appliances. */
   wall: boolean;
+  /** true for the gap in the wall customers arrive through. */
+  door: boolean;
 };
 
 export type Phase = "service" | "build";
 
 export type EffectCue =
   | { kind: "served"; playerId: number; amount: number }
-  | { kind: "binned"; tile: Vec2 };
+  | { kind: "tipped"; playerId: number; amount: number }
+  /** Paid at a table rather than to a chef: the food was already waiting. */
+  | { kind: "paid"; tile: Vec2; amount: number }
+  | { kind: "binned"; tile: Vec2 }
+  | { kind: "walkout"; tile: Vec2 };
 
 export type Effect = EffectCue & { id: number; ttl: number };
 
@@ -195,16 +243,22 @@ export type World = {
   appliances: Map<number, Appliance>;
 
   players: Player[];
-  orders: Order[];
+  customers: Customer[];
+  /** Tile customers walk in through, taken from the level. */
+  door: Vec2;
 
   phase: Phase;
   day: number;
-  /** Seconds left in the service phase. */
+  /**
+   * Seconds left in the service phase. Goes **negative** after closing time:
+   * arrivals stop, but the day is not over until the last customer has eaten
+   * and left. That overrun is the "kitchen's closed" beat.
+   */
   dayTime: number;
   /** Length of a full service phase, in seconds. */
   dayLength: number;
-  /** Seconds until the next order spawns. */
-  nextOrderIn: number;
+  /** Seconds until the next customer walks up the path. */
+  nextArrivalIn: number;
 
   money: number;
   served: number;

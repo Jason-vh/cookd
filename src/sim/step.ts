@@ -1,9 +1,9 @@
 import type { Inputs, World } from "./types";
 import { log } from "./world";
 import { applianceSystem } from "./systems/appliances";
+import { customerSystem, unreachableTables } from "./systems/customers";
 import { interactionSystem } from "./systems/interaction";
 import { movementSystem } from "./systems/movement";
-import { orderSystem } from "./systems/orders";
 
 /** Fixed simulation timestep. Everything in `sim` assumes this dt. */
 export const DT = 1 / 60;
@@ -24,7 +24,7 @@ export function step(world: World, inputs: Inputs, dt: number = DT): void {
   movementSystem(world, inputs, dt);
   interactionSystem(world, inputs);
   applianceSystem(world, dt);
-  orderSystem(world, dt);
+  customerSystem(world, dt);
   phaseSystem(world, inputs, dt);
 
   for (let i = world.events.length - 1; i >= 0; i--) {
@@ -49,10 +49,24 @@ export function step(world: World, inputs: Inputs, dt: number = DT): void {
   }
 }
 
+/**
+ * Closing time is not the end of the day.
+ *
+ * Arrivals stop before the clock runs out (see `LAST_ORDERS`), and once it does
+ * the kitchen stays open until the last customer has eaten and gone. That gives
+ * a day a natural closing beat instead of tables vanishing mid-meal — and it
+ * makes finishing the stragglers fast a real thing to care about.
+ *
+ * The grace period is the backstop: nobody can hold a day open forever, and a
+ * customer whose dish never arrives is walked out rather than waited on.
+ */
+const CLOSING_GRACE = 60;
+
 function phaseSystem(world: World, inputs: Inputs, dt: number): void {
   if (world.phase === "service") {
     world.dayTime -= dt;
-    if (world.dayTime <= 0) endDay(world);
+    if (world.dayTime > 0) return;
+    if (world.customers.length === 0 || world.dayTime <= -CLOSING_GRACE) endDay(world);
     return;
   }
 
@@ -67,28 +81,34 @@ function phaseSystem(world: World, inputs: Inputs, dt: number): void {
 export function endDay(world: World): void {
   world.phase = "build";
   world.dayTime = 0;
-  world.orders.length = 0;
+  clearService(world);
+  log(world, `Day ${world.day} closed — rearrange the kitchen`);
+}
+
+/**
+ * Empty the kitchen and the dining room.
+ *
+ * Tips left on tables are swept up with everything else: an uncollected tip is
+ * money the players chose not to walk over for, and carrying it into the next
+ * day would quietly remove the reason to bus during service.
+ */
+function clearService(world: World): void {
+  world.customers.length = 0;
   for (const player of world.players) player.carried = null;
   for (const appliance of world.appliances.values()) {
     appliance.item = null;
     appliance.progress = 0;
     appliance.overcook = 0;
+    appliance.tip = 0;
   }
-  log(world, `Day ${world.day} closed — rearrange the kitchen`);
 }
 
 /** Wipe the current day and run it again. Used by the pause menu. */
 export function restartDay(world: World): void {
   world.phase = "service";
   world.dayTime = world.dayLength;
-  world.nextOrderIn = 2;
-  world.orders.length = 0;
-  for (const player of world.players) player.carried = null;
-  for (const appliance of world.appliances.values()) {
-    appliance.item = null;
-    appliance.progress = 0;
-    appliance.overcook = 0;
-  }
+  world.nextArrivalIn = 2;
+  clearService(world);
   log(world, `Day ${world.day} restarted`);
 }
 
@@ -102,6 +122,12 @@ export function beginDay(world: World): void {
   world.day++;
   world.phase = "service";
   world.dayTime = world.dayLength;
-  world.nextOrderIn = 2;
+  world.nextArrivalIn = 2;
+  // A dining room nobody can walk into is the one build-phase mistake that
+  // silently ends the run, so it is said out loud rather than prevented.
+  const stranded = unreachableTables(world);
+  if (stranded.length > 0) {
+    log(world, `${stranded.length} table(s) can't be reached from the door`);
+  }
   log(world, `Day ${world.day} — service!`);
 }

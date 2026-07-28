@@ -1,15 +1,17 @@
 # cookd
 
 A browser-based, controller-first co-op cooking game. Chefs run around a
-tile-aligned kitchen turning raw ingredients into plated dishes, serving orders
-before customers walk out, and rearranging the kitchen between days.
+tile-aligned kitchen turning raw ingredients into plated dishes, carrying them
+out to seated customers before they walk out, and rearranging the restaurant
+between days.
 
 Inspirations: **Overcooked** (moment-to-moment chaos, hold-to-chop, plate-and-serve
 loop) and **PlateUp!** (kitchen as a thing you design and optimise across days).
 
-Status: **playable, and multiplayer.** Multiple chefs, three recipes, burning,
-orders with patience timers, a day loop, a build phase where appliances can be
-moved — and a server so the chefs can be in different countries.
+Status: **playable, and multiplayer.** Multiple chefs, three recipes, burning, a
+dining room with customers who walk in, sit, order, eat and leave, tips left on
+tables, a day loop, a build phase where appliances can be moved — and a server
+so the chefs can be in different countries.
 
 ---
 
@@ -36,7 +38,7 @@ the server too if you want online play.
 | Action | Gamepad | Player 1 keyboard | Player 2 keyboard |
 | --- | --- | --- | --- |
 | Move | Left stick / D-pad | `W A S D` | Arrow keys |
-| Grab / place / serve | `A` (south) | `Space` or `E` | `,` |
+| Grab / place / deliver / bus | `A` (south) | `Space` or `E` | `,` |
 | Use (hold to prep) | `X` (west) or `B` | `F` or `Left Shift` | `.` |
 | Open the next day | `Y` (north) | `Enter` | `Enter` |
 | Pause menu | `Start` | `Esc` | `Esc` |
@@ -76,13 +78,23 @@ The white square in front of your chef is what you'll interact with.
 5. Plate it: carry a plate onto the food, or the food onto a plate — either way
    round works, and you can **assemble on the plate**: drop chopped tomato onto
    a plate of chopped lettuce and you get a salad. Carrying food to the plate
-   stack plates it in one move. Then carry it to the green serving hatch.
-6. When the day timer hits zero — or you pick **Close up early** from the pause
+   stack plates it in one move.
+6. **Take it to the table that ordered it.** Customers walk in through the park
+   gate, sit down, and a bubble appears over their table showing the dish they
+   want and a ring counting down their patience. Placing the plate on that
+   table feeds them. The green **pass** in the dividing wall is a counter, not
+   a chute — one player can plate and slide, another can run.
+7. When they finish eating they leave behind a **dirty plate and a tip**. Pick
+   the plate up and the tip is yours; carry it to the plate stack to wash it.
+   A table with a plate still on it cannot be sat at, so clearing up *is* the
+   capacity.
+8. When the day timer hits zero — or you pick **Close up early** from the pause
    menu — you enter the **build phase**: face any appliance and `Grab` to pick
    it up. A **ghost** of it appears on the tile you're facing, showing exactly
    where it will land; `Grab` again to put it there. Drop it onto another
-   appliance and the two **swap**. `Start` opens the next day (orders arrive
-   faster each day).
+   appliance and the two **swap**. Tables are appliances too, so where the
+   dining room goes is your decision. `Start` opens the next day (customers
+   arrive faster each day).
 
 Grabbed the wrong thing? Put it back where you got it: a **source takes back
 exactly what it hands out**, so an untouched tomato returns to its crate and a
@@ -110,15 +122,16 @@ gamepads) is an observer or a producer of those inputs.
 ```
 src/
   sim/                 pure simulation — no DOM, no three.js
-    types.ts           World, Player, Item, Appliance, Order, PlayerInput
+    types.ts           World, Player, Customer, Item, Appliance, PlayerInput
     world.ts           world construction from a level, tile/collision helpers, PRNG
     items.ts           item identity + canonical keys
+    pathing.ts         BFS over walkable tiles: customer routes and reachability
     step.ts            fixed-timestep tick: runs the systems in order
     systems/
       movement.ts      circle-vs-tile collision, player separation
-      interaction.ts   grab/place/combine/serve, build-phase appliance moving
+      interaction.ts   grab/place/combine/deliver, build-phase appliance moving
       appliances.ts    transforms (chop/fry/bake) and burning
-      orders.ts        order spawning, patience, expiry
+      customers.ts     arrivals, seating, patience, eating, leaving, tips
     sim.test.ts        headless tests that drive the game through PlayerInput
   data/                content — plain data, no logic
     ingredients.ts     ingredient + process definitions (colours, shapes)
@@ -139,13 +152,14 @@ src/
   render/
     view.ts            three.js scene, camera, animation, reconciliation
     environment.ts     biome rendering: sky, sun, ground, patio, scattered props
-    meshes.ts          appliances, walls, chefs, labels, bars, highlights
+    bubble.ts          the order floating over a table: dish model + patience ring
+    meshes.ts          appliances, walls, chefs, customers, labels, highlights
     models.ts          sculpted models for every ingredient and dish
     primitives.ts      shared geometry/material factories and caches
     palette.ts         every colour and surface finish in the game
     post.ts            post-processing chain (AO, bloom, vignette, AA)
   ui/
-    hud.ts             DOM HUD (stats, order tickets, event log, build banner)
+    hud.ts             DOM HUD (stats, event log, build banner — no order list)
     style.css
   main.ts              the shell: input in, pixels out; owns no rules
 server/
@@ -465,13 +479,18 @@ Supporting decisions:
 - **Ingredients are modelled, not symbolised.** See below.
 - **Silhouette over labels.** Each appliance carries a small identifying detail
   (a knife on the board, an oil basin on the fryer, a glass door on the oven, a
-  cloche on the serving hatch), and crates show a 3D sample of their ingredient.
+  cloche on the pass), and crates show a 3D sample of their ingredient.
   Text labels are **contextual** — only the appliance a chef is facing is named.
   A world full of floating text destroys the diorama illusion.
 - **Animation beats geometry.** The chef is simple shapes with clear
   articulation points: a walk cycle, a forward lean proportional to speed, and a
   squash-and-stretch pop whenever what they're holding changes. All of it is
   derived from simulation state in `view.ts` and stored nowhere.
+- **Customers share the chef's rig**, minus the toque and the apron — which are
+  exactly what say "staff". Same creature, same world, same walk cycle for free,
+  and never a moment's doubt about who works here. Their colours are
+  deliberately a softer, cooler family than the four chef colours, so the people
+  you control stay the brightest people on screen.
 
 ### Biomes
 
@@ -549,12 +568,13 @@ same.
 ### Gotchas discovered the hard way
 
 - **Never hand two worlds the same arrays.** The client applies each frame to
-  the world it *draws* and the world it *predicts* in. Assigning `frame.orders`
-  to both made them the same array, and the prediction world's `step()` — which
-  spawns orders, logs events and queues effects — wrote straight into what the
-  HUD was rendering. Order tickets flashed into the list and vanished a frame
-  later. It got worse with latency, because more unacknowledged input means more
-  ticks replayed, so more chances to invent one. `applyFrame` copies now.
+  the world it *draws* and the world it *predicts* in. Assigning the frame's
+  order list to both made them the same array, and the prediction world's
+  `step()` — which spawns customers, logs events and queues effects — wrote
+  straight into what was being drawn. Orders flashed into view and vanished a
+  frame later. It got worse with latency, because more unacknowledged input
+  means more ticks replayed, so more chances to invent one. `applyFrame` copies
+  now, and the customer list arrives the same way.
 - **A request that takes a round trip needs a latch.** Asking the server for a
   new player returned nothing until the answer came back, so the frame loop
   asked again, and again — one controller filled a four-player kitchen in under
@@ -855,8 +875,12 @@ which is obvious, harmless and undone with the bin.
 plate becomes the combined dish in place, so a salad can be assembled directly
 on the plate — the move players reach for first, and refusing it taught them
 nothing. Food that combines with nothing simply sits alongside, which is
-exactly what stops it being served: a dish is *one* item, so a plate holding
-two things is refused at the hatch.
+exactly what stops it being eaten: a dish is *one* item, so a plate holding two
+things is not what anybody ordered.
+
+A **dirty plate** is the one plate that is not a workspace. Nothing goes on it
+until it has been washed — which today means carrying it back to the plate
+stack, and will mean a sink in the next patch.
 
 ### Current recipes
 
@@ -866,7 +890,9 @@ two things is refused at the hatch.
 | Fries | chop potato, fry, plate | $6 |
 | Pizza | flour + water, knead, chop tomato **twice** → sauce, chop cheese → top, bake, plate | $16 |
 
-Serving pays the reward plus a tip proportional to the time left on the ticket.
+Delivery pays the reward. The **tip** — up to 40% more, proportional to the
+patience left when the plate landed — is left on the table and collected by
+whoever busses the dirty plate.
 
 ### Levels
 
@@ -874,24 +900,135 @@ Kitchens are authored as ASCII so layouts stay readable and diffable
 (`data/level.ts`):
 
 ```
-#############
-#tlcfwpP===X#
-#...........#
-#.=B=.......#
-S...........O
-S...........O
-#.=B=.......#
-#.......===F#
-#############
+####################
+#......#tlcfwpP===X#
+#.T..T.#...........#
+#........=B=.......#
+D......S...........O
+#......S...........O
+#.T..T.#.=B=.......#
+#......#.......===F#
+####################
 ```
 
-`#` wall · `.` floor · `=` counter · `B` board · `F` fryer · `O` oven ·
-`P` plate stack · `S` serving hatch · `X` bin · `t l c f w p` ingredient crates
-(tomato, lettuce, cheese, flour, water, potato).
+`#` wall · `.` floor · `D` door · `T` table · `=` counter · `B` board ·
+`F` fryer · `O` oven · `P` plate stack · `S` pass · `X` bin ·
+`t l c f w p` ingredient crates (tomato, lettuce, cheese, flour, water, potato).
+
+The dining room is the western half of the **same grid** — one rectangle, one
+collision system, no new concepts. The two `S` tiles are the pass, and the gap
+beside them at `(7,3)` is how a chef walks round it. That gap is deliberate:
+the pass lets one player plate-and-slide while another runs food, but nobody is
+*forced* through a bottleneck, so roles stay something a group discovers rather
+than something the level imposes.
 
 Dough is **made, not found**: flour + water. An ingredient that arrives ready to
 use is a crate that exists only to be walked to, and the pizza's first step now
 teaches the combine rule that the rest of it depends on.
+
+---
+
+## The dining room
+
+The biggest change the game has made: serving stopped being a **sink** (post the
+dish through a hatch, done) and became a **loop** (seat → order → deliver → eat
+→ bus → wash). It is worth writing down *why*, because three things that used to
+be abstract are now physical, and each of them paid for itself:
+
+1. **Order capacity became furniture.** There used to be a constant,
+   `MAX_ACTIVE_ORDERS = 5`. Now it is the number of tables you have placed — so
+   the players choose their own difficulty during the build phase. More tables
+   is more revenue *and* more chaos, which is the PlateUp trick, earned.
+2. **The patience timer became a person.** The same number, drawn as somebody
+   sinking into their chair. A ring going red is information; a customer
+   slumping is the same information readable from the fryer, in peripheral
+   vision, without looking away from what you are burning.
+3. **The queue became visible before it exists.** Customers walk the biome path
+   to the door, so you can *see* demand coming. A rush stops being a spawn rate
+   and becomes four people on the path — anticipation and prep-ahead decisions,
+   diegetically, for free.
+
+### The lifecycle
+
+```
+         (no free table)
+ arriving ──────────────> waiting ──(gave up)──> leaving
+    │                             │
+    │ (reached seat)              │ (a table frees up)
+    v                             v
+ deciding ──(3s)──> ordering ──(fed)──> eating ──(12s)──> leaving
+                       │
+                       └──(patience ran out)──> leaving
+```
+
+Two of those timers are load-bearing:
+
+- **Dwell time is a throughput constraint.** A table is occupied while somebody
+   eats it, so fast service means more covers per day. Table turnover became an
+   economic concept without a single new UI element.
+- **The door queue is the overflow valve.** A short tolerated wait smooths
+   spikes; somebody walking away from a full door is the visible cost of not
+   having built enough tables.
+
+Patience only starts draining when the order appears, not when the customer
+arrives. The walk in is a beat of calm, and the number in `data/recipes.ts`
+still means what it says.
+
+### Say yes, and let the failure be visible
+
+**Any plate can be placed on any table.** Wrong dish? The customer does not eat,
+and the bubble keeps showing what they actually wanted. The mistake is visible,
+harmless, and undone by picking the plate back up. No refusal, no error sound,
+no penalty beyond the walk you can see you wasted.
+
+Matching is **by table, not by ticket juggling**. The bubble over the table *is*
+the ticket, which is why the HUD's order list is gone rather than kept
+alongside: two places to read the same thing splits attention, and only one of
+them can also tell you how far you have to walk.
+
+### The tip is why bussing is not a chore
+
+Payment is split. The **base reward** lands on delivery, on the chef who ran the
+food. The **tip** — proportional to how much patience was left — stays on the
+table, and is collected automatically by whoever picks up the dirty plate.
+
+Without this, dirty plates are a toll: pure maintenance work standing between
+you and the next order. With it, clearing a table is a decision you *want* to
+make — "grab the tip and the plate on my way back from table 3" — and the sink
+loop that follows next patch inherits an economic pull instead of being pure
+maintenance.
+
+A table with anything on it cannot be sat at, so the tip and the seat are the
+same decision under pressure: leave it and lose capacity, clear it and lose the
+time.
+
+### Pathing, and why it is allowed to be this simple
+
+`sim/pathing.ts` is a breadth-first flood fill over non-solid tiles. No A*, no
+steering, no avoidance. Two things make that enough:
+
+- **Appliances only move during the build phase.** A path computed when a
+  customer sets off cannot be invalidated while they walk it, so it is computed
+  once and then followed.
+- **Customers are ghosts.** They do not collide with chefs, with each other, or
+  with anything except the tiles the flood fill already refused. Bodyblocking by
+  pathing NPCs is the fastest route to frustration in a game about hurrying, so
+  the first version simply does not have it. Gentle "excuse me" soft-collision
+  can come later, if the room ever feels too empty without it.
+
+The same flood fill answers the build phase's question: **can the door reach
+every table?** A player *will* wall off the dining room in their first week. The
+rule is not to prevent it — stranded tables pulse red under a warning ring, the
+log says so when the day opens, and nobody is ever seated at one.
+
+### The closing beat
+
+Arrivals stop 30 seconds before the clock runs out, and the day does not end
+until the last customer has eaten and left — `dayTime` simply goes negative
+while the room empties, and the HUD clock says `last orders` and then `closing`.
+"Kitchen's closed" arrives for free, and finishing the stragglers fast becomes
+something to care about. A 60-second grace period is the backstop: nobody can
+hold a day open forever.
 
 ---
 
@@ -909,7 +1046,9 @@ not needed and would be premature.** What actually keeps this fast:
   changes (`tomato` → `tomato|chopped`);
 - geometries, materials and label textures are shared/cached; the floor is one
   textured quad;
-- the HUD updates by diffing text and reconciling order rows, never by
+- the HUD updates by diffing text, never by re-rendering, and it no longer
+  renders a per-order row at all — the order bubbles live in the 3D scene,
+  where they cost one shader quad and one cached model each;
   rewriting `innerHTML` per frame.
 
 The bottleneck was draw calls, not logic — and it was worse than it looked. The
@@ -1021,8 +1160,14 @@ than the clock.
 ### Verified so far
 
 Keyboard play has been driven end to end in a real browser: crate → chop →
-combine → plate → serve pays out, food burns if left on the fryer, and
+combine → plate → deliver pays out, food burns if left on the fryer, and
 appliances can be picked up and re-placed in the build phase.
+
+The dining room has been driven headlessly in a real browser, offline and
+online: customers walk the path, take a seat, raise a bubble with the dish and a
+patience ring, eat a delivered plate, and leave a dirty plate and a stack of
+coins behind. Six simulated days run without a throw, and the wire frame stays
+under 1.5 KB with two chefs and a full room.
 
 The server is written so that **one bad room cannot take the others with it** —
 the per-room tick is wrapped, and a room that throws is evicted and logged
@@ -1098,15 +1243,19 @@ link like a shared document.
 
 Near term:
 
-- **Dining room.** The intended shape, so nothing gets built that blocks it:
-  extend the level grid with a seating area on the far side of the serving
-  hatch (one grid, one collision system, no new concepts). Add a `table`
-  appliance that accepts a plate and holds it; customers become simple entities
-  that walk the biome path, occupy a seat, spawn the order, and free the seat
-  once served. Serving then means *carrying the plate to the right table*
-  rather than posting it through a hatch, which turns delivery into real
-  floor-planning pressure. The natural follow-on is dirty plates and a sink,
-  which closes the loop and makes the build phase much more interesting.
+- **The sink.** Closes the plate economy the dining room opened. Dirty plates,
+  bussing and the tip already exist; today the plate stack washes up for free,
+  which is a hand-wave with an obvious shape to replace — a `sink` appliance
+  with a hold-to-scrub transform from `plate|dirty` to `plate`, and a plate
+  count that can actually run out.
+- **Door queue and rushes.** Customers who find the room full wait at the door
+  and give up; the next step is showing that queue properly and weighting
+  arrivals into visible **groups** so a rush is four people on the path rather
+  than a spawn rate.
+- **Parties** — one table, several dishes, wanted together. The coordination
+  flagship ("table 2 wants a pizza *and* two fries"), and the reason tables are
+  drawn with four chairs already.
+- **Customer variety** — patience and appetite as data, like biomes are.
 - **More biomes** — beach, night market, ski lodge. Mostly a data exercise now.
 - **Verify the gamepad mapping** on real hardware, add per-player join/leave UI
   and rumble on burn/serve.
@@ -1119,21 +1268,24 @@ Near term:
 
 - **Shop phase** — spend money on new appliances between days (appliance prices
   already exist in `data/appliances.ts`).
-- **More content** — soups (pots + liquids), a sink and dirty plates, serving
-  windows with seated customers.
-- **Juice** — pickup/serve/burn sounds, steam and sizzle particles, floating
-  `+$8` text, screen shake on burn, a customer walk cycle.
+- **More content** — soups (pots + liquids), drinks, sides.
+- **Juice** — pickup/serve/burn sounds, steam and sizzle particles, screen shake
+  on burn.
+- **Chef–customer soft collision** — a gentle "excuse me" nudge, if the dining
+  room ever feels too empty with everyone walking through each other.
 - **Rendered icons** — render each ingredient once to a texture with an
-  offscreen camera, then reuse it on crates and in HUD tickets. Consistent 3D
-  icons with no illustration work.
+  offscreen camera, then reuse it on crates. Consistent 3D icons with no
+  illustration work.
 - **Throwing** — an extra button to toss items across the kitchen.
 
 Bigger:
 
 - **Delta frames and interest management.** Only send what changed, and only to
   players who can see it. Neither is needed at one kitchen per room.
-- **Kitchen validation in build mode** — prevent layouts that wall off the
-  serving hatch (flood fill from spawns).
+- **Kitchen validation in build mode, part two.** The dining room half is done
+  (stranded tables are flagged, and never seated at); the kitchen half — can a
+  chef still reach the pass, the crates, the oven — uses the same flood fill and
+  is not written yet.
 - **Procedural kitchens** and a run-based meta layer à la PlateUp.
 
 ### The build phase

@@ -86,16 +86,17 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     rngState: seed,
     width,
     height,
-    tiles: new Array(width * height).fill(null).map(() => ({ wall: false })),
+    tiles: new Array(width * height).fill(null).map(() => ({ wall: false, door: false })),
     applianceAt: new Array(width * height).fill(0),
     appliances: new Map(),
     players: [],
-    orders: [],
+    customers: [],
+    door: { x: 0, y: Math.floor(height / 2) },
     phase: "service",
     day: 1,
     dayTime: level.dayLength,
     dayLength: level.dayLength,
-    nextOrderIn: 2,
+    nextArrivalIn: 2,
     money: 0,
     served: 0,
     lost: 0,
@@ -111,7 +112,10 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
       if (!spec) throw new Error(`Unknown level char "${ch}" at ${x},${y}`);
       const idx = tileIndex(world, x, y);
       if (spec.kind === "wall") {
-        world.tiles[idx] = { wall: true };
+        world.tiles[idx] = { wall: true, door: false };
+      } else if (spec.kind === "door") {
+        world.tiles[idx] = { wall: false, door: true };
+        world.door = { x, y };
       } else if (spec.kind === "appliance") {
         const appliance: Appliance = {
           id: world.nextId++,
@@ -124,6 +128,7 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
           motion: null,
           source: spec.source ?? null,
           heldBy: null,
+          tip: 0,
         };
         world.appliances.set(appliance.id, appliance);
         world.applianceAt[idx] = appliance.id;

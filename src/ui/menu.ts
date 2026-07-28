@@ -144,7 +144,7 @@ export class PauseMenu {
         : [
             { action: "resume", label: "Resume", hint: `Day ${world.day} in progress` },
             { action: "endDay", label: "Close up early", hint: "Skip to rearranging" },
-            { action: "restartDay", label: "Restart day", hint: "Clear orders and start over" },
+            { action: "restartDay", label: "Restart day", hint: "Empty the room and start over" },
           ];
 
     const signature = items.map((item) => item.label).join("|");

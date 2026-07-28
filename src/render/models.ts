@@ -413,11 +413,31 @@ const plate: Builder = (parent, item, y) => {
     [0.315, 0.07],
     [0.33, 0.082],
   ]);
-  const dish = new THREE.Mesh(profile, shellMaterial(PALETTE.ceramic, "enamel"));
+  const dirty = item.processes.includes("dirty");
+  const dish = new THREE.Mesh(
+    profile,
+    shellMaterial(dirty ? PALETTE.plateDirty : PALETTE.ceramic, dirty ? "ceramic" : "enamel"),
+  );
   dish.castShadow = true;
   dish.receiveShadow = true;
   dish.position.y = y;
   parent.add(dish);
+
+  // Leftovers, so a used plate reads as used from the far side of the room
+  // rather than as a clean one someone forgot to pick up.
+  if (dirty) {
+    for (let i = 0; i < 5; i++) {
+      const smear = put(
+        parent,
+        mesh(sphere(0.026 + Math.abs(wobble(41, i)) * 0.018, 8), PALETTE.crumbs, "food"),
+        wobble(42, i) * 0.16,
+        y + 0.022,
+        wobble(43, i) * 0.16,
+      );
+      smear.scale.set(1.3, 0.42, 1.1);
+    }
+  }
+
   for (const child of item.contents) addModel(parent, child, y + 0.03);
 };
 

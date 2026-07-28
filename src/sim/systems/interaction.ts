@@ -1,9 +1,10 @@
 import { applianceDef } from "../../data/appliances";
 import { ingredient } from "../../data/ingredients";
-import { COMBINE_INDEX, DISH_INDEX, pairKey } from "../../data/recipes";
-import { isBurnt, isPlate, makeItem, specKey } from "../items";
+import { COMBINE_INDEX, pairKey } from "../../data/recipes";
+import { isBurnt, isDirty, isPlate, makeItem, specKey } from "../items";
 import type { Appliance, Inputs, Item, Player, World } from "../types";
 import { PLAYER_RADIUS, applianceAtTile, effect, inBounds, log, tileIndex } from "../world";
+import { acceptDelivery, customerAt } from "./customers";
 
 /** How far in front of the player we look for something to interact with. */
 const REACH = 0.75;
@@ -55,10 +56,10 @@ function serviceGrab(world: World, player: Player): void {
       log(world, "Binned");
       return;
     }
-    if (appliance.kind === "serving") {
-      tryServe(world, player);
-      return;
-    }
+    // Note there is no "serve" case here any more. The pass is a counter, not a
+    // chute: a plate put down on it stays there for someone to run out. Food is
+    // delivered at a table, in front of the person who ordered it.
+    //
     // A source takes back exactly what it hands out: the untouched tomato goes
     // back in the crate, the clean plate back on the stack. Anything you've
     // changed — chopped, cooked, loaded — is your problem, and the bin's.
@@ -69,6 +70,14 @@ function serviceGrab(world: World, player: Player): void {
       player.carried.contents.length === 0
     ) {
       log(world, `Put back: ${itemLabel(player.carried)}`);
+      player.carried = null;
+      return;
+    }
+    // The plate stack also takes dirty plates back and hands them out clean.
+    // A hand-wave for one release: the sink is the next patch, and it slots in
+    // here without anything else about bussing having to change.
+    if (appliance.kind === "plates" && isDirty(player.carried)) {
+      log(world, "Washed up");
       player.carried = null;
       return;
     }
@@ -91,6 +100,7 @@ function serviceGrab(world: World, player: Player): void {
       player.carried = null;
       appliance.progress = 0;
       appliance.overcook = 0;
+      if (appliance.kind === "table") tryDeliver(world, player, appliance);
       return;
     }
 
@@ -114,7 +124,37 @@ function serviceGrab(world: World, player: Player): void {
     appliance.item = null;
     appliance.progress = 0;
     appliance.overcook = 0;
+    collectTip(world, player, appliance);
   }
+}
+
+/**
+ * Money left on a table comes up with whatever is on it.
+ *
+ * This is what makes clearing tables a decision rather than a chore: the tip is
+ * the pull, the dirty plate is what you have to carry to get it, and both are
+ * on the way back from delivering the next dish.
+ */
+function collectTip(world: World, player: Player, appliance: Appliance): void {
+  if (appliance.tip <= 0) return;
+  world.money += appliance.tip;
+  effect(world, { kind: "tipped", playerId: player.id, amount: appliance.tip });
+  appliance.tip = 0;
+}
+
+/**
+ * A plate just landed on a table. If the customer sitting there ordered it,
+ * they start eating and the chef who ran the food is paid for it.
+ *
+ * The rule itself lives with the customers (`acceptDelivery`), because a
+ * customer can also find their dish already waiting when they finish deciding.
+ * Only the credit differs: there, nobody is standing at the table.
+ */
+function tryDeliver(world: World, player: Player, table: Appliance): void {
+  const customer = customerAt(world, table);
+  if (!customer) return;
+  const reward = acceptDelivery(world, table, customer);
+  if (reward !== null) effect(world, { kind: "served", playerId: player.id, amount: reward });
 }
 
 /**
@@ -147,6 +187,8 @@ function merge(held: Item, target: Item): Item | null {
  */
 function tryPlate(plate: Item, food: Item): Item | null {
   if (!isPlate(plate) || isPlate(food)) return null;
+  // A dirty plate is not a workspace. It goes to the sink, or back on the stack.
+  if (isDirty(plate)) return null;
   for (const existing of plate.contents) {
     if (tryCombine(food, existing)) return plate;
   }
@@ -163,46 +205,6 @@ function tryCombine(held: Item, target: Item): Item | null {
   target.processes = [...output.processes];
   target.contents = [];
   return target;
-}
-
-function tryServe(world: World, player: Player): void {
-  const held = player.carried;
-  if (!held) return;
-  if (!isPlate(held) || held.contents.length === 0) {
-    log(world, "Serve dishes on a plate");
-    return;
-  }
-  if (held.contents.length > 1) {
-    log(world, "That plate holds more than one thing");
-    return;
-  }
-  const dish = held.contents[0]!;
-  const recipe = DISH_INDEX.get(specKey(dish));
-  if (!recipe) {
-    log(world, "Nobody ordered that");
-    return;
-  }
-
-  // Satisfy the most urgent matching order.
-  let best = -1;
-  for (let i = 0; i < world.orders.length; i++) {
-    const order = world.orders[i]!;
-    if (order.recipeId !== recipe.id) continue;
-    if (best === -1 || order.remaining < world.orders[best]!.remaining) best = i;
-  }
-  if (best === -1) {
-    log(world, `No order for ${recipe.name}`);
-    return;
-  }
-
-  const order = world.orders[best]!;
-  const tip = Math.round(recipe.reward * 0.4 * (order.remaining / order.patience));
-  world.orders.splice(best, 1);
-  world.money += recipe.reward + tip;
-  world.served++;
-  player.carried = null;
-  effect(world, { kind: "served", playerId: player.id, amount: recipe.reward + tip });
-  log(world, `${recipe.name} served  +$${recipe.reward + tip}`);
 }
 
 // --- build phase -------------------------------------------------------------
@@ -305,6 +307,7 @@ function pushOutOfTile(player: Player, tx: number, ty: number): void {
 export function itemLabel(item: Item): string {
   const base = ingredient(item.base).name;
   if (item.base === "plate") {
+    if (isDirty(item)) return "Dirty plate";
     return item.contents.length ? `Plate: ${itemLabel(item.contents[0]!)}` : "Plate";
   }
   if (item.processes.length === 0) return base;

@@ -26,6 +26,11 @@ export function isBurnt(item: Item | null): boolean {
   return item !== null && item.processes.includes("burnt");
 }
 
+/** A plate a customer has eaten off. Useless until it has been washed. */
+export function isDirty(item: Item | null): boolean {
+  return item !== null && item.processes.includes("dirty");
+}
+
 /** Flattened list of items (an item plus anything it contains). */
 export function* walkItems(item: Item | null): Generator<Item> {
   if (!item) return;

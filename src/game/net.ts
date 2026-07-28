@@ -375,19 +375,38 @@ export class NetGame implements Game {
         }
         continue;
       }
-      const now = this.sample(player.id, this.playout);
-      const before = this.sample(player.id, this.playout - DT * 1000);
+      const now = this.sample("players", player.id, this.playout);
+      const before = this.sample("players", player.id, this.playout - DT * 1000);
       if (now && before) {
         player.prevPos = before;
         player.pos = now;
       }
-      const facing = this.sampleFacing(player.id);
+      const facing = this.sampleFacing("players", player.id);
       if (facing) player.facing = facing;
+    }
+
+    // Customers are nobody's chef, so they are always sampled — never
+    // predicted. `applyFrame` has just planted them at the newest frame's
+    // position; walking them back onto the playout clock is what keeps them in
+    // step with the remote chefs moving around them.
+    for (const customer of this.world.customers) {
+      const now = this.sample("customers", customer.id, this.playout);
+      const before = this.sample("customers", customer.id, this.playout - DT * 1000);
+      if (now && before) {
+        customer.prevPos = before;
+        customer.pos = now;
+      }
+      const facing = this.sampleFacing("customers", customer.id);
+      if (facing) customer.facing = facing;
     }
   }
 
-  /** Position of a player on the received timeline at a given moment. */
-  private sample(id: number, at: number): { x: number; y: number } | null {
+  /** Position of a player or customer on the received timeline at a given moment. */
+  private sample(
+    kind: "players" | "customers",
+    id: number,
+    at: number,
+  ): { x: number; y: number } | null {
     if (this.buffer.length === 0) return null;
     let before = this.buffer[0]!;
     let after = this.buffer[this.buffer.length - 1]!;
@@ -398,16 +417,21 @@ export class NetGame implements Game {
         break;
       }
     }
-    const a = before.frame.players.find((p) => p.id === id);
-    const b = after.frame.players.find((p) => p.id === id);
+    const a = before.frame[kind].find((entity) => entity.id === id);
+    const b = after.frame[kind].find((entity) => entity.id === id);
     if (!a || !b) return (b ?? a) ? { x: (b ?? a)!.x, y: (b ?? a)!.y } : null;
     const span = after.at - before.at;
     const t = span > 0 ? Math.max(0, Math.min(1, (at - before.at) / span)) : 1;
     return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
   }
 
-  private sampleFacing(id: number): { x: number; y: number } | null {
-    const latest = this.buffer[this.buffer.length - 1]?.frame.players.find((p) => p.id === id);
+  private sampleFacing(
+    kind: "players" | "customers",
+    id: number,
+  ): { x: number; y: number } | null {
+    const latest = this.buffer[this.buffer.length - 1]?.frame[kind].find(
+      (entity) => entity.id === id,
+    );
     return latest ? { x: latest.fx, y: latest.fy } : null;
   }
 
