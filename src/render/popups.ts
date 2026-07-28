@@ -9,8 +9,8 @@ import { LAYER, setLayer } from "./layers";
  * for a fast serve is invisible there. Putting it on the chef ties the reward
  * to the action and the player who made it.
  *
- * Sprites are pooled and drawn on the UI layer, so they never enter the
- * depth/normal buffers the screen-space effects read (see layers.ts).
+ * Sprites are pooled and drawn on the UI layer, so they cast no shadow and stay
+ * out of any pass that rebuilds the scene (see layers.ts).
  */
 
 const LIFETIME = 1.1;

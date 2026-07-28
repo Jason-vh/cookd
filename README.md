@@ -279,6 +279,14 @@ than "latest wins" — otherwise the two would drift under jitter and never
 reconcile cleanly. A starved queue repeats the last input instead of stopping
 dead: a dropped packet should look like a moment of lag, not a stumble.
 
+That last property is also what makes an idle kitchen quiet. Since silence
+already means "carry on", the client stops sending altogether while a chef
+stands still: runs of idle input collapse, and only the first idle tick — the
+instruction to stop — goes out. A stationary chef cannot drift apart from the
+server either, because both integrate the same zero velocity, so there is
+nothing for the reconciler to correct. Idle upload falls from ~4 KB/s to 16 B/s,
+which is just the two-second keepalive.
+
 Measured against a 180ms latency proxy:
 
 | | |
@@ -392,8 +400,20 @@ while (accumulator >= 1/60) { step(world, inputs); accumulator -= 1/60 }
 render(world, accumulator / (1/60))   // alpha interpolates prev -> current
 ```
 
-Players store `prevPos` each tick so rendering interpolates between ticks: the
-sim stays at a deterministic 60Hz while the display can be 120Hz.
+Players store `prevPos` each tick so rendering interpolates between ticks, so the
+sim stays at a deterministic 60Hz whatever the display is doing.
+
+Drawing is capped at **60fps**. `requestAnimationFrame` follows the refresh rate,
+so on a 120Hz panel the game drew every frame twice over — twice the draw calls,
+twice the post-processing — to show the same thing, because the sim is a fixed
+60Hz timestep either way and the extra frames only re-interpolated a chef
+between two positions it was already being drawn between.
+
+An unfocused window drops to **10fps**. Chrome throttles a hidden or occluded
+tab but not one that has merely lost focus, so a kitchen sitting visible in the
+corner of the screen kept drawing at full rate. Only *drawing* is throttled:
+`game.update` keeps its cadence because online it is also what sends this
+client's inputs to the server.
 
 ---
 
@@ -674,9 +694,15 @@ dark glass out to flat orange paint; it should read as embers behind a window.
 
 ### Performance
 
-The full chain (GTAO + bloom + vignette + SMAA) runs at a display-capped
-**120fps at 1440×900**. Add `?fx=off` to the URL to bypass post-processing when
-profiling or on a weak GPU.
+The chain is GTAO → bloom → grade+vignette+output → SMAA. Two things keep it
+cheap. Ambient occlusion and bloom render at **half the framebuffer**, which is
+invisible on effects that are already blurs and measures 59% off the AO pass;
+and the grade, the vignette, tone mapping and the sRGB conversion share a single
+shader, because every extra pass is a full-screen read, a write and a target
+swap in exchange for a few instructions' work.
+
+Drawing is capped at 60fps — see [the game loop](#the-game-loop). Add `?fx=off`
+to the URL to bypass post-processing when profiling or on a weak GPU.
 
 ---
 
@@ -886,9 +912,47 @@ not needed and would be premature.** What actually keeps this fast:
 - the HUD updates by diffing text and reconciling order rows, never by
   rewriting `innerHTML` per frame.
 
-The realistic bottleneck is draw calls, not logic. If appliance counts grow a
-lot, the next step is instanced meshes per appliance kind — not a different
-language.
+The bottleneck was draw calls, not logic — and it was worse than it looked. The
+park is *authored* as ~1,700 separate meshes (260 grass tufts of three blades
+each, 70 flower clusters, trees, rocks, path slabs), every one a draw call, and
+each was drawn three times a frame: once into the shadow map, once into the
+ambient-occlusion G-buffer, then once for real. On a 120Hz panel all of that ran
+twice as often as anything could show.
+
+| | before | after |
+| --- | --- | --- |
+| Draw calls / frame | 3,818 | **335** |
+| Triangles / frame | 633k | **184k** |
+| CPU per render | 4.6ms | **0.7ms** |
+| Main thread idle | 12% | **90%** |
+
+What changed:
+
+- **static scenery is baked into one mesh per material** at startup
+  (`render/merge.ts`). Authoring still builds loose parts — a tree is a trunk
+  and four blobs — and only what reaches the scene changes. The trade is
+  per-object frustum culling, which a fixed orthographic camera framing the
+  whole diorama never wanted anyway;
+- **grass stopped being expensive.** `roundedBox` subdivides into a 7×7×7 grid
+  to carry its corner radius: 588 triangles, which is right for an oven door and
+  absurd for a blade of grass four pixels wide. 780 blades were 459k of the
+  scene's 633k triangles;
+- **the AO pass reuses the depth `RenderPass` already drew** instead of
+  rendering the scene again into its own G-buffer. This is GPU-neutral on Apple
+  silicon — making depth sampleable costs a store that tile memory would
+  otherwise discard — but it halves the draw calls and the CPU that submits
+  them;
+- **drawing is capped**, at 60fps focused and 10fps unfocused.
+
+Measured and rejected, so nobody spends the afternoon again: smaller shadow maps
+(shadows are 4% of a frame — switching them off entirely saves nothing worth
+having), instancing the progress dials (already invisible when nothing is
+cooking), merging each appliance's parts (−4%), and ambient occlusion at quarter
+resolution (−16%, but it visibly widens every contact shadow, and contact
+shadows are the whole point of having AO here).
+
+If appliance counts grow a lot, instanced meshes per appliance kind is still the
+next step — not a different language.
 
 ---
 
