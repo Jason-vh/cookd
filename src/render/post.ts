@@ -1,20 +1,17 @@
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { VignetteShader } from "three/examples/jsm/shaders/VignetteShader.js";
-import { GradeShader } from "./grade";
+import { createGradedOutputPass, type Grade } from "./grade";
 import { LAYER } from "./layers";
 
 /**
  * Post-processing chain for the diorama look.
  *
  * Order matters:
- *   render -> ambient occlusion -> bloom -> grade -> vignette -> output -> AA
+ *   render -> ambient occlusion -> bloom -> grade+vignette+output -> AA
  *
  * The effect doing the heavy lifting is **GTAO**: contact shadows in every
  * crevice are what make objects feel like they're actually resting on the
@@ -33,7 +30,25 @@ export type Post = {
   render(): void;
 };
 
-export type Grade = { saturation: number; warmth: number; lift: number };
+/**
+ * Ambient occlusion and bloom render at half the framebuffer's resolution.
+ *
+ * Both are low-frequency by nature — AO is a soft contact darkening that the
+ * pass immediately runs a denoise blur over, and bloom *is* a blur — so neither
+ * carries detail that survives to the eye at full resolution. Both are close to
+ * pure memory bandwidth, and at 3024x1544 the AO pass alone measures 59% more
+ * expensive at full resolution for no visible difference.
+ *
+ * This has to be re-applied after every `composer.setSize`, which resets each
+ * pass to the full framebuffer.
+ *
+ * It used to happen by accident: these two lines passed *CSS* pixels where the
+ * composer had just passed *device* pixels, so the effects ran at half
+ * resolution on a retina display and full resolution on a 1x one. Same game,
+ * different look and a 59% swing in cost depending on the monitor. Scaling from
+ * the real framebuffer size makes it the same everywhere.
+ */
+const EFFECT_SCALE = 0.5;
 
 export function createPost(
   renderer: THREE.WebGLRenderer,
@@ -63,7 +78,7 @@ export function createPost(
    */
   const aoCamera = camera.clone();
   aoCamera.layers.set(LAYER.WORLD);
-  const ao = new GTAOPass(scene, aoCamera, size.x, size.y);
+  const ao = new GTAOPass(scene, aoCamera, size.x * EFFECT_SCALE, size.y * EFFECT_SCALE);
   ao.blendIntensity = 0.85;
   ao.updateGtaoMaterial({
     radius: 0.4,
@@ -80,25 +95,20 @@ export function createPost(
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.13, 0.75, 0.86);
   composer.addPass(bloom);
 
-  // The biome's single dial for overall mood.
-  const gradePass = new ShaderPass(GradeShader);
-  gradePass.uniforms.saturation!.value = grade.saturation;
-  gradePass.uniforms.warmth!.value = grade.warmth;
-  gradePass.uniforms.lift!.value = grade.lift;
-  composer.addPass(gradePass);
+  // The biome's mood dial, the vignette, tone mapping and the sRGB conversion,
+  // all in the one shader that finishes the image — see grade.ts.
+  composer.addPass(createGradedOutputPass(grade));
 
-  const vignette = new ShaderPass(VignetteShader);
-  vignette.uniforms.offset!.value = 1.1;
-  vignette.uniforms.darkness!.value = 1.05;
-  composer.addPass(vignette);
-
-  composer.addPass(new OutputPass());
+  // After the output pass on purpose: SMAA needs sRGB input to find edges.
   composer.addPass(new SMAAPass());
 
   const resize = (width: number, height: number): void => {
     composer.setSize(width, height);
-    ao.setSize(width, height);
-    bloom.setSize(width, height);
+    // Device pixels, not CSS pixels: `composer.setSize` scales by the pixel
+    // ratio internally and these must be measured against the same framebuffer.
+    const scale = renderer.getPixelRatio() * EFFECT_SCALE;
+    ao.setSize(Math.ceil(width * scale), Math.ceil(height * scale));
+    bloom.setSize(Math.ceil(width * scale), Math.ceil(height * scale));
   };
   resize(size.x, size.y);
 
