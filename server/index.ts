@@ -1,14 +1,16 @@
+import type { ServerWebSocket } from "bun";
 import { DT } from "../src/sim/step";
 import { Host } from "../src/game/host";
+import { DEFAULT_LEVEL_ID, levelById } from "../src/data/level";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
   encodeLayout,
-  layoutSignature,
-  type ClientMessage,
+  layoutVersion,
   type ServerMessage,
 } from "../src/game/protocol";
-import { saveSignature, snapshot, type Save } from "../src/save";
+import { decode, parseClientMessage } from "../src/game/wire";
+import { saveSignature, snapshot } from "../src/save";
 import type { World } from "../src/sim/types";
 import { loadSave, saveKitchen } from "./store";
 
@@ -22,6 +24,12 @@ import { loadSave, saveKitchen } from "./store";
  *
  * The simulation runs at a fixed 60Hz and broadcasts at 20Hz. Clients hold a
  * short playout buffer and interpolate, so they never see the gap.
+ *
+ * **Scale, stated so it is a decision rather than a surprise:** rooms live in a
+ * module-level `Map` and saves are local files, so this is one process on one
+ * box, capped at `MAX_ROOMS`. A second instance would need room-to-node routing
+ * and shared storage, and neither is worth building before the first box is
+ * busy. `/health` reports the numbers that would tell us it is.
  */
 
 const PORT = Number(process.env.PORT ?? 5273);
@@ -31,6 +39,9 @@ const EMPTY_ROOM_TTL = 10 * 60 * 1000;
 const MAX_PLAYERS_PER_ROOM = 8;
 const MAX_PER_CONNECTION = 4;
 const MAX_ROOMS = 200;
+
+/** Longest message we will even try to parse. A tick of input is ~300 bytes. */
+const MAX_MESSAGE_BYTES = 8 * 1024;
 
 /**
  * How long a disconnected player's chef is held before it is cleared away.
@@ -42,13 +53,42 @@ const MAX_ROOMS = 200;
  */
 const RECLAIM_GRACE = 25_000;
 
+/**
+ * Per-connection message budget: a steady rate plus a burst.
+ *
+ * A client sends at most one input per tick (60/s) plus a ping every two
+ * seconds, so 90/s of headroom is generous for anything honest. What it stops
+ * is the expensive verbs: `reset` rebuilds a world, broadcasts a layout and
+ * writes to disk, and one connection sending it in a loop could saturate the
+ * shared 60Hz interval for *every other room in the process*.
+ */
+const RATE_PER_SECOND = 90;
+const RATE_BURST = 180;
+
+/**
+ * How much unsent data a client may accumulate before we stop sending frames.
+ *
+ * A state-sync frame is worthless once stale, so a client that cannot keep up
+ * should be skipped rather than queued at — queuing is how one bad connection
+ * turns into unbounded memory in the server. `layout` and `welcome` are never
+ * skipped: those are structural, and missing one desynchronises the client
+ * permanently rather than briefly.
+ */
+const MAX_BUFFERED_BYTES = 512 * 1024;
+const DROP_CLIENT_BYTES = 4 * 1024 * 1024;
+
+type SocketData = { client: Client | null; tokens: number; lastRefill: number };
+type Socket = ServerWebSocket<SocketData>;
+
 type Client = {
   id: string;
   room: string;
   players: number[];
   name: string;
   token: string;
-  socket: { send: (data: string) => void; close: () => void };
+  socket: Socket;
+  /** Frames skipped because the socket was backed up, for /health. */
+  dropped: number;
 };
 
 type Room = {
@@ -56,7 +96,7 @@ type Room = {
   host: Host;
   clients: Set<Client>;
   frames: number;
-  layout: string;
+  layout: number;
   /** Last phase seen, so a day boundary can trigger a checkpoint. */
   phase: World["phase"];
   emptySince: number | null;
@@ -66,8 +106,18 @@ type Room = {
    * else means there is something worth writing.
    */
   saved: string;
+  /**
+   * Whether we are allowed to write this room at all.
+   *
+   * False when the file on disk was something we could not read: it has been
+   * quarantined, but a room that starts from a rejected save must not then
+   * overwrite the real one if the quarantine rename also failed.
+   */
+  writable: boolean;
   /** Seats being held for players who dropped, by browser token. */
   vacant: Map<string, { ids: number[]; expires: number }>;
+  /** Ticks the room could not keep up with, for /health. */
+  behind: number;
 };
 
 const rooms = new Map<string, Room>();
@@ -80,36 +130,88 @@ const rooms = new Map<string, Room>();
  * memory (and, if untouched rooms were saved, the disk) by connecting in a
  * loop.
  */
-function roomFor(code: string, save: Save | null): Room | null {
+function roomFor(code: string, loaded: Awaited<ReturnType<typeof loadSave>>): Room | null {
   const existing = rooms.get(code);
   if (existing) return existing;
-  if (rooms.size >= MAX_ROOMS) return null;
-  const host = new Host(save);
+  if (rooms.size >= MAX_ROOMS && !evictColdestRoom()) return null;
+
+  const level = levelById(DEFAULT_LEVEL_ID);
+  if (!level) throw new Error(`missing default level ${DEFAULT_LEVEL_ID}`);
+  const host = new Host(loaded.save, level);
+
+  // A save we refused is not a save we may overwrite. `loadSave` has already
+  // moved the file aside; if that failed too, leaving it alone is the only way
+  // the player's kitchen survives long enough for someone to look at it.
+  const rejected = host.restored?.ok === false;
+  if (rejected) {
+    console.warn("[cookd] room", code, "ignored its save:", host.restored?.reason);
+  }
+
   const room: Room = {
     code,
     host,
     clients: new Set(),
     frames: 0,
-    layout: layoutSignature(host.world),
+    layout: layoutVersion(host.world),
     phase: host.world.phase,
-    emptySince: Date.now(),
+    emptySince: monotonic(),
     saved: saveSignature(host.world),
+    writable: !loaded.corrupt && !rejected,
     vacant: new Map(),
+    behind: 0,
   };
   rooms.set(code, room);
   return room;
 }
 
-/** Write the room if, and only if, it differs from what is on disk. */
+/**
+ * Make room for a new kitchen by dropping the one that has been empty longest.
+ *
+ * At the cap the server used to refuse new players outright, even when most of
+ * its rooms were empty-but-warm. Degrading is better than failing: an empty
+ * room's only value is that someone might come back to it, and the person
+ * asking right now definitely wants one.
+ */
+function evictColdestRoom(): boolean {
+  let coldest: Room | null = null;
+  for (const room of rooms.values()) {
+    if (room.clients.size > 0 || room.emptySince === null) continue;
+    if (!coldest || room.emptySince < (coldest.emptySince ?? Infinity)) coldest = room;
+  }
+  if (!coldest) return false;
+  persist(coldest);
+  rooms.delete(coldest.code);
+  return true;
+}
+
+/**
+ * Write the room if, and only if, it differs from what is on disk.
+ *
+ * `room.saved` only advances once the write has actually landed. It used to be
+ * set first, which meant a failed write left the server certain the kitchen was
+ * safe — no retry, no complaint, and the layout gone at the next eviction.
+ */
 function persist(room: Room): void {
+  if (!room.writable) return;
   const signature = saveSignature(room.host.world);
   if (signature === room.saved) return;
-  room.saved = signature;
-  void saveKitchen(room.code, snapshot(room.host.world));
+  void writeThrough(room, signature);
+}
+
+/**
+ * `room.saved` advances only once the bytes are down. Doing it the other way
+ * round — mark clean, then write — meant a failed write left the server certain
+ * the kitchen was safe: no retry, no complaint, and the layout gone at the next
+ * eviction. Now a failure simply leaves the room dirty, and the next tick that
+ * notices a change tries again.
+ */
+async function writeThrough(room: Room, signature: string): Promise<void> {
+  const ok = await saveKitchen(room.code, snapshot(room.host.world, room.host.level.id));
+  if (ok) room.saved = signature;
 }
 
 function normaliseRoom(raw: string): string {
-  const code = (raw || "main")
+  const code = raw
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
     .slice(0, 8);
@@ -128,20 +230,60 @@ function seatName(base: string, index: number): string {
   return index === 0 ? base : `${base} ${index + 1}`;
 }
 
-function broadcast(room: Room, message: ServerMessage): void {
+/**
+ * Send, unless the socket is so far behind that this would only make it worse.
+ *
+ * `skippable` is true for frames: the next one supersedes it completely, so
+ * dropping it costs a client on a bad link one twentieth of a second of
+ * smoothness and costs the server nothing.
+ */
+function deliver(client: Client, payload: string, skippable: boolean): void {
+  const buffered = client.socket.getBufferedAmount();
+  if (buffered > DROP_CLIENT_BYTES) {
+    // Past this the connection is not slow, it is gone, and it is holding
+    // megabytes of the server's memory to prove it.
+    client.socket.close();
+    return;
+  }
+  if (skippable && buffered > MAX_BUFFERED_BYTES) {
+    client.dropped++;
+    return;
+  }
+  client.socket.send(payload);
+}
+
+function broadcast(room: Room, message: ServerMessage, skippable = false): void {
   const payload = JSON.stringify(message);
-  for (const client of room.clients) client.socket.send(payload);
+  for (const client of room.clients) deliver(client, payload, skippable);
 }
 
 function send(client: Client, message: ServerMessage): void {
-  client.socket.send(JSON.stringify(message));
+  deliver(client, JSON.stringify(message), false);
+}
+
+function refuse(socket: Socket, message: string): void {
+  const error: ServerMessage = { t: "error", message, fatal: true };
+  socket.send(JSON.stringify(error));
+  socket.close();
+}
+
+/**
+ * A clock that only goes forwards.
+ *
+ * The loop used to derive `elapsed` from `Date.now()`, so an NTP step backwards
+ * produced a negative elapsed, drove the accumulator negative and froze every
+ * room for the size of the correction. Wall time is for timestamps; this is for
+ * durations.
+ */
+function monotonic(): number {
+  return Bun.nanoseconds() / 1_000_000;
 }
 
 // --- the loop ----------------------------------------------------------------
 
-let previous = Date.now();
+let previous = monotonic();
 setInterval(() => {
-  const now = Date.now();
+  const now = monotonic();
   const elapsed = (now - previous) / 1000;
   previous = now;
 
@@ -176,40 +318,42 @@ function tickRoom(room: Room, elapsed: number, now: number): void {
     room.vacant.delete(token);
   }
 
-  {
-    if (room.clients.size === 0) {
-      // Keep an empty room warm for a while: someone refreshing their browser
-      // should not come back to a wiped kitchen.
-      if (room.emptySince && now - room.emptySince > EMPTY_ROOM_TTL) {
-        persist(room);
-        rooms.delete(room.code);
-      }
-      return;
-    }
-
-    room.host.advance(elapsed, { maxTicks: 8 });
-    room.frames++;
-
-    // The layout is ~70% of the world's bytes and changes a handful of times a
-    // day, so it rides its own message.
-    const layout = layoutSignature(room.host.world);
-    if (layout !== room.layout) {
-      room.layout = layout;
-      broadcast(room, { t: "layout", layout: encodeLayout(room.host.world) });
+  if (room.clients.size === 0) {
+    // Keep an empty room warm for a while: someone refreshing their browser
+    // should not come back to a wiped kitchen.
+    if (room.emptySince !== null && now - room.emptySince > EMPTY_ROOM_TTL) {
       persist(room);
+      rooms.delete(room.code);
     }
+    return;
+  }
 
-    // Day boundaries are when money and the day counter change, and they are
-    // the natural checkpoint: losing the day in progress to a crash is fine,
-    // losing five days of takings is not.
-    if (room.host.world.phase !== room.phase) {
-      room.phase = room.host.world.phase;
-      persist(room);
-    }
+  const ticks = room.host.advance(elapsed, { maxTicks: 8 });
+  // Hitting the cap means the room asked for more simulation than it got, and
+  // the difference is time the players simply lost. Counted rather than logged:
+  // one slow tick is noise, a rising number is the signal to look.
+  if (ticks >= 8) room.behind++;
+  room.frames++;
 
-    if (room.frames % SEND_EVERY === 0) {
-      broadcast(room, { t: "frame", frame: encodeFrame(room.host.world, room.host.acks) });
-    }
+  // The layout is ~70% of the world's bytes and changes a handful of times a
+  // day, so it rides its own message.
+  const version = layoutVersion(room.host.world);
+  if (version !== room.layout) {
+    room.layout = version;
+    broadcast(room, { t: "layout", layout: encodeLayout(room.host.world) });
+    persist(room);
+  }
+
+  // Day boundaries are when money and the day counter change, and they are
+  // the natural checkpoint: losing the day in progress to a crash is fine,
+  // losing five days of takings is not.
+  if (room.host.world.phase !== room.phase) {
+    room.phase = room.host.world.phase;
+    persist(room);
+  }
+
+  if (room.frames % SEND_EVERY === 0) {
+    broadcast(room, { t: "frame", frame: encodeFrame(room.host.world, room.host.acks) }, true);
   }
 }
 
@@ -223,65 +367,106 @@ async function serveStatic(pathname: string): Promise<Response> {
   if (await file.exists()) return new Response(file);
   // Unknown paths fall back to the app so /ROOMCODE style links work.
   const index = Bun.file(staticRoot + "index.html");
-  if (await index.exists())
+  if (await index.exists()) {
     return new Response(index, { headers: { "content-type": "text/html" } });
+  }
   return new Response("cookd: run `bun run build` first", { status: 404 });
 }
 
-Bun.serve<{ client: Client | null }, Record<string, never>>({
+/**
+ * Spend one message from a connection's budget.
+ *
+ * A token bucket rather than a fixed window, so a client that sends its input
+ * in a small burst after a stall is not punished for the stall.
+ */
+function affordMessage(data: SocketData, now: number): boolean {
+  const elapsed = (now - data.lastRefill) / 1000;
+  data.lastRefill = now;
+  data.tokens = Math.min(RATE_BURST, data.tokens + elapsed * RATE_PER_SECOND);
+  if (data.tokens < 1) return false;
+  data.tokens -= 1;
+  return true;
+}
+
+Bun.serve<SocketData, "/ws">({
   port: PORT,
   idleTimeout: 60,
+  // Nothing we accept is remotely this big; the default is 16 MB, which is 16 MB
+  // a connection can make us parse.
+  maxRequestBodySize: MAX_MESSAGE_BYTES,
 
   async fetch(request, server) {
     const url = new URL(request.url);
     if (url.pathname === "/ws") {
-      if (server.upgrade(request, { data: { client: null } }))
-        return undefined as unknown as Response;
+      const data: SocketData = { client: null, tokens: RATE_BURST, lastRefill: monotonic() };
+      if (server.upgrade(request, { data })) return undefined;
       return new Response("expected a websocket", { status: 400 });
     }
     if (url.pathname === "/health") {
+      // Deliberately no room codes. A room code *is* the invite and the only
+      // access control there is, so listing every live one to any unauthenticated
+      // GET turned "guess a code" into "read the codes, then join and reset".
+      // The numbers below are what an operator actually needs.
+      let clients = 0;
+      let behind = 0;
+      let dropped = 0;
+      for (const room of rooms.values()) {
+        clients += room.clients.size;
+        behind += room.behind;
+        for (const client of room.clients) dropped += client.dropped;
+      }
       return Response.json({
         ok: true,
-        rooms: [...rooms.values()].map((room) => ({
-          code: room.code,
-          players: room.host.playerCount,
-          clients: room.clients.size,
-          day: room.host.world.day,
-        })),
+        rooms: rooms.size,
+        maxRooms: MAX_ROOMS,
+        clients,
+        /** Ticks where a room could not keep up. Rising means the box is full. */
+        behind,
+        /** Frames skipped for backed-up sockets. Rising means bad links. */
+        dropped,
       });
     }
     return serveStatic(url.pathname);
   },
 
   websocket: {
+    maxPayloadLength: MAX_MESSAGE_BYTES,
+
     async message(socket, raw) {
-      let message: ClientMessage;
-      try {
-        message = JSON.parse(String(raw)) as ClientMessage;
-      } catch {
-        return;
-      }
       const state = socket.data;
+      if (!affordMessage(state, monotonic())) return;
+
+      const message = decode(raw, parseClientMessage);
+      // Not a message we understand: a truncated frame, a stale client, or
+      // somebody poking at us. Dropping is safe even for input — `nextInputs`
+      // holds a player's last input when their queue starves, so a rejected
+      // packet is indistinguishable from a lost one.
+      if (!message) return;
 
       if (message.t === "hello") {
+        // One handshake per socket. Without this, a second `hello` either
+        // created a whole new `Client` — leaving the first in `room.clients`
+        // with players that `close()` would never see, permanently — or, with a
+        // token, "took over" from itself and closed the live connection the
+        // message had just arrived on.
+        if (state.client) return;
+
         if (message.version !== PROTOCOL_VERSION) {
-          socket.send(
-            JSON.stringify({ t: "error", message: "Version mismatch — refresh the page" }),
-          );
-          socket.close();
+          refuse(socket, "This page is out of date — refresh to keep playing");
           return;
         }
         const code = normaliseRoom(message.room);
         const room = roomFor(code, await loadSave(code));
         if (!room) {
-          socket.send(
-            JSON.stringify({ t: "error", message: "Server is full — try again shortly" }),
-          );
-          socket.close();
+          refuse(socket, "Server is full — try again shortly");
           return;
         }
+        // `await` above: another message on this socket may have arrived and
+        // been handled while we were reading the save.
+        if (state.client) return;
+
         const name = sanitiseName(message.name) || "Chef";
-        const token = String(message.token ?? "").slice(0, 64);
+        const token = message.token.slice(0, 64);
         const client: Client = {
           id: crypto.randomUUID(),
           room: code,
@@ -289,13 +474,14 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
           name,
           token,
           socket,
+          dropped: 0,
         };
 
         // Same browser already connected? This is a reconnect that beat the old
         // socket's close, so take the seats over rather than doubling up.
         if (token) {
           for (const other of room.clients) {
-            if (other.token !== token) continue;
+            if (other.token !== token || other.socket === socket) continue;
             client.players = other.players;
             other.players = [];
             room.clients.delete(other);
@@ -325,8 +511,7 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
         // retry. This is the reconnect case — a stale connection can still be
         // holding slots until the server notices it has gone.
         if (client.players.length === 0) {
-          socket.send(JSON.stringify({ t: "error", message: "Kitchen is full" }));
-          socket.close();
+          refuse(socket, "Kitchen is full");
           return;
         }
         room.clients.add(client);
@@ -361,7 +546,7 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
           break;
         case "join": {
           if (room.host.playerCount >= MAX_PLAYERS_PER_ROOM) {
-            send(client, { t: "error", message: "Kitchen is full" });
+            send(client, { t: "error", message: "Kitchen is full", fatal: false });
             break;
           }
           if (client.players.length >= MAX_PER_CONNECTION) break;
@@ -382,7 +567,7 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
           break;
         case "reset":
           room.host.reset(client.name);
-          room.layout = layoutSignature(room.host.world);
+          room.layout = layoutVersion(room.host.world);
           broadcast(room, { t: "layout", layout: encodeLayout(room.host.world) });
           persist(room);
           break;
@@ -395,22 +580,27 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
     close(socket) {
       const client = socket.data.client;
       if (!client) return;
+      socket.data.client = null;
       const room = rooms.get(client.room);
       if (!room) return;
+      // A connection that was already superseded by a reconnect has had its
+      // players moved to the new client; it must not take them back down.
+      if (!room.clients.has(client)) return;
+
       // Hold their seats rather than deleting the chefs outright: a blink of
       // bad signal should not cost you what you were carrying.
       if (client.token && client.players.length > 0) {
         for (const id of client.players) room.host.setAway(id, true);
         room.vacant.set(client.token, {
           ids: [...client.players],
-          expires: Date.now() + RECLAIM_GRACE,
+          expires: monotonic() + RECLAIM_GRACE,
         });
       } else {
         for (const id of client.players) room.host.leave(id);
       }
       room.clients.delete(client);
       if (room.clients.size === 0) {
-        room.emptySince = Date.now();
+        room.emptySince = monotonic();
         persist(room);
       }
     },

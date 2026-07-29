@@ -1,5 +1,5 @@
 import { LEVEL } from "../data/level";
-import { addPlayer } from "../sim/world";
+import { addPlayer, touchLayout } from "../sim/world";
 import type { Appliance, Customer, Effect, Phase, Player, PlayerInput, World } from "../sim/types";
 
 /**
@@ -118,7 +118,13 @@ export type ServerMessage =
   | { t: "layout"; layout: Layout }
   | { t: "frame"; frame: Frame }
   | { t: "joined"; id: number }
-  | { t: "error"; message: string }
+  /**
+   * `fatal` means "do not come back": a version mismatch or a full server is
+   * not fixed by trying again in a second and a half. Without it the client
+   * reconnected forever after a version-bumping deploy, so every tab that was
+   * open when we shipped hammered the box that had just restarted.
+   */
+  | { t: "error"; message: string; fatal: boolean }
   | { t: "pong"; sent: number };
 
 // --- encoding ----------------------------------------------------------------
@@ -137,13 +143,18 @@ export function encodeLayout(world: World): Layout {
   return { appliances };
 }
 
-/** Cheap value that changes whenever the layout does, so we only resend then. */
-export function layoutSignature(world: World): string {
-  let signature = "";
-  for (const appliance of world.appliances.values()) {
-    signature += `${appliance.id}:${appliance.kind}:${appliance.tile.x},${appliance.tile.y};`;
-  }
-  return signature;
+/**
+ * Has the layout changed since we last looked?
+ *
+ * This used to build a string of every appliance and compare it, every tick,
+ * for every room — 200 rooms of 30 appliances is ~360k string concatenations a
+ * second to answer "no" almost every time. The layout is mutated in exactly two
+ * places (`buildGrab` and `returnAppliance`), both of which bump a counter, so
+ * the question is now a number comparison and the answer cannot drift from the
+ * truth the way a recomputed signature can.
+ */
+export function layoutVersion(world: World): number {
+  return world.layoutVersion;
 }
 
 export function encodeFrame(world: World, acks: Map<number, number>): Frame {
@@ -225,6 +236,10 @@ export function applyLayout(world: World, layout: Layout): void {
   world.appliances.clear();
   world.applianceAt.fill(0);
   for (const saved of layout.appliances) {
+    // Bounds-checked like a save is. `restore` has always done this and the
+    // wire path never did, which is an odd place to be more trusting: a save is
+    // a file on our own disk and a layout is whatever came out of a socket.
+    if (saved.x < 0 || saved.y < 0 || saved.x >= world.width || saved.y >= world.height) continue;
     world.appliances.set(saved.id, {
       id: saved.id,
       kind: saved.kind,
@@ -240,6 +255,7 @@ export function applyLayout(world: World, layout: Layout): void {
     });
     world.applianceAt[saved.y * world.width + saved.x] = saved.id;
   }
+  touchLayout(world);
 }
 
 /**

@@ -50,6 +50,17 @@ export function isSolid(world: World, x: number, y: number): boolean {
   return (world.applianceAt[tileIndex(world, x, y)] ?? 0) !== 0;
 }
 
+/**
+ * Record that the appliance layout changed.
+ *
+ * Called by everything that moves an appliance on or off the grid. The server
+ * compares this against what it last broadcast, so forgetting it means a player
+ * moves an oven and nobody else ever sees it.
+ */
+export function touchLayout(world: World): void {
+  world.layoutVersion++;
+}
+
 /** Deterministic PRNG (mulberry32) so replays and future netcode line up. */
 export function random(world: World): number {
   world.rngState = (world.rngState + 0x6d2b79f5) | 0;
@@ -86,9 +97,10 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     rngState: seed,
     width,
     height,
-    tiles: new Array(width * height).fill(null).map(() => ({ wall: false, door: false })),
-    applianceAt: new Array(width * height).fill(0),
+    tiles: Array.from({ length: width * height }, () => ({ wall: false, door: false })),
+    applianceAt: Array.from({ length: width * height }, () => 0),
     appliances: new Map(),
+    layoutVersion: 0,
     players: [],
     customers: [],
     door: { x: 0, y: Math.floor(height / 2) },
@@ -212,6 +224,7 @@ function returnAppliance(world: World, appliance: Appliance): void {
   appliance.tile = { x: target.x, y: target.y };
   appliance.heldBy = null;
   world.applianceAt[tileIndex(world, target.x, target.y)] = appliance.id;
+  touchLayout(world);
 }
 
 /**

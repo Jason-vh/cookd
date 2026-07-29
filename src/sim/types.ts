@@ -234,6 +234,17 @@ export type World = {
   /** appliance id per tile index, or 0 for none. */
   applianceAt: number[];
   appliances: Map<number, Appliance>;
+  /**
+   * Bumped by every change to where appliances are. The server watches this to
+   * decide whether to resend the layout, which it would otherwise have to work
+   * out by rebuilding and comparing a signature string 60 times a second.
+   *
+   * Anything that moves, adds or removes an appliance must call `touchLayout`.
+   * That is a rule a reader has to keep, which is why the two places it applies
+   * (`buildGrab`, `returnAppliance`) are the only two places allowed to write
+   * to `applianceAt` outside world construction.
+   */
+  layoutVersion: number;
 
   players: Player[];
   customers: Customer[];

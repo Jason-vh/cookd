@@ -3,7 +3,15 @@ import { ingredient } from "../../data/ingredients";
 import { COMBINE_INDEX, pairKey } from "../../data/recipes";
 import { isBurnt, isDirty, isPlate, makeItem, specKey } from "../items";
 import type { Appliance, Inputs, Item, Player, World } from "../types";
-import { PLAYER_RADIUS, applianceAtTile, effect, inBounds, log, tileIndex } from "../world";
+import {
+  PLAYER_RADIUS,
+  applianceAtTile,
+  effect,
+  inBounds,
+  log,
+  tileIndex,
+  touchLayout,
+} from "../world";
 import { acceptDelivery, customerAt } from "./customers";
 
 /** How far in front of the player we look for something to interact with. */
@@ -249,6 +257,7 @@ function buildGrab(world: World, player: Player): void {
     appliance.tile = { x: tile.x, y: tile.y };
     appliance.heldBy = null;
     world.applianceAt[idx] = appliance.id;
+    touchLayout(world);
     return;
   }
 
@@ -259,6 +268,7 @@ function buildGrab(world: World, player: Player): void {
   appliance.progress = 0;
   appliance.overcook = 0;
   world.applianceAt[idx] = 0;
+  touchLayout(world);
   player.carriedAppliance = appliance.id;
 }
 

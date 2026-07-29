@@ -25,6 +25,10 @@ export type Identity = {
   room: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function newToken(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -35,11 +39,15 @@ export function loadIdentity(): Identity {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...FALLBACK, token: newToken() };
-    const parsed = JSON.parse(raw) as Partial<Identity>;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return { ...FALLBACK, token: newToken() };
+    // Field by field, because this is another machine's data as far as we are
+    // concerned: it was written by a version of the game we may not be.
+    const fields = parsed;
     return {
-      name: typeof parsed.name === "string" ? parsed.name.slice(0, 16) : "",
-      token: typeof parsed.token === "string" && parsed.token ? parsed.token : newToken(),
-      room: typeof parsed.room === "string" ? parsed.room : "",
+      name: typeof fields.name === "string" ? fields.name.slice(0, 16) : "",
+      token: typeof fields.token === "string" && fields.token ? fields.token : newToken(),
+      room: typeof fields.room === "string" ? fields.room : "",
     };
   } catch {
     // Private browsing, disabled storage, corrupt value: play as a stranger

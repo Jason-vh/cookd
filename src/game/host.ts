@@ -1,8 +1,8 @@
-import { LEVEL } from "../data/level";
+import { LEVEL, type LevelDef } from "../data/level";
 import { DT, beginDay, endDay, restartDay, step } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
 import { addPlayer, createWorld, emptyInput, log, playerById, removePlayer } from "../sim/world";
-import { restore, type Save } from "../save";
+import { restore, type RestoreResult, type Save } from "../save";
 
 /**
  * Owns a running game: one world, one clock, one set of players.
@@ -58,15 +58,28 @@ export class Host {
   private last = new Map<number, PlayerInput>();
   private accumulator = 0;
 
-  constructor(save?: Save | null) {
-    this.world = createWorld(LEVEL, 0);
-    if (save) restore(this.world, save);
+  readonly level: LevelDef;
+
+  /**
+   * Why the save was not used, if there was one and it was not.
+   *
+   * The result used to be discarded, which combined badly with the server
+   * marking a room dirty and overwriting: a save we refused to read was
+   * replaced by the default kitchen within seconds, silently. The caller now
+   * has to look at this to decide whether writing over the file is allowed.
+   */
+  readonly restored: RestoreResult | null;
+
+  constructor(save?: Save | null, level: LevelDef = LEVEL) {
+    this.level = level;
+    this.world = createWorld(level, 0);
+    this.restored = save ? restore(this.world, save, level.id) : null;
   }
 
   // --- players ---------------------------------------------------------------
 
   join(name: string): number {
-    const player = addPlayer(this.world, LEVEL, name);
+    const player = addPlayer(this.world, this.level, name);
     this.queues.set(player.id, []);
     this.last.set(player.id, emptyInput());
     this.acks.set(player.id, 0);
@@ -207,14 +220,23 @@ export class Host {
    * survive so nobody's gamepad ends up driving somebody else's chef.
    */
   reset(by?: string): void {
-    const players = this.world.players.map((player) => ({ id: player.id, name: player.name }));
-    this.world = createWorld(LEVEL, 0);
+    const players = this.world.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      away: this.away.has(player.id),
+    }));
+    this.world = createWorld(this.level, 0);
     this.accumulator = 0;
-    for (const { id, name } of players) {
-      const player = addPlayer(this.world, LEVEL, name);
+    for (const { id, name, away } of players) {
+      const player = addPlayer(this.world, this.level, name);
       // addPlayer hands out a fresh id; force the old one back so connections,
       // gamepads and input queues all still point at the right chef.
       player.id = id;
+      // `addPlayer` builds everyone present and correct. Somebody whose
+      // connection had dropped is still gone, and the `away` set still says so —
+      // so without this the server kept feeding them empty input (right) while
+      // every client drew them as a live chef standing perfectly still (wrong).
+      player.away = away;
     }
     this.world.nextPlayerId = Math.max(0, ...players.map((p) => p.id + 1));
 

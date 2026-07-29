@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Host } from "./host";
-import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutSignature } from "./protocol";
+import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutVersion } from "./protocol";
 import { PLAYER_SPEED, emptyInput, isIdleInput } from "../sim/world";
 import { saveSignature } from "../save";
 import type { Customer, PlayerInput } from "../sim/types";
@@ -14,6 +14,19 @@ import type { Customer, PlayerInput } from "../sim/types";
 
 function move(x: number): PlayerInput {
   return { ...emptyInput(), move: { x, y: 0 } };
+}
+
+/**
+ * One press and release of a button, through the `Host`'s own clock.
+ *
+ * The release matters: everything the simulation does on a button is edge
+ * triggered, so a held input is one action, not sixty.
+ */
+function press(host: Host, id: number, button: "grab" | "use" | "start"): void {
+  host.setInput(id, { ...emptyInput(), [button]: true });
+  host.advance(1 / 60);
+  host.setInput(id, emptyInput());
+  host.advance(1 / 60);
 }
 
 describe("host", () => {
@@ -123,16 +136,34 @@ describe("protocol", () => {
     expect(bytes).toBeLessThan(2000);
   });
 
-  test("the layout signature only changes when the layout does", () => {
+  test("the layout version only changes when an appliance actually moves", () => {
     const host = new Host();
-    const before = layoutSignature(host.world);
+    const before = layoutVersion(host.world);
     host.join("Ann");
-    host.advance(1 / 60);
-    expect(layoutSignature(host.world)).toBe(before);
+    // A full second of service: chefs walk, customers arrive, nothing is built.
+    for (let i = 0; i < 60; i++) host.advance(1 / 60);
+    expect(layoutVersion(host.world)).toBe(before);
 
-    const appliance = [...host.world.appliances.values()][0]!;
-    appliance.tile = { x: appliance.tile.x, y: appliance.tile.y + 1 };
-    expect(layoutSignature(host.world)).not.toBe(before);
+    // Lifting an appliance in the build phase is a layout change, and so is
+    // putting it back down. Driven through `interactionSystem` rather than by
+    // assigning to `tile`, because the version is only correct if the code that
+    // moves appliances is the code that bumps it — a test that pokes the field
+    // directly would pass even if every real caller forgot.
+    host.menu("endDay");
+    const player = host.world.players[0]!;
+    const board = [...host.world.appliances.values()].find((a) => a.kind === "board")!;
+    player.pos = { x: board.tile.x + 0.5, y: board.tile.y - 0.5 };
+    player.facing = { x: 0, y: 1 };
+
+    press(host, player.id, "grab");
+    const lifted = layoutVersion(host.world);
+    expect(lifted).not.toBe(before);
+    expect(board.heldBy).toBe(player.id);
+
+    player.facing = { x: 0, y: -1 };
+    press(host, player.id, "grab");
+    expect(board.heldBy).toBe(null);
+    expect(layoutVersion(host.world)).not.toBe(lifted);
   });
 
   test("layout carries what a crate dispenses", () => {

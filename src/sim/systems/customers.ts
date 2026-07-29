@@ -82,7 +82,7 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
       // tolerating a queue at all.
       const table = claimTable(world, reachable);
       if (table) {
-        seat(world, customer, table, reachable);
+        sitDown(world, customer, table, reachable);
         return false;
       }
       if (customer.timer > 0) return false;
@@ -139,6 +139,13 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
 
     case "leaving":
       return walk(customer, dt);
+
+    default: {
+      // Adding a `CustomerState` without handling it here is a type error, not
+      // a customer who quietly stops existing.
+      const unreachable: never = customer.state;
+      throw new Error(`unhandled customer state: ${String(unreachable)}`);
+    }
   }
 }
 
@@ -173,7 +180,7 @@ function arrive(world: World, reachable: Set<number>): void {
   world.customers.push(customer);
 
   if (table) {
-    seat(world, customer, table, reachable);
+    sitDown(world, customer, table, reachable);
     return;
   }
   // No table: walk to the door and hope one frees up.
@@ -196,11 +203,11 @@ function claimTable(world: World, reachable: Set<number>): Appliance | null {
   for (const appliance of world.appliances.values()) {
     if (appliance.kind !== "table" || taken.has(appliance.id)) continue;
     if (appliance.item !== null || appliance.tip > 0) continue;
-    const seat = pickSeat(world, appliance.tile, reachable);
-    if (!seat) continue;
+    const chair = pickSeat(world, appliance.tile, reachable);
+    if (!chair) continue;
     // Nearest table first, so a half-empty dining room fills from the door and
     // customers do not cross the room past a free seat.
-    const distance = (seat.x - world.door.x) ** 2 + (seat.y - world.door.y) ** 2;
+    const distance = (chair.x - world.door.x) ** 2 + (chair.y - world.door.y) ** 2;
     if (distance < bestDistance) {
       bestDistance = distance;
       best = appliance;
@@ -211,7 +218,9 @@ function claimTable(world: World, reachable: Set<number>): Appliance | null {
 
 /** Every chair at this table the door can actually reach. */
 function reachableSeats(world: World, tile: Vec2, reachable: Set<number>): Vec2[] {
-  return seatsAround(world, tile).filter((seat) => reachable.has(tileIndex(world, seat.x, seat.y)));
+  return seatsAround(world, tile).filter((chair) =>
+    reachable.has(tileIndex(world, chair.x, chair.y)),
+  );
 }
 
 /**
@@ -224,17 +233,17 @@ function pickSeat(world: World, tile: Vec2, reachable: Set<number>): Vec2 | null
   return reachableSeats(world, tile, reachable)[0] ?? null;
 }
 
-function seat(world: World, customer: Customer, table: Appliance, reachable: Set<number>): void {
+function sitDown(world: World, customer: Customer, table: Appliance, reachable: Set<number>): void {
   // Which chair is a coin toss, drawn once, here — the only place a seat is
   // actually taken. A fixed side made a full dining room look choreographed,
   // every customer at the same o'clock of their own table.
   const options = reachableSeats(world, table.tile, reachable);
-  const seat = options[Math.floor(random(world) * options.length)];
-  if (!seat) return;
+  const chair = options[Math.floor(random(world) * options.length)];
+  if (!chair) return;
   customer.table = table.id;
-  customer.seat = seat;
+  customer.seat = chair;
   customer.state = "arriving";
-  customer.path = route(world, customer, seat);
+  customer.path = route(world, customer, chair);
 }
 
 // --- movement ----------------------------------------------------------------

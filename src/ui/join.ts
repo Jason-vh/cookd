@@ -69,8 +69,8 @@ export class JoinScreen {
       this.hide();
       this.options.onPlayLocal();
     });
-    this.root.addEventListener("keydown", (event) => {
-      if ((event as KeyboardEvent).key === "Enter") this.confirmOnline();
+    this.root.addEventListener("keydown", (event: KeyboardEvent) => {
+      if (event.key === "Enter") this.confirmOnline();
     });
   }
 

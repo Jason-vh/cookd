@@ -13,6 +13,7 @@ import {
   type Layout,
   type ServerMessage,
 } from "./protocol";
+import { decode, parseServerMessage } from "./wire";
 
 /**
  * The networked client.
@@ -66,6 +67,40 @@ const HISTORY = 240;
 const ERROR_DECAY = 0.8;
 const MAX_ERROR = 2.5;
 
+/**
+ * Reconnect backoff.
+ *
+ * This used to be a flat 1500ms with no ceiling and no terminal state, which is
+ * fine for one tab and a blip and actively harmful for the case it was actually
+ * used in: a deploy. Every tab that was open when we shipped a protocol bump
+ * retried forever, at the same instant, against the box that had just
+ * restarted — and the server's "refresh the page" error was consumed by a
+ * `console.warn` nobody was reading.
+ *
+ * Jitter matters as much as the ceiling. Without it, backing off in lockstep
+ * just makes a slower thundering herd.
+ */
+const RECONNECT_BASE = 1000;
+const RECONNECT_MAX = 20_000;
+
+function reconnectDelay(attempt: number): number {
+  const capped = Math.min(RECONNECT_MAX, RECONNECT_BASE * 2 ** attempt);
+  return capped * (0.5 + Math.random() * 0.5);
+}
+
+/**
+ * `Inputs` allows a missing seat (`PlayerInput | undefined`) because the sim
+ * tolerates one; the wire does not, because "absent" and "present but
+ * undefined" are the same thing in JSON and only one of them is meant.
+ */
+function definedInputs(inputs: Inputs): Record<number, PlayerInput> {
+  const out: Record<number, PlayerInput> = {};
+  for (const [id, input] of Object.entries(inputs)) {
+    if (input) out[Number(id)] = input;
+  }
+  return out;
+}
+
 type Timed = { frame: Frame; at: number };
 
 export class NetGame implements Game {
@@ -76,6 +111,7 @@ export class NetGame implements Game {
   alpha = 0;
 
   private socket: WebSocket | null = null;
+  private listeners: AbortController | null = null;
   private readonly url: string;
   private readonly room: string;
   private name: string;
@@ -105,12 +141,31 @@ export class NetGame implements Game {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
+  private attempts = 0;
 
-  constructor(url: string, room: string, name: string, players: number, token: string) {
+  /**
+   * Set when the server has told us not to come back. A version mismatch or a
+   * full server is not fixed by trying again, and pretending otherwise is how
+   * one deploy becomes a self-inflicted denial of service.
+   */
+  private fatal: string | null = null;
+
+  /** Told what went wrong, so the shell can put it in front of the player. */
+  readonly onError: (message: string, fatal: boolean) => void;
+
+  constructor(
+    url: string,
+    room: string,
+    name: string,
+    players: number,
+    token: string,
+    onError: (message: string, fatal: boolean) => void = () => {},
+  ) {
     this.url = url;
     this.room = room;
     this.name = name;
     this.token = token;
+    this.onError = onError;
     this.wantedPlayers = Math.max(1, players);
     this.world = createWorld(LEVEL, 0);
     this.prediction = createWorld(LEVEL, 0);
@@ -120,47 +175,51 @@ export class NetGame implements Game {
   // --- connection ------------------------------------------------------------
 
   private connect(): void {
-    if (this.disposed) return;
+    if (this.disposed || this.fatal) return;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
+
     // Detach whatever came before. Without this a reconnect can leave the old
     // socket alive, which keeps its room occupied and interleaves its frames
-    // with the new one's.
-    if (this.socket) {
-      this.socket.onclose = null;
-      this.socket.onerror = null;
-      this.socket.onmessage = null;
-      try {
-        this.socket.close();
-      } catch {
-        /* already gone */
-      }
-    }
+    // with the new one's. An AbortController rather than nulling `on*` handlers:
+    // one signal removes every listener this socket ever had, and cannot be
+    // half-applied the way three separate assignments can.
+    if (this.socket) this.closeSocket();
+
     this.status = this.buffer.length ? "offline" : "connecting";
     const socket = new WebSocket(this.url);
+    const listeners = new AbortController();
+    const { signal } = listeners;
     this.socket = socket;
+    this.listeners = listeners;
 
-    socket.addEventListener("open", () => {
-      this.send({
-        t: "hello",
-        version: PROTOCOL_VERSION,
-        room: this.room,
-        name: this.name,
-        players: this.wantedPlayers,
-        token: this.token,
-      });
-      this.pingTimer = setInterval(() => this.send({ t: "ping", sent: Date.now() }), 2000);
-    });
+    socket.addEventListener(
+      "open",
+      () => {
+        this.send({
+          t: "hello",
+          version: PROTOCOL_VERSION,
+          room: this.room,
+          name: this.name,
+          players: this.wantedPlayers,
+          token: this.token,
+        });
+        this.pingTimer = setInterval(() => this.send({ t: "ping", sent: Date.now() }), 2000);
+      },
+      { signal },
+    );
 
-    socket.addEventListener("message", (event) => {
-      let message: ServerMessage;
-      try {
-        message = JSON.parse(String(event.data)) as ServerMessage;
-      } catch {
-        return;
-      }
-      this.receive(message);
-    });
+    socket.addEventListener(
+      "message",
+      (event) => {
+        // Validated, not cast. "The server is trustworthy" is an assumption
+        // about a deployment rather than about a socket, and a half-upgraded
+        // server mid-deploy is the ordinary way it stops being true.
+        const message = decode(event.data, parseServerMessage);
+        if (message) this.receive(message);
+      },
+      { signal },
+    );
 
     // Browsers fire `error` *and then* `close` for the same failed socket, so
     // this must only ever run once — otherwise two reconnects are scheduled and
@@ -173,13 +232,25 @@ export class NetGame implements Game {
       this.pingTimer = null;
       if (this.disposed || this.socket !== socket) return;
       this.status = "offline";
+      if (this.fatal) return;
       // Keep playing what we have and try again; a dropped connection should
       // look like the kitchen freezing, not like the game crashing.
       if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = setTimeout(() => this.connect(), 1500);
+      this.reconnectTimer = setTimeout(() => this.connect(), reconnectDelay(this.attempts++));
     };
-    socket.addEventListener("close", drop);
-    socket.addEventListener("error", drop);
+    socket.addEventListener("close", drop, { signal });
+    socket.addEventListener("error", drop, { signal });
+  }
+
+  private closeSocket(): void {
+    this.listeners?.abort();
+    this.listeners = null;
+    try {
+      this.socket?.close();
+    } catch {
+      /* already gone */
+    }
+    this.socket = null;
   }
 
   private send(message: ClientMessage): void {
@@ -189,6 +260,9 @@ export class NetGame implements Game {
   private receive(message: ServerMessage): void {
     switch (message.t) {
       case "welcome":
+        // Back to a clean slate: the next drop should retry promptly rather
+        // than inheriting the backoff from whatever went wrong before.
+        this.attempts = 0;
         // A reconnect is a *new session*: new ids, acks back at zero, and the
         // old frames describe players that no longer exist. Carrying any of it
         // over would replay the entire input history into the new world on the
@@ -222,7 +296,12 @@ export class NetGame implements Game {
         this.ping = Date.now() - message.sent;
         break;
       case "error":
-        console.warn("[cookd]", message.message);
+        if (message.fatal) {
+          this.fatal = message.message;
+          this.status = "offline";
+          this.closeSocket();
+        }
+        this.onError(message.message, message.fatal);
         break;
     }
   }
@@ -334,9 +413,9 @@ export class NetGame implements Game {
     const idle = Object.values(mine).every((input) => !input || isIdleInput(input));
     if (!idle || !this.sentIdle) {
       this.seq++;
-      this.history.push({ seq: this.seq, inputs: structuredClone(mine) as Inputs });
+      this.history.push({ seq: this.seq, inputs: structuredClone(mine) });
       while (this.history.length > HISTORY) this.history.shift();
-      this.send({ t: "input", seq: this.seq, inputs: mine as Record<number, PlayerInput> });
+      this.send({ t: "input", seq: this.seq, inputs: definedInputs(mine) });
       this.sentIdle = idle;
     }
     step(this.prediction, mine);
@@ -458,6 +537,6 @@ export class NetGame implements Game {
     this.disposed = true;
     if (this.pingTimer) clearInterval(this.pingTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.socket?.close();
+    this.closeSocket();
   }
 }

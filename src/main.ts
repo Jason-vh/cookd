@@ -71,7 +71,21 @@ function goOnline(room: string, name: string): void {
   // controller, which is how a second player actually turns up.
   wantedPlayers = 1;
   onlineSince = performance.now();
-  useGame(new NetGame(socketUrl(), room, name, 1, identity.token));
+  useGame(
+    new NetGame(socketUrl(), room, name, 1, identity.token, (message, fatal) => {
+      // The server's own words, in front of the player. These used to go to
+      // `console.warn`, so "refresh to keep playing" — the one message that
+      // tells someone how to fix it — was the one nobody ever saw, while the
+      // client retried forever behind a "reconnecting" badge.
+      hud.notify(message);
+      // A fatal error means the client has stopped trying. Falling back to a
+      // private offline kitchen is better than a frozen one.
+      if (fatal) {
+        onlineSince = 0;
+        useGame(new LocalGame(null, wantedPlayers));
+      }
+    }),
+  );
 }
 
 /**
@@ -329,8 +343,22 @@ function roomOf(): string {
   return location.hash.replace("#", "") || "MAIN";
 }
 
+declare global {
+  interface Window {
+    /** Dev-only console handle. See the block at the bottom of this file. */
+    cookd?: {
+      readonly world: Game["world"];
+      readonly game: Game;
+      view: View;
+      input: InputManager;
+      menu: PauseMenu;
+      join: JoinScreen;
+    };
+  }
+}
+
 if (import.meta.env.DEV) {
-  (window as unknown as Record<string, unknown>).cookd = {
+  window.cookd = {
     get world() {
       return game.world;
     },

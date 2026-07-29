@@ -21,6 +21,16 @@ import type { ApplianceKind, ItemSpec, Vec2 } from "../sim/types";
  * rooms, or fill the gap beside them for a single narrow one.
  */
 export type LevelDef = {
+  /**
+   * Stable identifier, and what a save is tied to.
+   *
+   * Saves used to be keyed by a hash of the ASCII below, which meant any edit
+   * at all — including realigning a comment — invalidated every save on every
+   * server. Changing where a kitchen's walls are should invalidate saves;
+   * touching the file should not. Those are different events and only one of
+   * them deserves a new id.
+   */
+  id: string;
   name: string;
   /** Which biome from `data/biomes.ts` surrounds this kitchen. */
   biome: string;
@@ -62,7 +72,8 @@ export const LEGEND: Record<string, TileSpec> = {
   p: crate("potato"),
 };
 
-export const LEVEL: LevelDef = {
+export const PARK_KITCHEN: LevelDef = {
+  id: "park-kitchen",
   name: "Park Kitchen",
   biome: "park",
   dayLength: 150,
@@ -85,3 +96,31 @@ export const LEVEL: LevelDef = {
     { x: 16, y: 4 },
   ],
 };
+
+/**
+ * Every kitchen the game knows about, by id.
+ *
+ * The wire carries a level *id*, never the geometry: both ends compile the same
+ * registry, so `welcome` naming a level is enough for a client to build the
+ * right walls, door and biome. Sending the tiles instead would work too, and
+ * would be worse — it would make every client's floor plan a thing a server
+ * could get wrong.
+ */
+export const LEVELS: Record<string, LevelDef> = {
+  [PARK_KITCHEN.id]: PARK_KITCHEN,
+};
+
+/** The level a room gets when nothing says otherwise. */
+export const DEFAULT_LEVEL_ID = PARK_KITCHEN.id;
+
+export function levelById(id: string): LevelDef | null {
+  return LEVELS[id] ?? null;
+}
+
+/**
+ * The one level, for the many callers that do not yet choose.
+ *
+ * Kept as a named export so this is a *default*, not an assumption baked into
+ * twenty files. `Host` takes a level; this is only what the shell hands it.
+ */
+export const LEVEL: LevelDef = PARK_KITCHEN;

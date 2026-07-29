@@ -452,7 +452,7 @@ describe("the pizza pipeline", () => {
     takeFrom(world, PLATES);
     putOn(world, COUNTER);
     expect(world.players[0]!.carried?.base).toBe("plate");
-    expect(counter.item!.processes).toContain("burnt");
+    expect(counter.item?.processes).toContain("burnt");
   });
 
   test("delivery still requires the plate to hold what was ordered", () => {

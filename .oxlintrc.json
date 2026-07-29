@@ -56,7 +56,14 @@
     // not an oversight.
     "unicorn/no-null": "off",
     // `import "./ui/style.css"` is how Vite is told to bundle the stylesheet.
-    "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }]
+    "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
+    // `toSorted`/`toReversed` are the right advice for shared data and the wrong
+    // advice here: both call sites own the array they are reordering (one has
+    // just built it, the other has just spread a copy), and the sim and render
+    // loops avoid allocation on purpose. They also need an ES2023 lib we do not
+    // otherwise want to commit to.
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off"
   },
 
   "ignorePatterns": ["dist/**", "node_modules/**", "saves/**"]
