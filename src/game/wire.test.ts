@@ -17,6 +17,21 @@ function inputMessage(input: unknown): string {
   return JSON.stringify({ t: "input", seq: 1, inputs: { 0: input } });
 }
 
+/**
+ * A complete, honest layout holding one appliance.
+ *
+ * Spelled out rather than hand-written per test, so a test about a bad
+ * *coordinate* cannot start passing because the message is missing an unrelated
+ * field — which is exactly what happened when the menu joined the layout.
+ */
+function layoutWith(kind: string, x: number, y: number) {
+  return {
+    appliances: [{ id: 1, kind, x, y, source: null, offer: null, taken: null, card: null }],
+    unlocked: ["salad"],
+    unlockedDay: 0,
+  };
+}
+
 describe("input is parsed, not trusted", () => {
   test("NaN never reaches the simulation", () => {
     // The original blocker. NaN slips past `movementSystem`'s deadzone (every
@@ -189,13 +204,41 @@ describe("server messages", () => {
 
   test("a bogus appliance kind is rejected before it can reach applianceDef", () => {
     // `applianceDef(kind).speed` on an unknown kind throws inside the tick.
-    const layout = { appliances: [{ id: 1, kind: "portal", x: 1, y: 1, source: null }] };
-    expect(parseServerMessage({ t: "layout", layout })).toBeNull();
+    // Spelled out in full, menu and all: a layout missing an unrelated field
+    // would be rejected too, and then this would be passing for a reason that
+    // has nothing to do with the kind.
+    expect(parseServerMessage({ t: "layout", layout: layoutWith("portal", 1, 1) })).toBeNull();
   });
 
   test("negative appliance coordinates are rejected", () => {
-    const layout = { appliances: [{ id: 1, kind: "oven", x: -5, y: 1, source: null }] };
-    expect(parseServerMessage({ t: "layout", layout })).toBeNull();
+    expect(parseServerMessage({ t: "layout", layout: layoutWith("oven", -5, 1) })).toBeNull();
+  });
+
+  test("an honest layout carries the menu through unchanged", () => {
+    const layout = { ...layoutWith("oven", 1, 1), unlocked: ["salad", "fries"], unlockedDay: 2 };
+    const parsed = parseServerMessage({ t: "layout", layout });
+    expect(parsed?.t).toBe("layout");
+    expect(parsed?.t === "layout" && parsed.layout.unlocked).toEqual(["salad", "fries"]);
+  });
+
+  test("a malformed menu is rejected: it is what customers order from", () => {
+    const base = layoutWith("oven", 1, 1);
+    for (const unlocked of [[42], "salad", [{ id: "salad" }], null]) {
+      expect(parseServerMessage({ t: "layout", layout: { ...base, unlocked } })).toBeNull();
+    }
+    expect(parseServerMessage({ t: "layout", layout: { ...base, unlockedDay: -1 } })).toBeNull();
+    expect(parseServerMessage({ t: "layout", layout: { ...base, unlockedDay: "2" } })).toBeNull();
+  });
+
+  test("a card that is not a recipe id is rejected, not coerced", () => {
+    const base = layoutWith("cards", 0, 7);
+    const withCard = (card: unknown): unknown => ({
+      ...base,
+      appliances: [Object.assign({}, base.appliances[0], { card })],
+    });
+    expect(parseServerMessage({ t: "layout", layout: withCard(7) })).toBeNull();
+    const good = parseServerMessage({ t: "layout", layout: withCard("fries") });
+    expect(good?.t === "layout" && good.layout.appliances[0]?.card).toBe("fries");
   });
 
   test("a fatal error is distinguishable from a passing one", () => {

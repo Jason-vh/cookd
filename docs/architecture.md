@@ -25,6 +25,8 @@ src/
     world.ts              world construction from a level, tile/collision helpers, PRNG
     items.ts              item identity + canonical keys
     plates.ts             the crockery, and the promise that none of it is ever destroyed
+    shop.ts               the stall's stock: rolled from the seed and the day, not from play
+    cards.ts              the menu: what a room has unlocked, and the stand that grows it
     pathing.ts            BFS over walkable tiles: customer routes and reachability
     random.ts             the one PRNG — deterministic, shared with the scenery
     step.ts               fixed-timestep tick: runs the systems in order
@@ -34,9 +36,12 @@ src/
       interaction.ts      grab/place/combine/deliver, build-phase appliance moving
       appliances.ts       transforms (chop/fry/bake) and burning
       customers.ts        arrivals, seating, patience, eating, leaving, tips
+      cards.ts            arming and taking a recipe card
   data/                   content — plain data, no logic
     ingredients.ts        what exists and what it is called
-    appliances.ts         appliance definitions, and the ApplianceKind union
+    appliances.ts         appliance definitions, prices, and the ApplianceKind union
+    economy.ts            the ledger: what the stall stocks, what it pays, what rent costs
+    progression.ts        the cards: what a kitchen starts with, and how its menu grows
     recipes.ts            transforms, combines, recipes + derived lookup maps
     level.ts              ASCII kitchen layouts, their legend, and the registry
     biomes.ts             locations: sky, sunlight, ground and scenery recipes

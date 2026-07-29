@@ -139,13 +139,19 @@ function roomFor(code: string, loaded: Awaited<ReturnType<typeof loadSave>>): Ro
   if (!level) throw new Error(`missing default level ${DEFAULT_LEVEL_ID}`);
   const host = new Host(loaded.save, level);
 
-  // A save we refused is not a save we may overwrite. `loadSave` has already
-  // moved the file aside; if that failed too, leaving it alone is the only way
-  // the player's kitchen survives long enough for someone to look at it.
-  const rejected = host.restored?.ok === false;
-  if (rejected) {
-    console.warn("[cookd] room", code, "ignored its save:", host.restored?.reason);
-  }
+  // A save we could not *understand* is not a save we may overwrite. `loadSave`
+  // has already moved the file aside; if that failed too, leaving it alone is
+  // the only way the player's kitchen survives long enough to be looked at.
+  //
+  // "Stale" is a different answer from "unreadable", and it used to get the
+  // same one. A save whose level no longer exists — which is what a level id
+  // bump makes every save in the world — describes coordinates that have
+  // stopped meaning anything, and there is nothing to preserve. Treating it as
+  // a quarantine would have left every existing room permanently unable to save
+  // again, silently, for as long as it was played.
+  const reason = host.restored?.ok === false ? host.restored.reason : null;
+  const unreadable = reason === "schema";
+  if (reason) console.warn("[cookd] room", code, "ignored its save:", reason);
 
   const room: Room = {
     code,
@@ -156,7 +162,7 @@ function roomFor(code: string, loaded: Awaited<ReturnType<typeof loadSave>>): Ro
     phase: host.world.phase,
     emptySince: monotonic(),
     saved: saveSignature(host.world),
-    writable: !loaded.corrupt && !rejected,
+    writable: !loaded.corrupt && !unreadable,
     vacant: new Map(),
     behind: 0,
   };

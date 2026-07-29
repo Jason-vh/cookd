@@ -11,6 +11,15 @@ be abstract are now physical, and each of them paid for itself:
    `MAX_ACTIVE_ORDERS = 5`. Now it is the number of tables you have placed — so
    the players choose their own difficulty during the build phase. More tables
    is more revenue *and* more chaos, which is the PlateUp trick, earned.
+
+   That claim was half true until the stall arrived, and it is worth being
+   honest about which half. More tables was more *capacity*; demand followed the
+   day and nothing else, so an extra table was free money and the only reason
+   not to fill the room with them was running out of floor. **Arrivals now track
+   free seats, with the day curve as a floor** — an empty table pulls the next
+   customer sooner. A table brings its own customers, so the two halves arrive
+   together and buying one is a decision rather than an upgrade. See
+   [the shop](the-shop.md#demand-follows-seats).
 2. **The patience timer became a person.** The same number, drawn as somebody
    sinking into their chair. A ring going red is information; a customer
    slumping is the same information readable from the fryer, in peripheral
@@ -19,6 +28,12 @@ be abstract are now physical, and each of them paid for itself:
    to the door, so you can *see* demand coming. A rush stops being a spawn rate
    and becomes four people on the path — anticipation and prep-ahead decisions,
    diegetically, for free.
+
+   They walk it on **real tiles**. The approach used to be a straight line drawn
+   from off-grid to the door, which was fine while outside was painted scenery;
+   the [patio ring](the-shop.md#the-patio-ring) made it a place, with a market
+   stall standing on some of it, so the walk in is now the same flood fill
+   everything else uses.
 
 ## The lifecycle
 
@@ -44,7 +59,9 @@ Two of those timers are load-bearing:
    a group of their own — emptying the meal must not shrink the crockery.
 - **The door queue is the overflow valve.** A short tolerated wait smooths
    spikes; somebody walking away from a full door is the visible cost of not
-   having built enough tables.
+   having built enough tables. They wait on the paving outside rather than in
+   the doorway, which is also where the stall is — so a queue you are failing to
+   serve stands next to the thing that would fix it.
 
 Patience only starts draining when the order appears, not when the customer
 arrives. The walk in is a beat of calm, and the number in `data/recipes.ts`
@@ -124,6 +141,7 @@ hold a day open forever.
 Next:
 
 - [content.md](content.md) — what they order
+- [the-menu.md](the-menu.md) — how a room decides what that list is
 - [art-direction.md](art-direction.md) — how a customer's patience is drawn
 
 [Back to the README](../README.md).

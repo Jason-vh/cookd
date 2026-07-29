@@ -1,4 +1,6 @@
 import { LEVEL, type LevelDef } from "../data/level";
+import { restockCards, setUnlocked } from "../sim/cards";
+import { restockStall } from "../sim/shop";
 import { DT, beginDay, endDay, restartDay, step } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
 import { addPlayer, createWorld, emptyInput, log, playerById, removePlayer } from "../sim/world";
@@ -225,7 +227,18 @@ export class Host {
       name: player.name,
       away: this.away.has(player.id),
     }));
+    // The menu survives. A reset un-wrecks the *layout* — it puts the walls
+    // back where the level says and undoes whatever the room has done to
+    // itself — and the recipes a room bought are not part of that: they are its
+    // history, and days were spent on them. What a reset does take away is the
+    // equipment those cards delivered, which is exactly what it takes away from
+    // everything else somebody bought, and the same shop is standing outside.
+    const unlocked = this.world.unlocked;
+    const unlockedDay = this.world.unlockedDay;
     this.world = createWorld(this.level, 0);
+    setUnlocked(this.world, unlocked, unlockedDay);
+    restockStall(this.world);
+    restockCards(this.world);
     this.accumulator = 0;
     for (const { id, name, away } of players) {
       const player = addPlayer(this.world, this.level, name);

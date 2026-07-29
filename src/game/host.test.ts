@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Host } from "./host";
 import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutVersion } from "./protocol";
 import { PLAYER_SPEED, addPlayer, createWorld, emptyInput, isIdleInput } from "../sim/world";
-import { endDay, predict, step } from "../sim/step";
+import { predict, step } from "../sim/step";
 import { platesInWorld, unshelvePlate } from "../sim/plates";
 import { LEVEL } from "../data/level";
 import { saveSignature } from "../save";
@@ -176,6 +176,33 @@ describe("protocol", () => {
     const layout = encodeLayout(host.world);
     const crate = layout.appliances.find((a) => a.kind === "crate");
     expect(crate?.source?.base).toBeTruthy();
+  });
+
+  test("layout carries the menu and the cards on the stand", () => {
+    // The menu is what customers order from, so a client that had it wrong
+    // would draw order bubbles for dishes this kitchen has never unlocked. It
+    // rides the layout rather than the frame because it changes every third
+    // morning and never during service — the same kind of fact as a counter.
+    const host = new Host();
+    while (host.world.day < 2) {
+      host.menu("startDay");
+      host.menu("endDay");
+    }
+    host.world.unlocked = ["salad", "fries"];
+    host.world.unlockedDay = 2;
+
+    const layout = encodeLayout(host.world);
+    expect(layout.unlocked).toEqual(["salad", "fries"]);
+    expect(layout.unlockedDay).toBe(2);
+    expect(layout.appliances.filter((a) => a.kind === "cards" && a.card !== null)).not.toEqual([]);
+
+    // Copied on the way out, never aliased: one layout is applied to two worlds
+    // and one of them is replayed over.
+    const client = new Host().world;
+    applyLayout(client, layout);
+    expect(client.unlocked).toEqual(["salad", "fries"]);
+    expect(client.unlocked).not.toBe(host.world.unlocked);
+    expect(client.unlockedDay).toBe(2);
   });
 });
 
@@ -480,6 +507,8 @@ describe("frames must not be shared between worlds", () => {
   test("a predicted tick cannot invent a customer in the world being drawn", () => {
     const host = new Host();
     const id = host.join("Ann");
+    // Open the day: rooms wake into the morning now, and nobody walks in then.
+    host.menu("startDay");
     const frame = encodeFrame(host.world, host.acks);
 
     const drawn = new Host().world;
@@ -524,9 +553,10 @@ describe("what a client is allowed to guess at", () => {
     // was still in build, and `interactionSystem` took the service branch for a
     // round trip — so a grab held across the transition predicted an entirely
     // different action, and `workingOn` is drawn.
+    // A world wakes in the build phase, which is exactly the state this is
+    // about: the morning of day one, waiting for somebody to open it.
     const world = createWorld(LEVEL, 0);
     const id = addPlayer(world, LEVEL, "Ann").id;
-    endDay(world);
     expect(world.phase).toBe("build");
 
     const pressing: Inputs = { [id]: { ...emptyInput(), start: true } };
@@ -564,6 +594,8 @@ describe("what a client is allowed to guess at", () => {
     // Without the latch a held button re-fires on every replayed tick, and a
     // replay can be 240 of them.
     const world = createWorld(LEVEL, 0);
+    // In service: a build-phase grab lifts appliances, and this is about food.
+    world.phase = "service";
     const player = addPlayer(world, LEVEL, "Ann");
     const crate = [...world.appliances.values()].find((a) => a.source?.base === "tomato")!;
     player.pos = { x: crate.tile.x + 0.5, y: crate.tile.y + 1.5 };

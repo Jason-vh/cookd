@@ -1,9 +1,13 @@
+import { rentFor } from "../data/economy";
+import { clearCards, restockCards } from "./cards";
 import { platesInWorld, stockPlates } from "./plates";
+import { restockStall } from "./shop";
 import type { Inputs, World } from "./types";
-import { log } from "./world";
+import { effect, emptyLedger, log } from "./world";
 import { applianceSystem } from "./systems/appliances";
+import { cardSystem } from "./systems/cards";
 import { customerSystem } from "./systems/customers";
-import { unreachableTables } from "./queries";
+import { kitchenWarnings } from "./queries";
 import { interactionSystem } from "./systems/interaction";
 import { movementSystem } from "./systems/movement";
 
@@ -26,6 +30,7 @@ export function step(world: World, inputs: Inputs, dt: number = DT): void {
   movementSystem(world, inputs, dt);
   interactionSystem(world, inputs);
   applianceSystem(world, dt);
+  cardSystem(world, dt);
   customerSystem(world, dt);
   phaseSystem(world, inputs, dt);
   expire(world, dt);
@@ -130,12 +135,37 @@ function someoneIsHolding(world: World): boolean {
   return world.players.some((player) => player.carriedAppliance !== null);
 }
 
-/** Close the kitchen immediately and move to the build phase. */
+/**
+ * Close the kitchen, take the rent, and wake into the next morning.
+ *
+ * The day number moves **here**, not at open, and that is what makes the build
+ * phase read as a morning rather than as an aftermath: close day 3, and the
+ * room is now standing in the morning of day 4 deciding what to buy for it. The
+ * HUD says "Day 4" throughout, first preparing and then serving, which is how
+ * days work.
+ *
+ * Rent lands at close for the same reason. It is announced a whole morning in
+ * advance and taken at the end of the day it was for; waking up into a
+ * deduction, before anybody has had the chance to earn anything, is a bad
+ * morning and a worse tutorial. Missing it means negative money, which blocks
+ * buying — and nothing else. There is no fail state here on purpose.
+ */
 export function endDay(world: World): void {
   world.phase = "build";
   world.dayTime = 0;
   clearService(world);
-  log(world, `Day ${world.day} closed — rearrange the kitchen`);
+
+  const rent = rentFor(world.day);
+  world.money -= rent;
+  world.today.rent = rent;
+  effect(world, { kind: "spent", tile: world.door, amount: rent });
+  log(world, `Day ${world.day} closed — rent $${rent}`);
+
+  world.day++;
+  restockStall(world);
+  // The morning's cards, rolled from the seed and the day it now is. Most
+  // mornings that is nothing at all — see `isCardMorning`.
+  restockCards(world);
 }
 
 /**
@@ -144,6 +174,13 @@ export function endDay(world: World): void {
  * Tips left on tables are swept up with everything else: an uncollected tip is
  * money the players chose not to walk over for, and carrying it into the next
  * day would quietly remove the reason to bus during service.
+ *
+ * **Something else depends on this and cannot see it.** Because every item is
+ * destroyed here, a ruined dish only occupies a plate until closing time — which
+ * is the entire reason the stall is willing to sell you your last bin, and why
+ * `ESSENTIAL` in `data/appliances.ts` has two entries rather than three. If food
+ * or dirt ever survives a day boundary, that decision has to be revisited in the
+ * same change.
  *
  * **Plates are counted out and counted back in.** They are the one thing in the
  * kitchen that cannot simply be thrown away at closing time: there are a fixed
@@ -177,25 +214,35 @@ export function restartDay(world: World): void {
   world.phase = "service";
   world.dayTime = world.dayLength;
   world.nextArrivalIn = 2;
+  world.today = emptyLedger(world.day);
   clearService(world);
   log(world, `Day ${world.day} restarted`);
 }
 
-/** Open the next day. Exported so the pause menu takes the same path. */
+/**
+ * Open the day the room has spent the morning preparing.
+ *
+ * Deliberately does **not** advance the day: `endDay` already did, and the
+ * build phase belongs to the day it is the morning of. Opening is a decision
+ * about a day that already has a number.
+ */
 export function beginDay(world: World): void {
   if (someoneIsHolding(world)) {
     log(world, "Put down what you're holding first");
     return;
   }
-  world.day++;
+  world.today = emptyLedger(world.day);
   world.phase = "service";
   world.dayTime = world.dayLength;
   world.nextArrivalIn = 2;
-  // A dining room nobody can walk into is the one build-phase mistake that
-  // silently ends the run, so it is said out loud rather than prevented.
-  const stranded = unreachableTables(world);
-  if (stranded.length > 0) {
-    log(world, `${stranded.length} table(s) can't be reached from the door`);
-  }
+  // Everything a kitchen can be rearranged — or sold — into that stops it
+  // working, said out loud rather than prevented. This used to be one warning
+  // about a walled-off dining room; the stall added a dozen more ways to reach
+  // the same place, and they are all the same sentence. See `kitchenWarnings`
+  // for why refusing the sale would be the wrong instrument.
+  // Unpicked cards leave with the morning. The choice was optional, the next
+  // offer comes on schedule regardless, and a room may consolidate on purpose.
+  clearCards(world);
+  for (const warning of kitchenWarnings(world)) log(world, warning);
   log(world, `Day ${world.day} — service!`);
 }

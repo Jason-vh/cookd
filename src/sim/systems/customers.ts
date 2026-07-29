@@ -1,8 +1,10 @@
-import { DISH_INDEX, RECIPES, RECIPE_BY_ID } from "../../data/recipes";
+import { LAUNCH_SHARE } from "../../data/progression";
+import { DISH_INDEX, RECIPE_BY_ID } from "../../data/recipes";
 import { isDirty, isPlate, specKey } from "../items";
 import { scrape } from "../plates";
 import { pathTo, reachableFrom, seatsAround } from "../pathing";
-import type { Appliance, Customer, Vec2, World } from "../types";
+import { unlockedRecipes } from "../cards";
+import type { Appliance, Customer, Recipe, Vec2, World } from "../types";
 import { CUSTOMER_SPEED, effect, log, random, tileIndex } from "../world";
 
 /**
@@ -32,10 +34,60 @@ export const TIP_FRACTION = 0.4;
 /** How far outside the door customers walk on and off screen. */
 const OFF_GRID = 3;
 
-/** How fast customers arrive. This is the whole difficulty curve, as before. */
-function arrivalInterval(world: World): number {
-  const base = Math.max(6, 14 - world.day * 1.5);
-  return base + random(world) * 4;
+/**
+ * How long a room with nothing free waits between customers.
+ *
+ * The ceiling, not the norm: every free table pulls the next arrival nearer by
+ * `SEAT_PULL`, down to the day's floor.
+ */
+const QUIET_INTERVAL = 20;
+/** How much sooner the next customer comes for each free table. */
+const SEAT_PULL = 3.5;
+
+/**
+ * How fast customers arrive: the day curve as a **floor**, free seats as the
+ * dial.
+ *
+ * This used to follow the day and nothing else, which made a table free money.
+ * You bought one, capacity went up, difficulty did not, and the only reason not
+ * to fill the dining room with tables was that you ran out of floor. Coupling
+ * demand to seats is what makes every purchase a piece of self-chosen
+ * escalation: a table brings its own customers, so revenue and chaos arrive
+ * together and the shop becomes the difficulty dial.
+ *
+ * Counted in *tables*, not in ratios. An empty room of two tables and an empty
+ * room of six should not feel the same, and a fraction would say they do — it
+ * would also make buying a table when the room is already empty change nothing
+ * at all, which is precisely the purchase this exists to give weight to.
+ *
+ * Consumes no randomness beyond the jitter it always did: the count is a
+ * question about the world, and burning the stream on questions makes answers
+ * depend on how many tables happen to exist.
+ */
+function arrivalInterval(world: World, reachable: Set<number>): number {
+  const floor = Math.max(6, 14 - world.day * 1.5);
+  const pull = QUIET_INTERVAL - SEAT_PULL * freeTables(world, reachable);
+  return Math.max(floor, pull) + random(world) * 4;
+}
+
+/**
+ * Tables somebody could sit at right now: unclaimed, clear, and reachable.
+ *
+ * The same three conditions `claimTable` uses, because "how busy is the room"
+ * and "is there anywhere to put this person" have to be the same question. A
+ * table with a dirty plate on it is not free — which means falling behind on
+ * bussing quietly slows the door down, and catching up opens it again.
+ */
+export function freeTables(world: World, reachable: Set<number>): number {
+  const taken = new Set(world.customers.map((c) => c.table).filter((id) => id !== null));
+  let free = 0;
+  for (const appliance of world.appliances.values()) {
+    if (appliance.kind !== "table" || taken.has(appliance.id)) continue;
+    if (appliance.item !== null || appliance.tip > 0) continue;
+    if (reachableSeats(world, appliance.tile, reachable).length === 0) continue;
+    free++;
+  }
+  return free;
 }
 
 export function customerSystem(world: World, dt: number): void {
@@ -58,7 +110,7 @@ export function customerSystem(world: World, dt: number): void {
   if (world.dayTime <= LAST_ORDERS) return;
   world.nextArrivalIn -= dt;
   if (world.nextArrivalIn > 0) return;
-  world.nextArrivalIn = arrivalInterval(world);
+  world.nextArrivalIn = arrivalInterval(world, reachable);
   arrive(world, reachable);
 }
 
@@ -86,7 +138,7 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
       if (customer.timer > 0) return false;
       effect(world, { kind: "walkout", tile: tileOf(customer) });
       log(world, "Someone left — no free table");
-      world.lost++;
+      lose(world, customer);
       leave(world, customer);
       return false;
     }
@@ -114,7 +166,7 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
       const recipe = RECIPE_BY_ID.get(customer.recipeId);
       effect(world, { kind: "walkout", tile: tileOf(customer) });
       log(world, `${recipe?.name ?? customer.recipeId} walked out`);
-      world.lost++;
+      lose(world, customer);
       leave(world, customer);
       return false;
     }
@@ -162,12 +214,11 @@ function arrive(world: World, reachable: Set<number>): void {
   // clear is just a stream of people walking in to walk out again.
   if (!table && world.customers.some((c) => c.state === "waiting")) return;
 
-  // Early days only serve the simpler recipes. Which ones is a property of the
-  // recipe, not of where it happens to sit in the array — see `unlockDay`.
-  const pool = RECIPES.filter((recipe) => recipe.unlockDay <= world.day);
-  const recipe = pool[Math.floor(random(world) * pool.length)] ?? RECIPES[0]!;
+  const recipe = orderFrom(world);
+  if (!recipe) return; // a room with nothing on the menu takes no orders
 
   const start = { x: world.door.x - OFF_GRID + 0.5, y: world.door.y + 0.5 };
+
   const customer: Customer = {
     id: world.nextId++,
     state: "arriving",
@@ -189,10 +240,41 @@ function arrive(world: World, reachable: Set<number>): void {
     sitDown(world, customer, table, reachable);
     return;
   }
-  // No table: walk to the door and hope one frees up.
+  // No table: wait on the paving outside and hope one frees up.
   customer.state = "waiting";
   customer.timer = DOOR_WAIT;
-  customer.path = [{ x: world.door.x + 0.5, y: world.door.y + 0.5 }];
+  const wait = approachTile(world);
+  customer.path = [{ x: wait.x + 0.5, y: wait.y + 0.5 }];
+}
+
+/**
+ * What this customer walks in wanting.
+ *
+ * Drawn from the recipes **this room has unlocked** — there is no day-slice any
+ * more, and no global menu: two kitchens on day ten are two different
+ * restaurants because they picked different cards.
+ *
+ * On the day a recipe is unlocked it takes about `LAUNCH_SHARE` of the orders.
+ * First contact under deliberate repetition: a dish learned by seeing it three
+ * times in an hour is a dish nobody learns, and the weighting is over by the
+ * next morning.
+ *
+ * Exactly **one** draw from the stream either way, whatever the pool looks
+ * like. Randomness spent conditionally is randomness that makes two rooms with
+ * the same seed diverge on their menus, which is the one thing an order pool
+ * must not do.
+ */
+function orderFrom(world: World): Recipe | null {
+  const pool = unlockedRecipes(world);
+  if (pool.length === 0) return null;
+  const roll = random(world);
+  const newest = pool.at(-1)!;
+  const launching = world.unlockedDay === world.day && pool.length > 1;
+  if (launching && roll < LAUNCH_SHARE) return newest;
+  // The rest of the roll, rescaled over the whole pool — including the new
+  // dish, which is on the menu like anything else once its day is over.
+  const spread = launching ? (roll - LAUNCH_SHARE) / (1 - LAUNCH_SHARE) : roll;
+  return pool[Math.min(pool.length - 1, Math.floor(spread * pool.length))] ?? newest;
 }
 
 /**
@@ -287,14 +369,39 @@ function walk(customer: Customer, dt: number): boolean {
   return customer.path.length === 0;
 }
 
-/** Tile centres from wherever the customer is now to `to`, prefixed by the door. */
+/**
+ * Where a customer steps onto the paving: the arrival point, pulled onto the
+ * grid.
+ *
+ * Customers spawn `OFF_GRID` tiles outside the door, beyond the world, so there
+ * is a stretch of walk that no tile can describe. Clamping the spawn point into
+ * bounds names the first tile that *can* — the outer edge of the patio ring, on
+ * the door's row — and the flood fill takes it from there.
+ */
+function approachTile(world: World): Vec2 {
+  return {
+    x: Math.min(world.width - 1, Math.max(0, world.door.x - OFF_GRID)),
+    y: Math.min(world.height - 1, Math.max(0, world.door.y)),
+  };
+}
+
+/**
+ * Tile centres from wherever the customer is now to `to`.
+ *
+ * Somebody arriving is off the grid entirely, so their route starts from the
+ * approach tile instead. It used to start from the **door**, which meant the
+ * walk up to it was a straight line drawn over whatever happened to be there —
+ * fine when "there" was painted scenery, and wrong now that the patio is real
+ * walkable tiles with a market stall standing on some of them. One map, walked
+ * by everybody, rather than two that agree by coincidence.
+ */
 function route(world: World, customer: Customer, to: Vec2): Vec2[] {
   const from = tileOf(customer);
   const outside = from.x < 0 || from.y < 0 || from.x >= world.width || from.y >= world.height;
-  const entry = outside ? world.door : from;
+  const entry = outside ? approachTile(world) : from;
   const tiles = pathTo(world, entry, to) ?? [];
   const path = tiles.map((tile) => ({ x: tile.x + 0.5, y: tile.y + 0.5 }));
-  if (outside) path.unshift({ x: world.door.x + 0.5, y: world.door.y + 0.5 });
+  if (outside) path.unshift({ x: entry.x + 0.5, y: entry.y + 0.5 });
   return path;
 }
 
@@ -302,7 +409,8 @@ function leave(world: World, customer: Customer): void {
   customer.state = "leaving";
   customer.table = null;
   customer.seat = null;
-  customer.path = route(world, customer, world.door);
+  // Out through the door and across the paving, on the tiles they came in on.
+  customer.path = route(world, customer, approachTile(world));
   customer.path.push({ x: world.door.x - OFF_GRID + 0.5, y: world.door.y + 0.5 });
 }
 
@@ -350,6 +458,21 @@ export function acceptDelivery(world: World, table: Appliance, customer: Custome
 
   world.money += recipe.reward;
   world.served++;
+  world.today.earned += recipe.reward;
+  world.today.served++;
   log(world, `${recipe.name} delivered  +$${recipe.reward}`);
   return recipe.reward;
+}
+
+/**
+ * One order lost, counted twice: once for the run, and once for the day.
+ *
+ * The day's tally is **by recipe** because that is the sentence the end-of-day
+ * card needs to be able to say. "Four walked out" is a number; "four pizzas
+ * walked out" is a diagnosis, and the difference between them is whether the
+ * morning knows what to buy.
+ */
+function lose(world: World, customer: Customer): void {
+  world.lost++;
+  world.today.lost[customer.recipeId] = (world.today.lost[customer.recipeId] ?? 0) + 1;
 }

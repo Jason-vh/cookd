@@ -1,14 +1,19 @@
 import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
-import type { Appliance, World } from "../sim/types";
+import { RECIPE_BY_ID } from "../data/recipes";
+import type { Appliance, Offer, Recipe, World } from "../sim/types";
 import { playerById } from "../sim/world";
+import { deliveryLabel, missingFor } from "../sim/cards";
 import { canPlace, targetTile } from "../sim/queries";
+import { offerLabel, offerPrice } from "../sim/shop";
 import { chopLift, ease, workPhase } from "./anim";
 import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";
 import { setGhost, setGhostOpacity } from "./ghost";
 import { buildAppliance, type ApplianceParts } from "./appliance-meshes";
+import { buildIngredientSample, buildItemModel } from "./models";
 import { PALETTE } from "./palette";
+import { makeCardLabel, makeLabel } from "./sprites";
 
 /**
  * Everything that draws an appliance: its mesh, its dial, its moving parts, and
@@ -29,6 +34,25 @@ type Visual = ApplianceParts & {
   dialFlash: number;
   /** How far the bin lid is still flipped open, 1..0. */
   binOpen: number;
+  /**
+   * What this stall slot is currently *showing*, as a string.
+   *
+   * The goods on the counter and the price above them are built from the offer,
+   * so they have to be rebuilt when it changes — which is three times a
+   * morning, not sixty times a second. Comparing a key is how we tell the
+   * difference.
+   */
+  offerKey: string;
+  /**
+   * What this card stand is currently showing: the recipe, and what it would
+   * have delivered. Both are on the key because the second changes without the
+   * first — buy the oven yourself and the card stops promising you one.
+   */
+  cardKey: string;
+  /** How far the card is lifted while somebody is considering it, 0..1. */
+  armed: number;
+  /** A refused purchase, flashing the price red. 1..0. */
+  refused: number;
   /** Placement ghost: eased position, fade, and the pop when it lands. */
   ghost: { alpha: number; x: number; z: number; pop: number; held: boolean };
 };
@@ -58,6 +82,18 @@ export class ApplianceViews {
     if (visual) visual.binOpen = 1;
   }
 
+  /**
+   * The stall said no: flash the price.
+   *
+   * A refusal has to be *seen*, not only logged. The player is looking at the
+   * slot — that is how they got here — so the answer belongs on the slot, and
+   * the log line is the detail rather than the notification.
+   */
+  refuse(id: number): void {
+    const visual = this.visuals.get(id);
+    if (visual) visual.refused = 1;
+  }
+
   sync(world: World, dt: number, time: number): void {
     // Appliances can vanish: a reset renumbers the kitchen, and online the
     // server can hand us a completely different layout. Meshes for ids that no
@@ -84,7 +120,97 @@ export class ApplianceViews {
       const phase = workPhase(appliance.motion, appliance.id, time);
       this.animateParts(appliance, visual, phase, dt);
       this.syncDial(appliance, visual, dt, time);
+      if (appliance.kind === "stall") this.syncStall(world, appliance, visual, dt);
+      if (appliance.kind === "cards") this.syncCards(world, appliance, visual, dt, time);
     }
+  }
+
+  /**
+   * Dress a card stand: the dish on the card, what the card says, and the lift
+   * that means somebody is about to choose it.
+   *
+   * The easel stands there either way — it is furniture on the apron, and an
+   * invisible thing to walk into would be worse than an empty one. What comes
+   * and goes is the card, which is the same grammar as the stall's shutters:
+   * whether there is a decision to make is legible from across the patio.
+   */
+  private syncCards(
+    world: World,
+    appliance: Appliance,
+    visual: Visual,
+    dt: number,
+    time: number,
+  ): void {
+    // Cards are a morning thing. A day opening takes them with it, and the
+    // simulation agrees — `beginDay` clears them — but the phase is what the
+    // renderer can see first, on the very frame it changes.
+    const id = world.phase === "build" ? appliance.card : null;
+    const recipe = id === null ? undefined : RECIPE_BY_ID.get(id);
+    // What it needs is asked of the world, so it answers for *this* kitchen and
+    // stops promising an oven the moment the room buys one.
+    const needs = recipe ? deliveryLabel(missingFor(world, recipe)) : "";
+    const key = recipe ? `${recipe.id}|${needs}` : "";
+    if (key !== visual.cardKey) {
+      visual.cardKey = key;
+      this.dressCard(appliance, visual, recipe, needs);
+    }
+    if (visual.card) visual.card.visible = recipe !== undefined;
+
+    // Armed: the card lifts off the easel and sways, so a second player across
+    // the patio can see a choice being made before it is made.
+    const target = appliance.armedBy !== null && recipe ? 1 : 0;
+    visual.armed += (target - visual.armed) * ease(12, dt);
+    if (visual.card) {
+      const base = applianceDef(appliance.kind).height * 0.98;
+      visual.card.position.y = base + visual.armed * 0.26;
+      visual.card.rotation.z = Math.sin(time * 3.4) * 0.05 * visual.armed;
+      visual.card.scale.setScalar(1 + visual.armed * 0.08);
+    }
+  }
+
+  /** Put a recipe on the card: its dish, and everything the card promises. */
+  private dressCard(
+    appliance: Appliance,
+    visual: Visual,
+    recipe: Recipe | undefined,
+    needs: string,
+  ): void {
+    const art = visual.cardArt;
+    if (art) {
+      const old = art.children.slice();
+      art.clear();
+      for (const child of old) disposeSubtree(child);
+      if (recipe) {
+        // The dish itself, at a third scale — the same object the plate will
+        // carry, for the same reason the stall shows a real fryer.
+        const dish = buildItemModel({
+          id: -1,
+          base: recipe.dish.base,
+          processes: [...recipe.dish.processes],
+          contents: [],
+        });
+        dish.scale.setScalar(0.62);
+        art.add(dish);
+      }
+    }
+
+    if (visual.label) {
+      visual.root.remove(visual.label);
+      disposeSubtree(visual.label);
+      visual.label = undefined;
+    }
+    if (!recipe) return;
+    // Name, reward, steps, requirements — the whole card, read only when a chef
+    // is standing in front of it. See `makeCardLabel`.
+    const label = makeCardLabel([
+      `${recipe.name}  +$${recipe.reward}`,
+      recipe.steps.join(" \u2192 "),
+      needs ? `needs: ${needs}` : "",
+    ]);
+    label.position.y = applianceDef(appliance.kind).height + 1.5;
+    label.visible = false;
+    visual.root.add(label);
+    visual.label = label;
   }
 
   private create(appliance: Appliance): Visual {
@@ -99,8 +225,81 @@ export class ApplianceViews {
       dialAlpha: 0,
       dialFlash: 0,
       binOpen: 0,
+      offerKey: "",
+      cardKey: "",
+      armed: 0,
+      refused: 0,
       ghost: { alpha: 0, x: 0, z: 0, pop: 0, held: false },
     };
+  }
+
+  /**
+   * Dress a stall slot: the goods on the counter, the price above them, and
+   * the shutters that say whether any of it is available.
+   *
+   * The goods are a **real, shrunken instance of the appliance** rather than an
+   * icon, because the thing you are about to buy and the thing that will be
+   * standing in your kitchen ought to be recognisably the same object. It costs
+   * one `buildAppliance` per slot per morning.
+   */
+  private syncStall(world: World, appliance: Appliance, visual: Visual, dt: number): void {
+    const open = world.phase === "build";
+    if (visual.shutter) visual.shutter.visible = !open;
+
+    // A slot that has handed something out today is empty, whatever it still
+    // remembers being worth — the same rule the simulation applies.
+    const offer = open && appliance.taken === null ? appliance.offer : null;
+    const key = offer ? offerKeyOf(offer) : "";
+    if (key !== visual.offerKey) {
+      visual.offerKey = key;
+      this.restock(appliance, visual, offer);
+    }
+
+    // Red for as long as the refusal is worth noticing, then back to white.
+    // Rebuilding the sprite is what it costs, which is why it is gated on the
+    // flash actually being over rather than eased every frame.
+    if (visual.refused > 0) {
+      const was = visual.refused;
+      visual.refused = Math.max(0, visual.refused - dt * 1.6);
+      if (was === 1 || (visual.refused === 0 && offer)) {
+        this.priceLabel(appliance, visual, offer, visual.refused > 0);
+      }
+    }
+  }
+
+  /** Put this morning's goods on the counter, and their price over them. */
+  private restock(appliance: Appliance, visual: Visual, offer: Offer | null): void {
+    const counter = visual.counter;
+    if (counter) {
+      // Detached first, then freed: `clear()` mutates the array being walked.
+      const old = counter.children.slice();
+      counter.clear();
+      for (const child of old) disposeSubtree(child);
+      if (offer) counter.add(goodsModel(offer));
+    }
+    this.priceLabel(appliance, visual, offer, false);
+  }
+
+  private priceLabel(
+    appliance: Appliance,
+    visual: Visual,
+    offer: Offer | null,
+    refused: boolean,
+  ): void {
+    if (visual.label) {
+      visual.root.remove(visual.label);
+      disposeSubtree(visual.label);
+      visual.label = undefined;
+    }
+    if (!offer) return;
+    const sprite = makeLabel(
+      `${offerLabel(offer)}  $${offerPrice(offer)}`,
+      refused ? PALETTE.progressBurn : 0xffffff,
+    );
+    sprite.position.y = applianceDef(appliance.kind).height + 1.35;
+    sprite.visible = false;
+    visual.root.add(sprite);
+    visual.label = sprite;
   }
 
   private release(visual: Visual): void {
@@ -265,6 +464,49 @@ export class ApplianceViews {
       scale: pulse * (1 + visual.dialFlash * 0.28),
     });
   }
+}
+
+/** What a slot is showing, as one string. Changes exactly when the goods do. */
+function offerKeyOf(offer: Offer): string {
+  return offer.good === "plate" ? "plate" : `${offer.kind}:${offer.source?.base ?? ""}`;
+}
+
+/**
+ * The goods, shrunk onto the counter.
+ *
+ * A whole appliance at a third scale, not a bespoke icon: a fryer on the stall
+ * and a fryer in the kitchen are the same object seen twice, and building the
+ * sample any other way is how the two drift into looking like different things.
+ * Plates are the exception because a plate is not an appliance — it is stock,
+ * and `models.ts` already knows how to draw one.
+ */
+function goodsModel(offer: Offer): THREE.Object3D {
+  if (offer.good === "plate") {
+    const plate = buildIngredientSample("plate");
+    plate.scale.setScalar(0.85);
+    return plate;
+  }
+
+  const sample = buildAppliance({
+    id: -1,
+    kind: offer.kind,
+    tile: { x: 0, y: 0 },
+    item: null,
+    progress: 0,
+    overcook: 0,
+    justFinished: false,
+    motion: null,
+    source: offer.source,
+    offer: null,
+    taken: null,
+    card: null,
+    armedBy: null,
+    armTime: 0,
+    heldBy: null,
+    tip: 0,
+  }).root;
+  sample.scale.setScalar(0.34);
+  return sample;
 }
 
 /** Prep and cooking feel different, so their gauges look different. */

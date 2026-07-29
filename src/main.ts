@@ -231,7 +231,17 @@ function frame(now: number): void {
   // Handed to the game as a function so it can be called once per *tick*. A
   // frame can run zero ticks, and the input layer clears its press buffer on
   // every poll, so polling once per frame silently eats quick taps.
-  const poll = (): Inputs => menuControl.filter(input.poll(game.localIds), game.localIds);
+  const poll = (): Inputs => {
+    const inputs = menuControl.filter(input.poll(game.localIds), game.localIds);
+    // Confirm folds away the end-of-day report. It is a *shell* concern, so it
+    // is read here rather than in the simulation: one player putting the card
+    // down must not put it down on everybody else's screen, and the kitchen has
+    // no business knowing what is drawn over it.
+    if (game.world.phase === "build" && Object.values(inputs).some((i) => i?.grab || i?.start)) {
+      hud.dismissSummary(game.world);
+    }
+    return inputs;
+  };
 
   game.update(elapsed, poll);
   if (shouldRender(now)) view.render(game.world, game.alpha, game.localIds);

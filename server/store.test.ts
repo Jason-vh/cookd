@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Save } from "../src/save";
+import { SCHEMA, type Save } from "../src/save";
 import { LEVEL } from "../src/data/level";
 import { loadSave, saveKitchen } from "./store";
 
@@ -27,12 +27,15 @@ afterEach(() => {
 
 function save(day: number): Save {
   return {
-    schema: 3,
+    schema: SCHEMA,
     level: LEVEL.id,
     appliances: [{ kind: "oven", x: 3, y: 3 }],
     money: 0,
     day,
     plates: 6,
+    stall: [],
+    unlocked: ["salad"],
+    unlockedDay: 0,
   };
 }
 

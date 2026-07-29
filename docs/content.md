@@ -141,6 +141,8 @@ combine rule:
 { a: dough(kneaded), b: tomato(chopped)  -> pizza(sauced) }
 { a: pizza(sauced),  b: cheese(chopped)  -> pizza(sauced, topped) }
 { a: lettuce(chopped), b: tomato(chopped) -> salad() }
+{ a: fries(fried),   b: cheese(chopped)  -> cheesefries() }
+{ a: potato(baked),  b: cheese(chopped)  -> bakedpotato() }
 ```
 
 Plating is a special case of the same interaction: **any** food item placed on
@@ -169,7 +171,7 @@ thing refusing says why.
 ## The plate economy
 
 A plate is the only thing in the kitchen there is a **fixed number of**. A level
-says how many (`plates: 6` for the park kitchen — one per table, plus two), they
+says how many (`plates: 4` for the park kitchen — one per table, plus two), they
 start clean on the plate stack, and from then on the game's job is to never lose
 one.
 
@@ -218,21 +220,48 @@ The cost of getting this wrong is not a lost plate. It is a room that cannot
 serve anybody, in a state that gets written to disk, that nobody can repair from
 inside the game. `sim.test.ts` counts plates across every one of those paths.
 
+Conservation means **no destruction**; it has never meant no creation. There is
+exactly one creation path — buying a plate at the stall — and it goes through
+`mintPlate` in the same file, so that "where do plates come from" has one answer
+rather than a `makeItem` call somewhere in a shop. `shop.test.ts` follows a
+bought plate through a full day loop. See [the shop](the-shop.md#plates-are-the-exception).
+
 There is deliberately **no plate counter in the HUD**. The stack is in the
 kitchen, in front of you, and visibly empties — the same reason orders are
 bubbles over tables rather than tickets in the corner.
 
 ## Current recipes
 
-| Dish | Steps | Reward |
-| --- | --- | --- |
-| Garden Salad | chop lettuce, chop tomato, combine, plate | $8 |
-| Fries | chop potato, fry, plate | $6 |
-| Pizza | flour + water, knead, chop tomato **twice** → sauce, chop cheese → top, bake, plate | $16 |
+| Dish | Steps | Reward | Tier | Needs first |
+| --- | --- | --- | --- | --- |
+| Garden Salad | chop lettuce, chop tomato, combine, plate | $8 | 1 | — |
+| Fries | chop potato, fry, plate | $6 | 1 | — |
+| Bread | flour + water, knead, bake, plate | $7 | 1 | — |
+| Cheese Fries | fries + chopped cheese | $9 | 1 | Fries |
+| Cheesy Bread | kneaded dough + chopped cheese, bake | $10 | 2 | — |
+| Baked Potato | bake a potato whole, + chopped cheese | $10 | 2 | — |
+| Pizza | flour + water, knead, chop tomato **twice** → sauce, chop cheese → top, bake, plate | $16 | 3 | — |
+| Loaded Pizza | a built pizza + chopped cheese → `loaded`, bake | $22 | 3 | Pizza |
 
 Delivery pays the reward. The **tip** — up to 40% more, proportional to the
 patience left when the plate landed — is left on the table and collected by
 whoever busses the dirty plate.
+
+**A kitchen does not have this menu; it has the part of it that it bought.**
+Every room starts with the salad and picks the rest from [recipe
+cards](the-menu.md), so `tier` is what the card stand rolls against and `needs
+first` is what stops a dish being offered before the dish it builds on. Nothing
+here is a day number: the calendar decides only *when a choice is offered*, not
+what is on the menu.
+
+### What a dish needs, derived
+
+`RECIPE_NEEDS` walks the transforms and combines backwards to answer "what would
+a kitchen have to have before it could make this" — a set of stations and a set
+of raw ingredients, per recipe. It is the same fixed point `makeableHere` runs
+forwards, and it exists for the same reason `RAW_INGREDIENTS` does: a card
+delivers what a recipe needs, and a hand-written list of that is a second
+opinion about the content that goes stale the day somebody changes a step.
 
 ## Levels
 
@@ -240,27 +269,47 @@ Kitchens are authored as ASCII so layouts stay readable and diffable
 (`data/level.ts`):
 
 ```
-####################
-#......#tlcfwpP===X#
-#.T..T.#...........#
-#........=B=.......#
-D......=...........O
-#......=...........O
-#.T..T.#.=B=.......#
-#......#.......===F#
-####################
+,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,
+,,####################,,
+$,#......#tl....PS==X#,,
+$,#.T....#...........#,,
+$,#........=B=.......#,,
+,,D......=...........#,,
+?,#......=...........#,,
+?,#.T....#.===.......#,,
+,,#......#...........#,,
+,,####################,,
+,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,
 ```
 
-`#` wall · `.` floor · `D` door · `T` table · `=` counter · `B` board ·
-`F` fryer · `O` oven · `P` plate stack · `X` bin ·
-`t l c f w p` ingredient crates (tomato, lettuce, cheese, flour, water, potato).
+`#` wall · `.` floor · `,` patio · `D` door · `$` stall · `?` card stand ·
+`T` table · `=` counter · `B` board · `F` fryer · `O` oven · `P` plate stack ·
+`S` sink · `X` bin · `t l c f w p` ingredient crates (tomato, lettuce, cheese,
+flour, water, potato).
 
 The dining room is the western half of the **same grid** — one rectangle, one
-collision system, no new concepts.
+collision system, no new concepts. So is the **patio ring** around the outside:
+walkable, never placeable, and where the market stall stands. Walkable is paved
+and paved is walkable, so there is one map rather than a floor plan and a
+backdrop that agree by coincidence — see [the shop](the-shop.md#the-patio-ring).
 
-**The pass is a place, not an appliance.** Those two `=` tiles at `x = 7` are
+**The level is a starting point, not an endpoint.** It has one board, two
+tables, four plates — and no fryer, no oven, and two crates, because a kitchen
+contains only what its menu needs and the menu is one salad. Heat and
+ingredients arrive with the [recipe cards](the-menu.md) that call for them; a
+second board or a third table comes from [the stall](the-shop.md). Both are the
+same idea: a shop nobody needs to visit teaches nothing, and a kitchen nobody
+chose is the same kitchen in every room.
+
+`F`, `O` and the other crate characters are still in the legend — they describe
+what a level *may* contain, and saves written against the older, richer park
+kitchen keep every appliance they had.
+
+**The pass is a place, not an appliance.** Those two `=` tiles at `x = 9` are
 ordinary counters that happen to stand in the dividing wall, and the gap beside
-them at `(7,3)` is how a chef walks round. There *was* a `serving` kind: it made
+them at `(9,5)` is how a chef walks round. There *was* a `serving` kind: it made
 sense when food vanished through a hatch, and when that stopped being true it
 was left describing nothing — a counter you could not chop on and could not
 move, painted a special colour that promised a rule which no longer existed.
@@ -281,6 +330,7 @@ teaches the combine rule that the rest of it depends on.
 
 Next:
 
+- [the-menu.md](the-menu.md) — how a room ends up with some of these recipes and not others
 - [architecture.md](architecture.md) — why content is data and not code
 - [dining-room.md](dining-room.md) — who orders it
 

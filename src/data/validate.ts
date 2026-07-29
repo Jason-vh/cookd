@@ -1,9 +1,11 @@
 import { specKey } from "../sim/items";
 import type { ItemSpec } from "../sim/types";
-import { APPLIANCES } from "./appliances";
+import { APPLIANCES, APPLIANCE_KINDS } from "./appliances";
+import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
 import { LEVELS } from "./level";
-import { COMBINES, RECIPES, TRANSFORMS } from "./recipes";
+import { BACKFILL_RECIPES, CARD_SLOTS, STARTING_RECIPES, TIER_WEIGHT } from "./progression";
+import { COMBINES, RAW_INGREDIENTS, RECIPES, RECIPE_NEEDS, TRANSFORMS } from "./recipes";
 
 /**
  * Is the content coherent?
@@ -85,12 +87,53 @@ export function validateContent(): string[] {
     if (byDish.has(dish)) problems.push(`${where}: another recipe already wants ${dish}`);
     byDish.add(dish);
     if (recipe.steps.length === 0) problems.push(`${where}: no steps`);
-    if (recipe.unlockDay < 1) problems.push(`${where}: unlockDay must be at least 1`);
     if (recipe.patience <= 0) problems.push(`${where}: patience must be positive`);
+    // A tier the card stand has no weight for would be offered at weight 1 by
+    // the fallback, which is a silent tuning decision nobody made.
+    if (!Object.hasOwn(TIER_WEIGHT, recipe.tier)) {
+      problems.push(`${where}: tier ${recipe.tier} has no weight in TIER_WEIGHT`);
+    }
+    // A card has to be able to *say* what it needs. An empty requirement set
+    // means nothing in the content produces this dish from raw ingredients.
+    const needs = RECIPE_NEEDS.get(recipe.id);
+    if (!needs || needs.bases.length === 0) {
+      problems.push(`${where}: no route from raw ingredients to ${specKey(recipe.dish)}`);
+    }
   }
-  // Somebody has to be able to order on day one.
-  if (!RECIPES.some((recipe) => recipe.unlockDay <= 1)) {
-    problems.push("no recipe is available on day 1");
+  for (const recipe of RECIPES) {
+    if (recipe.prereq === undefined) continue;
+    const where = `recipe "${recipe.id}"`;
+    const prereq = RECIPES.find((other) => other.id === recipe.prereq);
+    // A prerequisite that does not exist is a recipe the stand can never offer:
+    // `offerable` asks whether it is unlocked, and nothing can unlock it.
+    if (!prereq) problems.push(`${where}: unknown prereq "${recipe.prereq}"`);
+    else if (prereq.id === recipe.id) problems.push(`${where}: is its own prereq`);
+    else if (prereq.prereq === recipe.id) problems.push(`${where}: prereq cycle with ${prereq.id}`);
+  }
+  // Somebody has to be able to order on day one, and a room has to be able to
+  // come back from a pre-card save with a menu.
+  for (const [what, ids] of [
+    ["STARTING_RECIPES", STARTING_RECIPES],
+    ["BACKFILL_RECIPES", BACKFILL_RECIPES],
+  ] as const) {
+    if (ids.length === 0) problems.push(`${what} is empty`);
+    for (const id of ids) {
+      if (!byId.has(id)) problems.push(`${what}: no such recipe "${id}"`);
+    }
+  }
+
+  // --- the shop ---
+  // A crate is sold with an ingredient in it, drawn from what the recipes
+  // actually start from. An empty pool would mean a crate of nothing.
+  if (STOCK_WEIGHT.crate > 0 && RAW_INGREDIENTS.length === 0) {
+    problems.push("the stall sells crates, but no recipe starts from a raw ingredient");
+  }
+  for (const kind of APPLIANCE_KINDS) {
+    // A sale hands over a *held* appliance, so anything immovable is unsellable
+    // by construction — the buyer would be given something they cannot carry.
+    if (STOCK_WEIGHT[kind] > 0 && !APPLIANCES[kind].movable) {
+      problems.push(`stall: "${kind}" is for sale but cannot be picked up`);
+    }
   }
 
   // --- can each dish actually be made? ---
@@ -127,6 +170,26 @@ export function validateContent(): string[] {
     const tables = tiles.split("T").length - 1;
     if (level.plates < tables) {
       problems.push(`level "${id}": ${level.plates} plates for ${tables} tables`);
+    }
+    // The stall is how a kitchen grows, and a kitchen that cannot grow is one
+    // where money has nothing to be for. The count matters as much as the
+    // presence: `STALL_SLOTS` is what the stock roll fills, so a level with
+    // two `$` tiles would silently be a two-slot shop that every tuning note
+    // in `data/economy.ts` describes wrongly.
+    const slots = tiles.split("$").length - 1;
+    if (slots !== STALL_SLOTS) {
+      problems.push(`level "${id}": ${slots} stall slots, expected ${STALL_SLOTS}`);
+    }
+    // A stall standing where nobody can face it is a shop that does not exist.
+    if (slots > 0 && !level.rows.some((row) => row.includes(","))) {
+      problems.push(`level "${id}": a stall, but no patio to stand it on`);
+    }
+    // The card stand is the only way a menu grows, and `restockCards` fills
+    // exactly the tiles the level puts down: a level with one `?` would be a
+    // stand that offers no choice, which is the one thing it is for.
+    const stands = tiles.split("?").length - 1;
+    if (stands !== CARD_SLOTS) {
+      problems.push(`level "${id}": ${stands} card stands, expected ${CARD_SLOTS}`);
     }
   }
 

@@ -11,6 +11,12 @@ import type { Appliance, Item, World } from "./types";
  * end of a day, a player disconnecting, an appliance being lifted in the build
  * phase. `sim.test.ts` counts plates across all four.
  *
+ * Conservation means *no destruction*. Creation is a different question, and
+ * there is now exactly one answer to it: `mintPlate`, called when somebody buys
+ * one at the stall. It is a named, exported, single-caller function precisely
+ * so that "where do plates come from" stays a question with one honest answer
+ * rather than a `makeItem` call somewhere in a shop.
+ *
  * ## A pile of plates is a plate holding plates
  *
  * One representation, not three. `contents` already exists for the dish on a
@@ -30,8 +36,23 @@ import type { Appliance, Item, World } from "./types";
 export const MAX_CARRIED_PLATES = 4;
 
 /**
+ * A brand new plate, and the only one the game will ever make.
+ *
+ * The stall sells them, and this is what it hands over. Everything else that
+ * looks like plate creation is really plate *restoration*: `stockPlates` puts
+ * back a number somebody counted a moment earlier, which is why it takes a
+ * count rather than deciding one.
+ *
+ * The caller is expected to be able to say why the kitchen has one more plate
+ * than it did. There is currently one caller.
+ */
+export function mintPlate(world: World): Item {
+  return makeItem(world, { base: "plate", processes: [] });
+}
+
+/**
  * The most plates a kitchen may own, and therefore the tallest a single pile
- * can be — the whole supply fits on the stack.
+ * can be — the whole supply fits on the stack. The stall will not sell past it.
  *
  * It exists because the wire has to agree with it: a pile is an item with its
  * plates in `contents`, and a pile taller than the frame parser's `MAX_CONTENTS`
@@ -162,9 +183,8 @@ export function stockPlates(world: World, count: number, fallback?: Appliance): 
   if (count <= 0) return;
   const home = plateHome(world, fallback);
   if (!home) return;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i++)
     shelvePlate(home, makeItem(world, { base: "plate", processes: [] }));
-  }
 }
 
 /**

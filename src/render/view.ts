@@ -35,6 +35,32 @@ import { createPost, postEnabled, type Post } from "./post";
  *
  * Art direction lives in `palette.ts` (colour) and `meshes.ts` (form).
  */
+/**
+ * The rectangle the walls enclose, in tiles.
+ *
+ * "The kitchen" and "the world" used to be the same rectangle, and several
+ * things quietly relied on it. They stopped being the same the day the patio
+ * ring became real tiles, so the building has to be found rather than assumed.
+ */
+function wallBounds(world: World): { minX: number; minY: number; maxX: number; maxY: number } {
+  let minX = world.width;
+  let minY = world.height;
+  let maxX = 0;
+  let maxY = 0;
+  for (let y = 0; y < world.height; y++) {
+    for (let x = 0; x < world.width; x++) {
+      if (!world.tiles[y * world.width + x]?.wall) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return minX > maxX
+    ? { minX: 0, minY: 0, maxX: world.width - 1, maxY: world.height - 1 }
+    : { minX, minY, maxX, maxY };
+}
+
 export class View {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.OrthographicCamera;
@@ -106,7 +132,7 @@ export class View {
   }
 
   /**
-   * The kitchen itself: its paved floor and its walls.
+   * The kitchen itself: its tiled floor and its walls.
    *
    * Walls are fixed by the level and the floor never moves, so the whole shell
    * is baked down to one draw call per material alongside the scenery. There is
@@ -115,16 +141,25 @@ export class View {
   private buildKitchenShell(world: World): void {
     const shell = new THREE.Group();
 
+    // The kitchen is no longer the whole grid: the patio ring is part of the
+    // world now, and it is paved by the biome rather than tiled by the kitchen.
+    // Measured from the walls rather than passed in, because a floor is the
+    // thing inside walls — and a level with a different ring would otherwise
+    // have to remember to say so somewhere else as well.
+    const room = wallBounds(world);
+    const width = room.maxX - room.minX + 1;
+    const height = room.maxY - room.minY + 1;
+
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(world.width, world.height),
+      new THREE.PlaneGeometry(width, height),
       new THREE.MeshStandardMaterial({
-        map: floorTexture(world.width, world.height),
+        map: floorTexture(width, height),
         roughness: 0.85,
         metalness: 0,
       }),
     );
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(world.width / 2, 0.004, world.height / 2);
+    floor.position.set(room.minX + width / 2, 0.004, room.minY + height / 2);
     floor.receiveShadow = true;
     shell.add(floor);
 
@@ -141,8 +176,11 @@ export class View {
         }
         if (!tile?.wall) continue;
         // The two edges nearest the camera are a low lip, otherwise they would
-        // occlude the kitchen.
-        const near = x === world.width - 1 || y === world.height - 1;
+        // occlude the kitchen. Which edges those are is a fact about the
+        // *building*, not about the grid: with a patio ring the world's last
+        // column is paving, and testing against it would leave the real near
+        // walls at full height with the kitchen hidden behind them.
+        const near = x === room.maxX || y === room.maxY;
         const wall = buildWall(near ? 0.26 : 1.1);
         wall.position.set(x + 0.5, 0, y + 0.5);
         shell.add(wall);
@@ -284,6 +322,25 @@ export class View {
       case "binned": {
         const appliance = applianceAtTile(world, cue.tile.x, cue.tile.y);
         if (appliance) this.appliances.openBin(appliance.id);
+        return;
+      }
+      case "spent":
+        // Money going *out*, in its own colour. The same popup machinery as a
+        // reward, deliberately: a purchase and a delivery are both "the number
+        // in the corner just moved", and reading them the same way is what
+        // makes rent land as a thing that happened rather than as a surprise
+        // discovered later in the HUD.
+        this.popups.spawn(
+          `-$${cue.amount}`,
+          PALETTE.spend,
+          cue.tile.x + 0.5,
+          1.5,
+          cue.tile.y + 0.5,
+        );
+        return;
+      case "refused": {
+        const appliance = applianceAtTile(world, cue.tile.x, cue.tile.y);
+        if (appliance) this.appliances.refuse(appliance.id);
         return;
       }
       default: {

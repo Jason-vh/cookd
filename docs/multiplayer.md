@@ -66,12 +66,26 @@ of impossible bug:
 | Split static/dynamic | 1561 |
 | Idle appliances omitted | **723** |
 
-Two things get it there. The **layout** (which appliances exist and where) is
-~70% of the bytes and changes a handful of times a day, so it rides its own
-message and is sent only when it changes. And a frame carries only appliances
-that are *doing something* — a kitchen is mostly idle counters, and repeating
+Two things get it there. The **layout** — which appliances exist, where, what
+the stall is holding and what is on the [card stand](the-menu.md) — is ~70% of
+the bytes and changes a handful of times a day, so it rides its own message and
+is sent only when it changes. The room's **menu** rides it too, for the same
+reason: `unlocked` changes every third morning and never during service, and
+spending twenty messages a second on it would be as silly as it would be for a
+counter. And a frame carries only appliances that are *doing something* — a kitchen is mostly idle counters, and repeating
 "still empty, still zero" twenty times a second for each of them was two thirds
 of the frame. Anything missing from the list is idle by definition.
+
+What is *derived* is never sent twice over: both ends roll the same stall stock
+and the same pair of cards from `(seed, day)`. What is sent is everything that
+depends on what somebody **did** — which slot was emptied, which card was taken,
+what the menu now is. A shop or a stand that is half-derived and half-synced is
+one missed field away from "my friend sees a different kitchen".
+
+`PROTOCOL_VERSION` is **2**: the menu joined the layout, and a v1 server's
+layouts are rejected wholesale by a v2 client (see `parseLayout`). Without the
+bump that is a tab sitting at "connecting" with nothing logged; with it, it is
+one sentence telling the player to refresh.
 
 The simulation runs at 60Hz and broadcasts at 20Hz.
 

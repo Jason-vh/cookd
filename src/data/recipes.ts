@@ -1,4 +1,4 @@
-import type { Combine, ItemSpec, Recipe, Transform } from "../sim/types";
+import type { Combine, ItemSpec, Recipe, Station, Transform } from "../sim/types";
 import { specKey } from "../sim/items";
 
 /**
@@ -42,6 +42,16 @@ export const TRANSFORMS: Transform[] = [
   // --- fryer / oven: run on their own, then burn ---------------------------
   { station: "fry", mode: "auto", motion: "fry", duration: 5.0, burnAfter: 6.0, input: { base: "potato", processes: ["chopped"] }, output: { base: "fries", processes: ["fried"] } },
   { station: "bake", mode: "auto", motion: "bake", duration: 8.0, burnAfter: 8.0, input: { base: "pizza", processes: ["sauced", "topped"] }, output: { base: "pizza", processes: ["sauced", "topped", "baked"] } },
+  // Bread is the oven's cheap dish: kneaded dough, six seconds, and a short
+  // fuse. It is what makes an oven worth owning before a pizza is.
+  { station: "bake", mode: "auto", motion: "bake", duration: 6.0, burnAfter: 6.0, input: { base: "dough", processes: ["kneaded"] }, output: { base: "bread", processes: ["baked"] } },
+  // A potato goes in whole — the one bake with no prep in front of it, which
+  // is the whole character of the dish.
+  { station: "bake", mode: "auto", motion: "bake", duration: 7.0, burnAfter: 7.0, input: { base: "potato", processes: [] }, output: { base: "potato", processes: ["baked"] } },
+  { station: "bake", mode: "auto", motion: "bake", duration: 7.0, burnAfter: 6.5, input: { base: "cheesybread", processes: [] }, output: { base: "cheesybread", processes: ["baked"] } },
+  // The longest bake in the game, and the shortest fuse relative to it: a
+  // loaded pizza is the thing you stand next to.
+  { station: "bake", mode: "auto", motion: "bake", duration: 9.0, burnAfter: 7.0, input: { base: "pizza", processes: ["sauced", "topped", "loaded"] }, output: { base: "pizza", processes: ["sauced", "topped", "loaded", "baked"] } },
 ];
 
 // prettier-ignore
@@ -51,26 +61,48 @@ export const COMBINES: Combine[] = [
   { a: { base: "dough", processes: ["kneaded"] }, b: { base: "tomato", processes: ["chopped", "crushed"] }, output: { base: "pizza", processes: ["sauced"] } },
   { a: { base: "pizza", processes: ["sauced"] }, b: { base: "cheese", processes: ["chopped"] }, output: { base: "pizza", processes: ["sauced", "topped"] } },
   { a: { base: "lettuce", processes: ["chopped"] }, b: { base: "tomato", processes: ["chopped"] }, output: { base: "salad", processes: [] } },
+  // Dishes that build on another dish. Each one is a card with a prerequisite,
+  // so the stand can never offer the second half of a pipeline first.
+  { a: { base: "fries", processes: ["fried"] }, b: { base: "cheese", processes: ["chopped"] }, output: { base: "cheesefries", processes: [] } },
+  { a: { base: "dough", processes: ["kneaded"] }, b: { base: "cheese", processes: ["chopped"] }, output: { base: "cheesybread", processes: [] } },
+  { a: { base: "potato", processes: ["baked"] }, b: { base: "cheese", processes: ["chopped"] }, output: { base: "bakedpotato", processes: [] } },
+  { a: { base: "pizza", processes: ["sauced", "topped"] }, b: { base: "cheese", processes: ["chopped"] }, output: { base: "pizza", processes: ["sauced", "topped", "loaded"] } },
 ];
 
 /**
- * `unlockDay` is the difficulty curve, said out loud.
+ * The library. A kitchen starts with one of these and buys the rest with days.
  *
- * It used to be the *position in this array* — `RECIPES.slice(0, 1 + day)` —
- * so sorting these rows by reward, or slipping a hard dish in beside a related
- * one, silently changed what day one looks like. `steps` moved in here for the
- * same reason: it was a separate map keyed by id, already unreferenced and
- * already free to drift, and a recipe should not be able to ship without
- * saying how it is made.
+ * `tier` is the difficulty curve, said out loud. It used to be `unlockDay` —
+ * and before that, the *position in this array* — so sorting these rows by
+ * reward silently changed what day one looks like. Now the day number decides
+ * nothing at all: the card stand offers by tier (see `TIER_WEIGHT`), a room
+ * picks, and what a kitchen can cook is the record of its own choices.
+ *
+ * `prereq` keeps a dish that builds on another dish's output from being
+ * offered first — cheese fries before fries is a card nobody can use.
+ *
+ * `steps` lives here for the same reason everything else does: it was a
+ * separate map keyed by id, already free to drift, and a recipe should not be
+ * able to ship without saying how it is made. The card face reads it out.
  */
 // prettier-ignore
 export const RECIPES: Recipe[] = [
-  { id: "salad", name: "Garden Salad", dish: { base: "salad", processes: [] }, patience: 60, reward: 8, unlockDay: 1,
+  { id: "salad", name: "Garden Salad", dish: { base: "salad", processes: [] }, patience: 60, reward: 8, tier: 1,
     steps: ["Chop lettuce", "Chop tomato", "Combine", "Plate"] },
-  { id: "fries", name: "Fries", dish: { base: "fries", processes: ["fried"] }, patience: 55, reward: 6, unlockDay: 2,
+  { id: "fries", name: "Fries", dish: { base: "fries", processes: ["fried"] }, patience: 55, reward: 6, tier: 1,
     steps: ["Chop potato", "Fry", "Plate"] },
-  { id: "pizza", name: "Pizza", dish: { base: "pizza", processes: ["sauced", "topped", "baked"] }, patience: 95, reward: 16, unlockDay: 3,
+  { id: "bread", name: "Bread", dish: { base: "bread", processes: ["baked"] }, patience: 60, reward: 7, tier: 1,
+    steps: ["Flour + water", "Knead dough", "Bake", "Plate"] },
+  { id: "cheesefries", name: "Cheese Fries", dish: { base: "cheesefries", processes: [] }, patience: 60, reward: 9, tier: 1, prereq: "fries",
+    steps: ["Chop potato", "Fry", "Chop cheese", "Combine", "Plate"] },
+  { id: "cheesybread", name: "Cheesy Bread", dish: { base: "cheesybread", processes: ["baked"] }, patience: 65, reward: 10, tier: 2,
+    steps: ["Flour + water", "Knead dough", "Chop cheese", "Combine", "Bake", "Plate"] },
+  { id: "bakedpotato", name: "Baked Potato", dish: { base: "bakedpotato", processes: [] }, patience: 70, reward: 10, tier: 2,
+    steps: ["Bake a potato whole", "Chop cheese", "Combine", "Plate"] },
+  { id: "pizza", name: "Pizza", dish: { base: "pizza", processes: ["sauced", "topped", "baked"] }, patience: 95, reward: 16, tier: 3,
     steps: ["Flour + water", "Knead dough", "Chop tomato twice -> sauce", "Chop cheese -> top", "Bake", "Plate"] },
+  { id: "loadedpizza", name: "Loaded Pizza", dish: { base: "pizza", processes: ["sauced", "topped", "loaded", "baked"] }, patience: 100, reward: 22, tier: 3, prereq: "pizza",
+    steps: ["Build a pizza, unbaked", "Chop cheese -> load it", "Bake", "Plate"] },
 ];
 
 // --- derived lookup tables ---------------------------------------------------
@@ -104,6 +136,138 @@ for (const r of RECIPES) {
 }
 
 export const RECIPE_BY_ID = new Map<string, Recipe>(RECIPES.map((r) => [r.id, r]));
+
+/**
+ * The raw ingredients the recipes actually start from — what a crate may hold.
+ *
+ * Derived rather than listed, because a hand-kept list of "what crates exist"
+ * is a second opinion about the content that goes stale the day a recipe
+ * changes. Two conditions, and both are load-bearing:
+ *
+ *  1. it is *used* unprocessed by a transform or a combine — so an ingredient
+ *     no dish touches can never be sold to anybody; and
+ *  2. **nothing produces it**. Dough passes the first test (you knead it) and
+ *     fails this one, because dough is flour plus water. Without the second
+ *     condition the stall cheerfully offered a "Dough crate", which is a crate
+ *     of the thing the entire pizza pipeline exists to make.
+ *
+ * Both conditions are about the *whole spec*, not the base. Keying the second
+ * one on `base` alone looked equivalent and quietly excluded tomatoes: chopping
+ * a tomato produces a tomato, so "something makes tomatoes" is true and
+ * completely beside the point. What matters is that nothing makes an
+ * **unprocessed** one.
+ *
+ * A plate is excluded by name: it is crockery rather than food, it is finite,
+ * and it has its own way of being bought.
+ */
+const MADE = new Set<string>([
+  ...TRANSFORMS.map((t) => specKey(t.output)),
+  ...COMBINES.map((c) => specKey(c.output)),
+]);
+
+export const RAW_INGREDIENTS: string[] = [
+  ...new Set(
+    [...TRANSFORMS.map((t) => t.input), ...COMBINES.flatMap((c) => [c.a, c.b])]
+      .filter((spec) => spec.processes.length === 0 && spec.base !== "plate")
+      .filter((spec) => !MADE.has(specKey(spec)))
+      .map((spec) => spec.base),
+  ),
+].sort();
+
+// --- what a dish needs -------------------------------------------------------
+
+/**
+ * The equipment and the ingredients a dish cannot be made without.
+ *
+ * `stations` are the *kinds of work* its shortest route passes through, not
+ * appliance kinds — a `bake` is an oven's problem, a `prep` is any counter's,
+ * and which appliance satisfies which is `data/appliances.ts`'s business, not
+ * this file's. `bases` are the raw ingredients it starts from, so a crate list
+ * falls out of it.
+ */
+export type RecipeNeeds = {
+  stations: Station[];
+  bases: string[];
+};
+
+type Need = { stations: Set<Station>; bases: Set<string> };
+
+function needCost(need: Need): number {
+  return need.stations.size + need.bases.size;
+}
+
+/** Stable tie-break, so two equally cheap routes resolve the same way twice. */
+function needKey(need: Need): string {
+  return `${[...need.stations].sort().join(",")}|${[...need.bases].sort().join(",")}`;
+}
+
+function mergeNeeds(a: Need, b: Need): Need {
+  return {
+    stations: new Set([...a.stations, ...b.stations]),
+    bases: new Set([...a.bases, ...b.bases]),
+  };
+}
+
+/**
+ * Every makeable spec, and the cheapest way to get there.
+ *
+ * `makeableHere` in `sim/queries.ts` runs this fixed point forwards — "given
+ * these appliances, what can be cooked" — and this runs the same content the
+ * other way: "given this dish, what does a kitchen have to have". It is derived
+ * for the reason `RAW_INGREDIENTS` is derived. A hand-written list of what a
+ * card delivers is a second opinion about the recipes, and two opinions drift
+ * the day somebody adds a step.
+ *
+ * Cheapest by count of requirements, ties broken by name. Where a dish has two
+ * routes the game has no view on which is "the" recipe, so the card promises
+ * the smaller kitchen and the bigger one still works.
+ *
+ * Bounded by construction: a candidate only replaces an entry by being strictly
+ * cheaper or strictly earlier by name, and both orderings are finite.
+ */
+const NEEDS = new Map<string, Need>();
+for (const base of RAW_INGREDIENTS) {
+  NEEDS.set(base, { stations: new Set(), bases: new Set([base]) });
+}
+for (let grew = true; grew;) {
+  grew = false;
+  const offer = (key: string, candidate: Need): void => {
+    const current = NEEDS.get(key);
+    if (current) {
+      const difference = needCost(candidate) - needCost(current);
+      if (difference > 0) return;
+      if (difference === 0 && needKey(candidate) >= needKey(current)) return;
+    }
+    NEEDS.set(key, candidate);
+    grew = true;
+  };
+  for (const transform of TRANSFORMS) {
+    const input = NEEDS.get(specKey(transform.input));
+    if (!input) continue;
+    const work: Need = { stations: new Set([transform.station]), bases: new Set() };
+    offer(specKey(transform.output), mergeNeeds(input, work));
+  }
+  for (const combine of COMBINES) {
+    const a = NEEDS.get(specKey(combine.a));
+    const b = NEEDS.get(specKey(combine.b));
+    if (!a || !b) continue;
+    offer(specKey(combine.output), mergeNeeds(a, b));
+  }
+}
+
+/** What each recipe needs, by recipe id. Empty for a dish nothing can produce. */
+export const RECIPE_NEEDS = new Map<string, RecipeNeeds>(
+  RECIPES.map((recipe) => {
+    const need = NEEDS.get(specKey(recipe.dish));
+    return [
+      recipe.id,
+      {
+        stations: [...(need?.stations ?? [])].sort(),
+        bases: [...(need?.bases ?? [])].sort(),
+      },
+    ];
+  }),
+);
 
 export function pairKey(a: string, b: string): string {
   return a < b ? `${a}+${b}` : `${b}+${a}`;

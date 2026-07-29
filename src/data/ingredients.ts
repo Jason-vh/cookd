@@ -32,6 +32,10 @@ export const INGREDIENTS: Record<IngredientId, Ingredient> = {
   pizza: { id: "pizza", name: "Pizza" },
   salad: { id: "salad", name: "Salad" },
   fries: { id: "fries", name: "Fries" },
+  bread: { id: "bread", name: "Bread" },
+  cheesefries: { id: "cheesefries", name: "Cheese Fries" },
+  cheesybread: { id: "cheesybread", name: "Cheesy Bread" },
+  bakedpotato: { id: "bakedpotato", name: "Baked Potato" },
 
   plate: { id: "plate", name: "Plate" },
 };
@@ -50,6 +54,8 @@ export const PROCESSES: Record<ProcessId, true> = {
   kneaded: true,
   sauced: true,
   topped: true,
+  /** A second helping of cheese, over an already-topped pizza. */
+  loaded: true,
   baked: true,
   fried: true,
   burnt: true,

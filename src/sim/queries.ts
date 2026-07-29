@@ -1,10 +1,13 @@
-import { applianceDef } from "../data/appliances";
+import { applianceDef, type ApplianceKind } from "../data/appliances";
+import { rentFor } from "../data/economy";
 import { ingredient } from "../data/ingredients";
-import { isDirty, isPlate } from "./items";
+import { COMBINES, TRANSFORMS } from "../data/recipes";
+import { unlockedRecipes } from "./cards";
+import { isDirty, isPlate, specKey } from "./items";
 import { plateCount } from "./plates";
 import { reachableFrom, seatsAround } from "./pathing";
 import { EAT_TIME, LAST_ORDERS } from "./systems/customers";
-import type { Appliance, Customer, Item, Player, World } from "./types";
+import type { Appliance, Customer, Item, Player, Station, World } from "./types";
 import { applianceAtTile, inBounds, tileIndex } from "./world";
 
 /**
@@ -49,11 +52,17 @@ export function targetAppliance(world: World, player: Player): Appliance | null 
  *
  * Shared with the render layer so the placement ghost and the rule that governs
  * it can never disagree.
+ *
+ * Asks the *tile* whether it is placeable rather than asking whether it is a
+ * wall. That is what keeps the patio ring out of the kitchen without
+ * `canPlace` growing a concept of "outside": the ring is walkable and it is not
+ * placeable, and those are two independent facts about a tile. Outdoor seating,
+ * if it ever happens, is some tiles changing their minds about the second one.
  */
 export function canPlace(world: World, tx: number, ty: number): boolean {
   if (!inBounds(world, tx, ty)) return false;
   const index = tileIndex(world, tx, ty);
-  if (world.tiles[index]?.wall) return false;
+  if (!world.tiles[index]?.placeable) return false;
   const existing = applianceAtTile(world, tx, ty);
   return !existing || applianceDef(existing.kind).movable;
 }
@@ -65,6 +74,117 @@ export function customerAt(world: World, table: Appliance): Customer | null {
       (customer) => customer.table === table.id && customer.state === "ordering",
     ) ?? null
   );
+}
+
+/**
+ * Everything this kitchen could actually produce, as a set of spec keys.
+ *
+ * A fixed point over the content: start from what the crates dispense, then
+ * keep applying every transform whose station is standing somewhere and every
+ * combine whose two halves are already reachable, until nothing new appears.
+ *
+ * Derived rather than listed, for the same reason `RAW_INGREDIENTS` is. "Which
+ * appliances does a pizza need" is a fact about the recipes, and any hand-kept
+ * copy of it is a second opinion that goes stale the day somebody adds a dish.
+ */
+function makeableHere(world: World): Set<string> {
+  const stations = new Set<Station>();
+  const have = new Set<string>();
+  for (const appliance of world.appliances.values()) {
+    for (const station of applianceDef(appliance.kind).stations) stations.add(station);
+    if (appliance.source) have.add(specKey(appliance.source));
+  }
+
+  // Bounded by construction: a pass only repeats if it *added* a key, and the
+  // content names finitely many.
+  //
+  // `learn` exists because the obvious spelling of it does not work. `if
+  // (!have.add(key)) continue;` reads like a set insertion reporting whether it
+  // was new — `Set.add` returns the **set**, which is always truthy, so the
+  // guard never fired, `grew` was never cleared, and this loop ran until the
+  // process was killed. It hung every test that opens a day.
+  const learn = (key: string): boolean => {
+    if (have.has(key)) return false;
+    have.add(key);
+    return true;
+  };
+
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const transform of TRANSFORMS) {
+      if (!stations.has(transform.station)) continue;
+      if (!have.has(specKey(transform.input))) continue;
+      if (learn(specKey(transform.output))) grew = true;
+    }
+    for (const combine of COMBINES) {
+      if (!have.has(specKey(combine.a)) || !have.has(specKey(combine.b))) continue;
+      if (learn(specKey(combine.output))) grew = true;
+    }
+  }
+  return have;
+}
+
+/** How many of a kind are standing in this kitchen, held ones included. */
+function countKind(world: World, kind: ApplianceKind): number {
+  let count = 0;
+  for (const appliance of world.appliances.values()) {
+    if (appliance.kind === kind) count++;
+  }
+  return count;
+}
+
+/**
+ * What is wrong with this kitchen, in words, or nothing at all.
+ *
+ * **Said out loud, never prevented.** That is the house rule, and it predates
+ * this function: a dining room walled off from the door has always been
+ * reported at day open rather than made impossible, because the build phase's
+ * promise is that you may rearrange your own restaurant into something silly.
+ * The stall widened the ways to do it — you can now sell your last table, your
+ * last crate, or every surface capable of holding a knife — and each of those
+ * is the same sentence, so they get the same treatment rather than a growing
+ * list of things the shop refuses to buy.
+ *
+ * The menu warnings are the ones that earn their place. Customers order from
+ * what the *room* has unlocked, not from what the kitchen can cook, so a room
+ * that has sold the oven a card gave it takes pizza orders it can never fill
+ * and watches them walk out with no explanation. Naming the dish turns a
+ * mystery into a shopping list.
+ */
+export function kitchenWarnings(world: World): string[] {
+  const warnings: string[] = [];
+
+  if (countKind(world, "table") === 0) {
+    warnings.push("No tables — nobody can sit down");
+  } else {
+    const stranded = unreachableTables(world);
+    if (stranded.length > 0) {
+      warnings.push(`${stranded.length} table(s) can't be reached from the door`);
+    }
+  }
+
+  const menu = unlockedRecipes(world);
+  if (countKind(world, "plates") === 0) {
+    warnings.push("No plate stack — nothing can be served");
+  } else {
+    const here = makeableHere(world);
+    const off = menu.filter((recipe) => !here.has(specKey(recipe.dish)));
+    // All of it gone is one sentence, not three: a room that can cook nothing
+    // has one problem, and listing its symptoms buries it.
+    if (off.length === menu.length && menu.length > 0) {
+      warnings.push("Nothing on the menu can be made here");
+    } else {
+      for (const recipe of off) warnings.push(`${recipe.name} can't be made here`);
+    }
+  }
+
+  // Not about making a dish — about undoing one. Worth a line because the cost
+  // is invisible until the plate you need is under a burnt pizza.
+  if (countKind(world, "bin") === 0) {
+    warnings.push("No bin — a ruined dish has nowhere to go");
+  }
+
+  return warnings;
 }
 
 /** Tables a customer cannot actually reach. Used by the build phase to warn. */
@@ -93,6 +213,16 @@ export function unreachableTables(world: World): Appliance[] {
 export function mealLeft(customer: Customer): number {
   if (customer.state !== "eating") return 1;
   return Math.max(0, Math.min(1, customer.timer / EAT_TIME));
+}
+
+/**
+ * What the stall will charge tonight, so the morning can see it coming.
+ *
+ * Rent is meant to be predictable: a number you can read off the banner while
+ * deciding whether the oven is affordable, not a surprise at closing time.
+ */
+export function rentTonight(world: World): number {
+  return rentFor(world.day);
 }
 
 /**

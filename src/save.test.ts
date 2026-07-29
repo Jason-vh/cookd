@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { LEVEL } from "./data/level";
 import { platesInWorld } from "./sim/plates";
 import { createWorld } from "./sim/world";
-import { migrate, parseSave, restore, saveSignature, snapshot, type Save } from "./save";
+import { BACKFILL_RECIPES } from "./data/progression";
+import { Host } from "./game/host";
+import { SCHEMA, migrate, parseSave, restore, saveSignature, snapshot, type Save } from "./save";
 
 /**
  * A save is the one artefact in this game a player would be genuinely upset to
@@ -36,8 +38,13 @@ describe("round trip", () => {
     const before = world();
     before.money = 137;
     before.day = 4;
-    const oven = [...before.appliances.values()].find((a) => a.kind === "oven")!;
-    oven.tile = { x: 3, y: 3 };
+    // Anything the *player* moved has to come back where they left it. The
+    // level's own crates are the movable thing every kitchen still ships with
+    // now that the heat arrives on a card.
+    const crate = [...before.appliances.values()].find((a) => a.kind === "crate")!;
+    before.applianceAt[crate.tile.y * before.width + crate.tile.x] = 0;
+    crate.tile = { x: 5, y: 5 };
+    before.applianceAt[5 * before.width + 5] = crate.id;
 
     const after = world();
     expect(restore(after, snapshot(before))).toEqual({ ok: true });
@@ -73,7 +80,17 @@ describe("round trip", () => {
 });
 
 describe("a file we cannot trust", () => {
-  const good: Save = { schema: 3, level: LEVEL.id, appliances: [], money: 0, day: 1, plates: 6 };
+  const good: Save = {
+    schema: 5,
+    level: LEVEL.id,
+    appliances: [],
+    money: 0,
+    day: 1,
+    plates: 6,
+    stall: [],
+    unlocked: ["salad"],
+    unlockedDay: 0,
+  };
 
   test("an unknown appliance kind is rejected at the door", () => {
     // This is the eviction loop: `applianceDef(kind).speed` throws inside the
@@ -128,8 +145,8 @@ describe("a file we cannot trust", () => {
       appliances: [
         { kind: "oven", x: -1, y: 3 },
         { kind: "oven", x: 9999, y: 3 },
-        { kind: "oven", x: 0, y: 0 }, // the level's outer wall
-        { kind: "oven", x: 3, y: 3 },
+        { kind: "oven", x: 2, y: 2 }, // the level's outer wall
+        { kind: "oven", x: 5, y: 5 },
       ],
     };
     const target = world();
@@ -166,15 +183,22 @@ describe("migration", () => {
       money: 90,
       day: 6,
       plates: 0,
+      stall: [],
+      unlocked: [],
+      unlockedDay: 0,
     };
     const migrated = migrate(v1);
-    expect(migrated?.schema).toBe(3);
-    expect(migrated?.level).toBe(LEVEL.id);
+    expect(migrated?.schema).toBe(SCHEMA);
+    // Named, not looked up. `LEVEL.id` is whichever kitchen ships today, and a
+    // v1 save belongs to the one that existed when it was written — labelling
+    // it with the current level would restore it into walls that have moved.
+    expect(migrated?.level).toBe("park-kitchen");
 
-    const target = world();
-    expect(restore(target, v1)).toEqual({ ok: true });
-    expect(target.money).toBe(90);
-    expect(target.day).toBe(6);
+    // Which, today, means it is refused: the patio ring gave the kitchen a new
+    // id, and a save whose coordinates predate it is not one we can honour.
+    // Being *carried forward* and being *usable* are different questions, and
+    // the migration only answers the first.
+    expect(restore(world(), v1)).toEqual({ ok: false, reason: "level" });
   });
 
   test("a save from the future is refused rather than half-understood", () => {
@@ -185,6 +209,9 @@ describe("migration", () => {
       money: 0,
       day: 1,
       plates: 6,
+      stall: [],
+      unlocked: [],
+      unlockedDay: 0,
     };
     expect(migrate(future)).toBeNull();
     expect(restore(world(), future)).toEqual({ ok: false, reason: "schema" });
@@ -198,6 +225,9 @@ describe("migration", () => {
       money: 0,
       day: 1,
       plates: 6,
+      stall: [],
+      unlocked: [],
+      unlockedDay: 0,
     };
     expect(migrate(orphan)).toBeNull();
   });
@@ -217,8 +247,104 @@ describe("migration", () => {
       money: 0,
       day: 1,
       plates: 0,
+      stall: [],
+      unlocked: [],
+      unlockedDay: 0,
     };
     expect(migrate(v2)?.plates).toBe(4);
+  });
+
+  test("a v3 save has bought nothing, because there was nowhere to buy it", () => {
+    const v3: Save = {
+      schema: 3,
+      level: LEVEL.id,
+      appliances: [{ kind: "oven", x: 5, y: 5 }],
+      money: 40,
+      day: 2,
+      plates: 4,
+      stall: [],
+      unlocked: [],
+      unlockedDay: 0,
+    };
+    expect(migrate(v3)?.stall).toEqual([]);
+  });
+
+  test("a v4 save is given the menu it was played with", () => {
+    // v4 predates the cards: those kitchens were played against `unlockDay`,
+    // which handed out fries on day two and pizza on day three, and their
+    // layouts still have the fryer and the oven standing in them. Dropping them
+    // back to salad-only would be taking away a restaurant somebody built.
+    const v4: Save = {
+      schema: 4,
+      level: LEVEL.id,
+      appliances: [
+        { kind: "oven", x: 5, y: 5 },
+        { kind: "fryer", x: 6, y: 5 },
+      ],
+      money: 40,
+      day: 7,
+      plates: 4,
+      stall: [],
+      unlocked: [],
+      unlockedDay: 0,
+    };
+    const migrated = migrate(v4);
+    expect(migrated?.unlocked).toEqual(BACKFILL_RECIPES);
+    // Not "unlocked today": there must be no launch-day weighting for a dish
+    // this kitchen has been cooking for a week.
+    expect(migrated?.unlockedDay).toBe(0);
+
+    const target = world();
+    expect(restore(target, v4)).toEqual({ ok: true });
+    expect(target.unlocked).toEqual(BACKFILL_RECIPES);
+    // ...and it keeps the kit it was built with, which the level no longer has.
+    expect(kinds(target, "oven")).toBe(1);
+    expect(kinds(target, "fryer")).toBe(1);
+  });
+});
+
+describe("the menu is part of the run", () => {
+  test("unlocks survive the round trip", () => {
+    const before = world();
+    before.unlocked = ["salad", "fries"];
+    before.unlockedDay = 3;
+    before.day = 3;
+
+    const after = world();
+    expect(restore(after, snapshot(before))).toEqual({ ok: true });
+    expect(after.unlocked).toEqual(["salad", "fries"]);
+    expect(after.unlockedDay).toBe(3);
+  });
+
+  test("a recipe that no longer exists is dropped on the way in", () => {
+    // The menu is the order pool. A customer asking for a dish the content does
+    // not describe is one nobody can ever serve, and a save is a file on disk
+    // that a content change can outlive.
+    const before = world();
+    before.unlocked = ["salad", "souffle"];
+    const after = world();
+    expect(restore(after, snapshot(before))).toEqual({ ok: true });
+    expect(after.unlocked).toEqual(["salad"]);
+  });
+
+  test("unlocking changes the signature, so the room is written", () => {
+    // It once covered only the layout, and a room could reach day five with
+    // money in the bank and never be saved. A menu is the same kind of fact.
+    const target = world();
+    const before = saveSignature(target);
+    target.unlocked = [...target.unlocked, "fries"];
+    expect(saveSignature(target)).not.toBe(before);
+  });
+
+  test("a reset keeps the menu and takes back the kitchen", () => {
+    // Reset un-wrecks the layout; it does not delete history. The days spent on
+    // those cards were really spent.
+    const host = new Host();
+    host.world.unlocked = ["salad", "fries", "pizza"];
+    host.world.unlockedDay = 4;
+    host.reset();
+    expect(host.world.unlocked).toEqual(["salad", "fries", "pizza"]);
+    expect(host.world.unlockedDay).toBe(4);
   });
 });
 

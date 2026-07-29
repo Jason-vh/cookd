@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LEVEL } from "../src/data/level";
 import { PROTOCOL_VERSION } from "../src/game/protocol";
 import { parseServerMessage } from "../src/game/wire";
 import type { ServerMessage } from "../src/game/protocol";
@@ -121,7 +122,7 @@ describe("the handshake", () => {
     const client = await connected("HELLO", "Ann", 2);
     const welcome = await client.waitFor("welcome");
     expect(welcome?.t === "welcome" && welcome.you.length).toBe(2);
-    expect(welcome?.t === "welcome" && welcome.level).toBe("park-kitchen");
+    expect(welcome?.t === "welcome" && welcome.level).toBe(LEVEL.id);
     expect(welcome?.t === "welcome" && welcome.layout.appliances.length).toBeGreaterThan(20);
     client.close();
   });

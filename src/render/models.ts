@@ -469,6 +469,107 @@ const fries: Builder = (parent, item, y) => {
   void item;
 };
 
+/**
+ * A loaf. Baked bread is the oven's cheap dish, so it has to read as bread from
+ * across the room and at a third scale on a recipe card.
+ */
+const bread: Builder = (parent, item, y) => {
+  const baked = item.processes.includes("baked");
+  const crust = baked ? PALETTE.crustBaked : PALETTE.crustRaw;
+  const loaf = put(parent, mesh(roundedBox(0.34, 0.19, 0.22, 0.09), crust, "food"), 0, y + 0.1, 0);
+  loaf.scale.set(1, 1, 1);
+  // Three slashes across the top: the one detail that says "loaf" rather than
+  // "beige box".
+  for (let i = 0; i < 3; i++) {
+    const slash = put(
+      parent,
+      mesh(roundedBox(0.05, 0.02, 0.15, 0.008), PALETTE.doughDust, "food"),
+      (i - 1) * 0.09,
+      y + 0.185,
+      0,
+    );
+    slash.rotation.y = 0.4;
+  }
+};
+
+/**
+ * Fries with cheese over them: the carton again, plus the melt.
+ *
+ * Built from the same carton as `fries` on purpose — the dish is the dish you
+ * already know with something on it, and drawing it from scratch would let the
+ * two drift apart.
+ */
+const cheesefries: Builder = (parent, item, y) => {
+  fries(parent, item, y);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + 0.3;
+    const r = 0.04 + wobble(41, i) * 0.05;
+    const melt = put(
+      parent,
+      mesh(roundedBox(0.075, 0.028, 0.075, 0.014), PALETTE.cheese, "food"),
+      Math.cos(a) * r,
+      y + 0.32 + wobble(42, i) * 0.05,
+      Math.sin(a) * r,
+    );
+    melt.rotation.set(wobble(43, i) * 0.4, a, wobble(44, i) * 0.4);
+  }
+};
+
+/** Flatbread under a layer of cheese — pale before the oven, golden after. */
+const cheesybread: Builder = (parent, item, y) => {
+  const baked = item.processes.includes("baked");
+  const crust = baked ? PALETTE.crustBaked : PALETTE.crustRaw;
+  put(parent, mesh(cylinder(0.26, 0.24, 0.07), crust, "food"), 0, y + 0.035, 0);
+  put(parent, mesh(torus(0.25, 0.03), crust, "food"), 0, y + 0.06, 0).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + 0.2;
+    const r = i % 2 === 0 ? 0.15 : 0.07;
+    const blob = put(
+      parent,
+      mesh(roundedBox(0.07, 0.025, 0.07, 0.014), PALETTE.cheese, "food"),
+      Math.cos(a) * r,
+      y + 0.085,
+      Math.sin(a) * r,
+    );
+    blob.rotation.y = a;
+  }
+};
+
+/**
+ * A potato straight out of the oven: split open, flesh forked up, no cheese.
+ *
+ * Its own builder rather than a fallback to `potato`, because a baked potato
+ * that looks raw is the quietest kind of content bug — the player is meant to
+ * be able to tell from across the kitchen that the oven is done with it.
+ */
+const splitPotato: Builder = (parent, _item, y) => {
+  const skin = put(parent, mesh(sphere(0.17), PALETTE.potato, "food"), 0, y + 0.09, 0);
+  skin.scale.set(1.25, 0.62, 0.92);
+  const flesh = put(
+    parent,
+    mesh(roundedBox(0.26, 0.05, 0.14, 0.04), PALETTE.potatoFlesh, "food"),
+    0,
+    y + 0.15,
+    0,
+  );
+  flesh.rotation.y = 0.12;
+};
+
+/** The dish: the same split potato, with cheese melting into it. */
+const bakedpotato: Builder = (parent, item, y) => {
+  splitPotato(parent, item, y);
+  for (let i = 0; i < 5; i++) {
+    const melt = put(
+      parent,
+      mesh(roundedBox(0.06, 0.03, 0.06, 0.014), PALETTE.cheese, "food"),
+      (i - 2) * 0.05 + wobble(45, i) * 0.02,
+      y + 0.18,
+      wobble(46, i) * 0.04,
+    );
+    melt.rotation.y = wobble(47, i);
+  }
+};
+
 // --- containers and failure states -------------------------------------------
 
 /** One piece of crockery: the dish, and the leftovers if it is a used one. */
@@ -597,6 +698,10 @@ const BASE_MODELS: Record<IngredientId, Builder> = {
   pizza,
   salad,
   fries,
+  bread,
+  cheesefries,
+  cheesybread,
+  bakedpotato,
   plate,
 };
 
@@ -614,6 +719,7 @@ const STATE_MODELS: Record<string, Builder> = {
   "lettuce|chopped": choppedLettuce,
   "cheese|chopped": choppedCheese,
   "potato|chopped": choppedPotato,
+  "potato|baked": splitPotato,
 };
 
 /** Which ingredient bases have a model. For the coverage test. */

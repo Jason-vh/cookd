@@ -22,12 +22,15 @@ Near term:
   players; if a room ever gets busy, the encoder is one file and the format is
   already split static/dynamic.
 
-- **Shop phase** — spend money on new appliances between days (appliance prices
-  already exist in `data/appliances.ts`). **Extra plates** should be the cheap
-  item on that list: plate count is now real capacity, alongside tables, and
-  buying one is the smallest possible interesting decision. It is also the first
-  thing that will change a kitchen's plate count after creation, which is why
-  the save carries the number rather than deriving it from the level.
+- **Upgrade appliances** — a double fryer, a pro board, an oven with a bell. The
+  [stall](the-shop.md) exists and sells the kinds that already exist; the next
+  slice is kinds that are *better*, which is the first time a purchase changes
+  how the kitchen works rather than how much of it there is. Deliberately not
+  anticipated anywhere in the shop's code.
+- **A menu cap** — [recipe cards](the-menu.md) ship without one: nothing stops a
+  room unlocking the whole library. Deferred on purpose until the library is
+  bigger than about five dishes, because "which five do we keep" is only a
+  decision when keeping one means dropping another. There is no hook for it.
 - **More content** — soups (pots + liquids), drinks, sides.
 - **Juice** — pickup/serve/burn sounds, steam and sizzle particles, screen shake
   on burn.
@@ -42,13 +45,20 @@ Bigger:
 
 - **Delta frames and interest management.** Only send what changed, and only to
   players who can see it. Neither is needed at one kitchen per room.
-- **Kitchen validation in build mode, part two.** The dining room half is done
-  (stranded tables are flagged, and never seated at); the kitchen half — can a
-  chef still reach the pass, the crates, the oven — uses the same flood fill and
-  is not written yet.
+- **Kitchen validation in build mode, part two.** The *content* half is now done
+  (`kitchenWarnings`): a kitchen that cannot make a dish on its own menu says so
+  at day open, derived from the recipes rather than from a list of appliances.
+  What is left is the **reachability** half — can a chef still get to the pass,
+  the crates, the oven — which uses the same flood fill the dining room already
+  does and is not written yet. It should stay a warning: see the note on
+  `ESSENTIAL` for why refusing the sale is the wrong instrument.
 - **Procedural kitchens** and a run-based meta layer à la PlateUp.
 
 ## The build phase
+
+The build phase is the **morning of the upcoming day**, and it is where the shop
+lives. [the-shop.md](the-shop.md) covers the stall, rent, the end-of-day card and
+the patio ring they stand on; what follows is the part that predates all of it.
 
 A held appliance is drawn as a **ghost standing on the tile it would go to**,
 not carried on the chef's head. Balancing an oven on someone's hat is funny
@@ -70,11 +80,15 @@ see-through.
 Dropping onto an occupied tile **swaps**: theirs comes up as yours goes down.
 Rearranging a kitchen is mostly exchanging two appliances, and making that a
 single action beats hunting for a free tile to park one on. Swapping rather than
-destroying also keeps it reversible — there is no way to buy an appliance back
-yet.
+destroying also keeps it reversible — and now that the stall will buy an
+appliance back at half price, reversible is a thing the whole phase promises
+rather than a property of one interaction.
 
-`canPlace()` lives in `sim/systems/interaction.ts` and is used by both the rule
-and the ghost, so the preview and the placement can never disagree.
+`canPlace()` lives in `sim/queries.ts` and is used by both the rule and the
+ghost, so the preview and the placement can never disagree. It asks the *tile*
+whether it is placeable rather than asking whether it is a wall, which is what
+keeps the patio ring out of the kitchen without the function growing a concept
+of "outside".
 
 ## Saving
 
@@ -88,11 +102,20 @@ the oven is. What genuinely belongs to a person rather than to a kitchen — you
 name, how many of you share this screen, your appearance later — stays in the
 browser, in `src/identity.ts`.
 
-Only what a *player* changed is stored: appliance layout, money, day, and how
-many plates the kitchen owns. Items mid-flight, orders and timers are
-deliberately discarded: a save that restores a half-chopped tomato and a ticking
-order is a save that can restore a broken game, and none of it is worth
-resuming.
+Only what a *player* changed is stored: appliance layout, money, day, how many
+plates the kitchen owns, and which stall slots have been emptied. Items
+mid-flight, orders and timers are deliberately discarded: a save that restores a
+half-chopped tomato and a ticking order is a save that can restore a broken
+game, and none of it is worth resuming.
+
+**Immovable appliances are not stored at all.** Walls and the market stall are
+furniture of the *place*, not of anybody's build, so `restore` rebuilds them from
+the level's ASCII. Storing them would mean every save carrying a copy of the
+level — and a save written before a stall existed describing a kitchen with none.
+
+The stall's *stock* is not stored either, because it is a pure function of the
+room's seed and the day. What cannot be recomputed is what somebody already
+bought, and without it "restart the server" would be a way to reroll the shop.
 
 Plates are the exception that proves it. They are finite, so they cannot simply
 be dropped with the rest of the crockery in flight — but *where* they were lying
@@ -128,8 +151,16 @@ deliberately a short list (`plates`, `sink`) rather than "everything the level
 ships" — a save with no oven is a player who moved their oven, and one day it
 will be a player who sold it.
 
+The same rule now covers the **menu**. A save written before the [recipe
+cards](the-menu.md) existed cannot say what a room had unlocked, because rooms
+did not have menus — recipes arrived on a day number. Those kitchens were played
+with salad, fries and pizza, and their layouts still have the fryer and the oven
+standing in them, so that is what they are backfilled with. A schema bump is not
+an excuse to take somebody's restaurant away.
+
 A room is written when what it would save **differs from what is on disk** —
-compared with `saveSignature`, which covers the layout, the money and the day.
+compared with `saveSignature`, which covers the layout, the money, the day, the
+plates, the stall and the menu.
 Checking that rather than "did someone move an appliance" matters: with only the
 layout watched, a room could reach day five with money banked and never be
 written, because nobody had rearranged anything.
@@ -143,6 +174,16 @@ The write points are:
 | The last player leaves | Last chance before the room goes quiet |
 | A room is evicted (10 min empty) | Final flush before it leaves memory |
 | Reset | It is destructive and deliberate |
+
+Buying and selling ride the first of those: a purchase changes the layout (a
+slot empties) as well as the money, so it is already a write point. Both are
+things people would be upset to lose.
+
+A save the server **refuses** is not always a save it must preserve. "We cannot
+parse this" is quarantined; "this belongs to a level that no longer exists" is
+stale, and describes coordinates that have stopped meaning anything. Those used
+to get the same answer, which meant a level id bump would have silently left
+every existing room unable to save again for as long as it was played.
 
 Deliberately *not* every serve: losing the day in progress to a crash is fine,
 losing five days of takings is not.

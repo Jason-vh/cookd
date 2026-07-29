@@ -5,22 +5,29 @@ import {
   MAX_CARRIED_PLATES,
   MAX_PLATES,
   emptyAppliance,
+  mintPlate,
+  plateCount,
+  platesInWorld,
   scrape,
   shelvePlate,
   stackPlates,
   unshelvePlate,
 } from "../plates";
-import type { Appliance, Inputs, Item, Player, World } from "../types";
+import { countKind, isEssential, offerLabel, offerPrice, sellPrice } from "../shop";
+import type { Appliance, Inputs, Item, Offer, Player, World } from "../types";
 import {
   PLAYER_RADIUS,
   applianceAtTile,
   effect,
   inBounds,
   log,
+  nearestFreeTile,
+  spawnAppliance,
   tileIndex,
   touchLayout,
 } from "../world";
 import { acceptDelivery } from "./customers";
+import { useCardStand } from "./cards";
 import { canPlace, customerAt, itemLabel, targetAppliance, targetTile } from "../queries";
 
 export function interactionSystem(world: World, inputs: Inputs): void {
@@ -286,6 +293,7 @@ function usePlateStack(world: World, player: Player, home: Appliance): void {
 function collectTip(world: World, player: Player, appliance: Appliance): void {
   if (appliance.tip <= 0) return;
   world.money += appliance.tip;
+  world.today.tips += appliance.tip;
   effect(world, { kind: "tipped", playerId: player.id, amount: appliance.tip });
   appliance.tip = 0;
 }
@@ -375,6 +383,21 @@ function buildGrab(world: World, player: Player): void {
   if (!inBounds(world, tile.x, tile.y)) return;
   const idx = tileIndex(world, tile.x, tile.y);
 
+  // The stall answers a grab entirely on its own terms, in both directions, so
+  // it goes first. Everything below would otherwise refuse it silently: a stall
+  // slot is immovable, so it cannot be lifted and cannot be placed onto.
+  const faced = applianceAtTile(world, tile.x, tile.y);
+  if (faced?.kind === "stall") {
+    useStall(world, player, faced);
+    return;
+  }
+  // The card stand, for the same reason and on the same terms: immovable, so
+  // every rule below would refuse it silently.
+  if (faced?.kind === "cards") {
+    useCardStand(world, player, faced);
+    return;
+  }
+
   if (player.carriedAppliance !== null) {
     const appliance = world.appliances.get(player.carriedAppliance);
     if (!appliance) {
@@ -422,6 +445,191 @@ function buildGrab(world: World, player: Player): void {
   world.applianceAt[idx] = 0;
   touchLayout(world);
   player.carriedAppliance = appliance.id;
+}
+
+// --- the stall ---------------------------------------------------------------
+
+/**
+ * Face a slot, press `Grab`. That is the whole shop.
+ *
+ * **Zero new verbs.** Empty-handed at a stocked slot buys; carrying an
+ * appliance at an empty one sells; carrying the thing you just bought back to
+ * the slot you bought it from is an undo. Every branch ends in a log line that
+ * names the player, because money is one shared number and the only honest
+ * account of who spent it is the log.
+ */
+function useStall(world: World, player: Player, slot: Appliance): void {
+  if (world.phase !== "build") return; // shuttered; the morning is the decision
+
+  const carried = player.carriedAppliance;
+  if (carried !== null) {
+    const appliance = world.appliances.get(carried);
+    if (appliance) sellToStall(world, player, slot, appliance);
+    else player.carriedAppliance = null;
+    return;
+  }
+
+  // A slot that has already handed something out today is empty, whatever it
+  // still remembers being worth.
+  const offer = slot.taken === null ? slot.offer : null;
+  if (!offer) return;
+
+  const price = offerPrice(offer);
+  if (world.money < price) {
+    // Never a silent no. The log says the number, the slot flashes, and the
+    // player is left knowing exactly what they are short of.
+    refuse(world, slot, `Need $${price} — ${offerLabel(offer)}`);
+    return;
+  }
+
+  if (offer.good === "plate") buyPlate(world, player, slot, offer, price);
+  else buyAppliance(world, player, slot, offer, price);
+}
+
+/**
+ * An appliance leaves the stall as a **held ghost**, exactly as if it had been
+ * lifted off the kitchen floor.
+ *
+ * That is the entire point of routing a purchase through the build phase's
+ * existing verb: the thing you have just bought is already answering "where
+ * would this go", with `canPlace` deciding and the highlight underneath saying
+ * yes or no. A shop that handed you an appliance and then asked you to find it
+ * would be two interactions where one will do.
+ *
+ * It is born held, so it never touches the grid on its way out — see
+ * `spawnAppliance`. Its home tile is the nearest **free** one, which by
+ * construction is neither the door nor the patio: an appliance whose buyer
+ * disconnects has to land somewhere the game is allowed to put it.
+ */
+function buyAppliance(
+  world: World,
+  player: Player,
+  slot: Appliance,
+  offer: Extract<Offer, { good: "appliance" }>,
+  price: number,
+): void {
+  const home = nearestFreeTile(world, slot.tile);
+  if (!home) {
+    refuse(world, slot, "Nowhere to put it");
+    return;
+  }
+
+  const bought = spawnAppliance(world, offer.kind, home, offer.source, player.id);
+  world.money -= price;
+  slot.taken = bought.id;
+  player.carriedAppliance = bought.id;
+  spend(world, slot, price);
+  log(world, `${who(player)} bought a ${offerLabel(offer)}  -$${price}`);
+  touchLayout(world);
+}
+
+/**
+ * A plate is bought into your hands, and is the one thing in the game that did
+ * not exist a moment ago.
+ *
+ * It goes through `mintPlate` so that the kitchen's plate count has exactly one
+ * place it can grow, and so the conservation tests can follow it. There is no
+ * refund: giving the money back would mean destroying the plate, and there are
+ * no destruction paths.
+ */
+function buyPlate(
+  world: World,
+  player: Player,
+  slot: Appliance,
+  offer: Offer,
+  price: number,
+): void {
+  if (player.carried && !isPlate(player.carried)) {
+    refuse(world, slot, "Hands full");
+    return;
+  }
+  if (platesInWorld(world) >= MAX_PLATES) {
+    refuse(world, slot, "That is all the plates a kitchen can hold");
+    return;
+  }
+
+  const plate = mintPlate(world);
+  if (player.carried) {
+    // Onto the pile, if it will go. A chef already holding four is holding four.
+    const stacked = stackPlates(plate, player.carried, MAX_CARRIED_PLATES);
+    if (!stacked) {
+      refuse(world, slot, "Hands full");
+      return;
+    }
+  } else {
+    player.carried = plate;
+  }
+
+  world.money -= price;
+  // No `taken`: a plate cannot be handed back, so the slot is simply empty.
+  slot.offer = null;
+  spend(world, slot, price);
+  log(world, `${who(player)} bought a ${offerLabel(offer)}  -$${price}`);
+  touchLayout(world);
+}
+
+/**
+ * Putting an appliance down on an empty slot sells it — unless it is the one
+ * that came out of that slot this morning, in which case it is an undo.
+ *
+ * Full price back before the day opens, half afterwards. Remorse inside the
+ * morning you bought in is not commerce, and charging for it would make the
+ * shop a place to be careful rather than a place to experiment.
+ */
+function sellToStall(world: World, player: Player, slot: Appliance, appliance: Appliance): void {
+  if (slot.taken !== null && slot.taken === appliance.id && slot.offer) {
+    const price = offerPrice(slot.offer);
+    world.money += price;
+    slot.taken = null;
+    player.carriedAppliance = null;
+    world.appliances.delete(appliance.id);
+    log(world, `${who(player)} put the ${offerLabel(slot.offer)} back  +$${price}`);
+    touchLayout(world);
+    return;
+  }
+
+  if (slot.taken === null && slot.offer) return; // the slot is full; nothing to do
+
+  const def = applianceDef(appliance.kind);
+  if (isEssential(appliance.kind) && countKind(world, appliance.kind) <= 1) {
+    refuse(world, slot, `The kitchen needs its ${def.label.toLowerCase()}`);
+    return;
+  }
+
+  // Plates travel with a lifted plate stack when it is the only one in the
+  // kitchen, so this has to be true rather than assumed: nothing is sold with
+  // crockery still on board.
+  if (plateCount(appliance.item) > 0) {
+    refuse(world, slot, "Take the plates off first");
+    return;
+  }
+
+  const price = sellPrice(appliance.kind);
+  emptyAppliance(world, appliance);
+  world.appliances.delete(appliance.id);
+  player.carriedAppliance = null;
+  world.money += price;
+  // Whatever the slot was holding is gone with the sale: one slot, one thing.
+  slot.offer = null;
+  slot.taken = null;
+  log(world, `${who(player)} sold a ${def.label}  +$${price}`);
+  touchLayout(world);
+}
+
+/** A refusal that can be seen as well as read. */
+function refuse(world: World, slot: Appliance, why: string): void {
+  log(world, why);
+  effect(world, { kind: "refused", tile: slot.tile });
+}
+
+/** Money leaving, drawn where it left from. */
+function spend(world: World, slot: Appliance, amount: number): void {
+  effect(world, { kind: "spent", tile: slot.tile, amount });
+}
+
+/** Who did it. Local players have no name; the kitchen still has to say something. */
+function who(player: Player): string {
+  return player.name || "Chef";
 }
 
 function tileOccupiedByPlayer(world: World, tx: number, ty: number, ignore: number): boolean {

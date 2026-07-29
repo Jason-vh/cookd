@@ -73,6 +73,14 @@ export type ApplianceParts = {
   glass?: THREE.MeshStandardMaterial[];
   /** Bin: flips open when something goes in. */
   lid?: THREE.Object3D;
+  /** Stall: where the goods stand, restocked by `appliance-views.ts`. */
+  counter?: THREE.Object3D;
+  /** Stall: dropped over the goods while the kitchen is in service. */
+  shutter?: THREE.Object3D;
+  /** Card stand: the card itself — hidden on ordinary mornings, lifted when armed. */
+  card?: THREE.Object3D;
+  /** Card stand: where the dish model stands, dressed by `appliance-views.ts`. */
+  cardArt?: THREE.Object3D;
 };
 
 export function buildAppliance(appliance: Appliance): ApplianceParts {
@@ -88,6 +96,10 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   // silhouette instead — see buildBin.
   if (appliance.kind === "bin") {
     root.add(buildBin(parts, h));
+  } else if (appliance.kind === "stall") {
+    buildStall(parts, h);
+  } else if (appliance.kind === "cards") {
+    buildCardStand(parts, h);
   } else if (appliance.kind === "table") {
     buildTable(root, h);
   } else {
@@ -112,8 +124,12 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
 
   // Labels are contextual: hidden until a chef looks at the appliance. Keeping
   // the world label-free is what lets the diorama read as a diorama.
+  //
+  // A stall slot's label is the price of what it is holding, and a card stand's
+  // is the recipe on the card, so both change with their stock and are (re)built
+  // by `appliance-views.ts` instead.
   const label = appliance.source ? ingredient(appliance.source.base).name : look.label;
-  if (label) {
+  if (label && appliance.kind !== "stall" && appliance.kind !== "cards") {
     const sprite = makeLabel(label);
     // Just above the progress bar. depthTest is off, so it draws over a chef
     // standing in front rather than fighting them for space.
@@ -124,6 +140,118 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   }
 
   return parts;
+}
+
+/**
+ * The market stall: a timber counter under a striped awning.
+ *
+ * It is the only structure in the game that faces *outward*, and it is built to
+ * be read from two distances. Close up you are looking at what is on the
+ * counter and the price above it. From across the patio it is a silhouette —
+ * awning, posts, goods — and its state is legible from that silhouette alone:
+ * shutters down means closed, and closed is the answer to "can I buy something
+ * mid-rush".
+ */
+function buildStall(parts: ApplianceParts, h: number): void {
+  const group = parts.root;
+
+  const counter = mesh(roundedBox(0.94, h, 0.94, 0.06), PALETTE.stallBody, "wood");
+  counter.position.y = h / 2;
+  group.add(counter);
+
+  const top = mesh(roundedBox(1.02, 0.08, 1.02, 0.03), PALETTE.stallCounter, "wood");
+  top.position.y = h + 0.02;
+  group.add(top);
+
+  // Where the goods stand. An empty group rather than a mesh: what is on the
+  // counter changes every morning, so the shape of it belongs to whoever knows
+  // what the offer is.
+  const stock = new THREE.Group();
+  stock.position.y = h + 0.06;
+  group.add(stock);
+  parts.counter = stock;
+
+  // Two posts and a canopy. The awning is tilted forward so it catches the key
+  // light on its upper face and shades the goods underneath.
+  const canopyY = h + 0.92;
+  for (const x of [-0.42, 0.42]) {
+    const post = mesh(cylinder(0.035, 0.035, canopyY), PALETTE.stallPost, "wood");
+    post.position.set(x, canopyY / 2, -0.4);
+    group.add(post);
+  }
+
+  const awning = new THREE.Group();
+  awning.position.set(0, canopyY, -0.1);
+  awning.rotation.x = -0.28;
+  for (let i = 0; i < 5; i++) {
+    const stripe = mesh(
+      roundedBox(0.2, 0.05, 0.86, 0.02),
+      i % 2 === 0 ? PALETTE.awning : PALETTE.awningStripe,
+      "ceramic",
+    );
+    stripe.position.x = -0.4 + i * 0.2;
+    awning.add(stripe);
+  }
+  group.add(awning);
+
+  // Shutters: hidden in the build phase, dropped during service. Positioned to
+  // fill the gap between counter and awning exactly, so "closed" is a solid
+  // face rather than a board hanging in the air.
+  const shutter = mesh(roundedBox(0.9, 0.82, 0.06, 0.02), PALETTE.shutter, "wood");
+  shutter.position.set(0, h + 0.44, -0.36);
+  shutter.visible = false;
+  group.add(shutter);
+  parts.shutter = shutter;
+}
+
+/**
+ * The recipe card stand: an easel on the apron, with a card on it or without.
+ *
+ * The **easel is always there** and the card is not. A stand that vanished
+ * entirely on ordinary mornings would be an invisible thing to walk into — it
+ * is furniture standing on the patio, and the patio is walked over by every
+ * customer in the park. So it follows the stall's grammar instead: the place is
+ * permanent, and whether it is *open* is legible from across the patio. Empty
+ * easel, nothing to decide.
+ */
+function buildCardStand(parts: ApplianceParts, h: number): void {
+  const group = parts.root;
+
+  // Two splayed legs and a crossbar: an easel reads as "something is displayed
+  // here" from any angle, which a plinth does not.
+  for (const x of [-0.26, 0.26]) {
+    const leg = mesh(cylinder(0.032, 0.038, h * 1.1), PALETTE.cardEasel, "wood");
+    leg.position.set(x, (h * 1.1) / 2, 0.06);
+    leg.rotation.z = x > 0 ? -0.12 : 0.12;
+    group.add(leg);
+  }
+  const rail = mesh(roundedBox(0.62, 0.05, 0.09, 0.02), PALETTE.cardEasel, "wood");
+  rail.position.set(0, h * 0.62, 0.02);
+  group.add(rail);
+
+  // The card: its own group so it can be hidden, and lifted while somebody is
+  // considering it. Tilted back like a menu board, so the camera reads the face
+  // rather than the edge.
+  const card = new THREE.Group();
+  card.position.set(0, h * 0.98, 0);
+  card.rotation.x = -0.34;
+  card.visible = false;
+  group.add(card);
+  parts.card = card;
+
+  const backing = mesh(roundedBox(0.68, 0.86, 0.04, 0.03), PALETTE.cardEdge, "wood");
+  card.add(backing);
+  const face = mesh(roundedBox(0.6, 0.78, 0.02, 0.02), PALETTE.cardFace, "ceramic");
+  face.position.z = 0.03;
+  card.add(face);
+
+  // Where the dish stands. Rotated back out of the card's tilt so the food is
+  // upright: a pizza lying at 20 degrees reads as a pizza sliding off a plate.
+  const art = new THREE.Group();
+  art.position.set(0, 0.06, 0.12);
+  art.rotation.x = 0.34;
+  card.add(art);
+  parts.cardArt = art;
 }
 
 /**
@@ -204,6 +332,10 @@ type Look = {
 const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // Enamel bodies for anything that would really be enamelled steel.
   wall: { body: [PALETTE.wood, "wood"] },
+  // Built by `buildStall`, and labelled with a price rather than a name.
+  stall: { body: [PALETTE.stallBody, "wood"] },
+  // Built by `buildCardStand`, and labelled with whatever is on the card.
+  cards: { body: [PALETTE.cardEasel, "wood"] },
   counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"] },
   board: { body: [PALETTE.wood, "wood"], top: [PALETTE.boardTop, "wood"], label: "Chop" },
   fryer: { body: [PALETTE.fryerBody, "enamel"], top: [PALETTE.ceramic, "enamel"], label: "Fryer" },

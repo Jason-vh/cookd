@@ -8,11 +8,12 @@ between days.
 Inspirations: **Overcooked** (moment-to-moment chaos, hold-to-chop, plate-and-serve
 loop) and **PlateUp!** (kitchen as a thing you design and optimise across days).
 
-Status: **playable, and multiplayer.** Multiple chefs, three recipes, burning, a
-dining room with customers who walk in, sit, order, eat and leave, tips left on
-tables, a sink and a kitchen with only six plates to its name, a day loop, a
-build phase where appliances can be moved — and a server so the chefs can be in
-different countries.
+Status: **playable, and multiplayer.** Multiple chefs, a kitchen that starts with
+one dish and buys the rest from recipe cards, burning, a dining room with
+customers who walk in, sit, order, eat and leave, tips left on tables, a sink and
+a kitchen with only four plates to its name, a day loop that begins in the
+morning, a market stall on the patio to spend the takings at, rent waiting at
+closing time — and a server so the chefs can be in different countries.
 
 ---
 
@@ -69,7 +70,8 @@ The white square in front of your chef is what you'll interact with.
 3. Pick it back up and combine it with something else by placing it on top.
 4. Cook where needed (fryer/oven run on their own — and **will burn**). A
    working fryer bubbles and an oven's window glows, so you can read the state
-   of the kitchen from across it.
+   of the kitchen from across it. A new kitchen has neither: heat arrives with
+   the recipe that calls for it (step 11).
 5. Plate it: carry a plate onto the food, or the food onto a plate — either way
    round works, and you can **assemble on the plate**: drop chopped tomato onto
    a plate of chopped lettuce and you get a salad. Carrying food to the plate
@@ -82,7 +84,7 @@ The white square in front of your chef is what you'll interact with.
 7. When they finish eating they leave behind a **dirty plate and a tip**. Pick
    the plate up and the tip is yours. A table with a plate still on it cannot be
    sat at, so clearing up *is* the capacity.
-8. **Wash up.** Your kitchen owns six plates and no more, so the dirty ones have
+8. **Wash up.** Your kitchen owns four plates and no more, so the dirty ones have
    to come back. Plates **stack in your hands** — up to four — so one sweep
    clears a room: grab from each table in turn, drop the pile in the **sink**,
    and hold `Use` to scrub. One plate per fill of the dial; the pile stays
@@ -93,12 +95,37 @@ The white square in front of your chef is what you'll interact with.
    Ruined a dish? The **bin scrapes it** — the food goes and you keep the plate,
    dirty. There is no way to throw a plate away, and no way to get another one.
 9. When the day timer hits zero — or you pick **Close up early** from the pause
-   menu — you enter the **build phase**: face any appliance and `Grab` to pick
-   it up. A **ghost** of it appears on the tile you're facing, showing exactly
-   where it will land; `Grab` again to put it there. Drop it onto another
-   appliance and the two **swap**. Tables are appliances too, so where the
-   dining room goes is your decision. `Start` opens the next day (customers
-   arrive faster each day).
+   menu — **rent comes out of the till** and you wake into the next day's
+   **morning**. Face any appliance and `Grab` to pick it up. A **ghost** of it
+   appears on the tile you're facing, showing exactly where it will land;
+   `Grab` again to put it there. Drop it onto another appliance and the two
+   **swap**. Tables are appliances too, so where the dining room goes is your
+   decision. `Start` opens the day when the room is ready.
+10. **Go shopping.** Out of the door and to the left, three slots of a market
+    stall are stocked fresh each morning. Face one and `Grab`: the price comes
+    out of the till and the thing appears as a ghost in your hands, ready to
+    place. Put it straight back on the same slot and you get every penny back;
+    put *anything else* on an empty slot and the stall buys it off you for half.
+    Plates are on sale too, and they are the only way a kitchen ever gets a
+    fifth one.
+
+    The stall is shuttered during service. Mornings are when a kitchen changes.
+
+    **Buy tables carefully.** Customers arrive faster when there are free seats
+    waiting, so a bigger dining room is a busier one. That is the difficulty
+    dial, and it is in your hands.
+
+11. **Choose what you cook.** You start with one dish — a garden salad — and
+    that is the whole menu. On the morning of day 2, and every third morning
+    after, **two recipe cards** stand on the apron beside the stall. Face one and
+    `Grab` to lift it (the log says who is considering what), `Grab` again to
+    take it. It is a choice *between* the two: the other card leaves with it.
+
+    The card is free, and so is everything the kitchen lacks for it — pick
+    Fries and a fryer and a potato crate are delivered onto the floor before
+    service, for you to place where you want them. Ignore both cards if you
+    like; the next pair still comes on schedule. By day 10 no two kitchens are
+    the same restaurant. See [the menu](docs/the-menu.md).
 
 Grabbed the wrong thing? Put it back where you got it: a **source takes back
 exactly what it hands out**, so an untouched tomato returns to its crate and a
@@ -106,9 +133,11 @@ clean plate returns to the stack. Once you've changed it — chopped, cooked or
 loaded — the crate won't have it, and ruined food goes in the bin.
 
 **Your kitchen is saved.** Rearrange it in the build phase and it will be there
-after a refresh — on the server, per room. *Reset kitchen* in the build-phase
-pause menu restores the original layout, **for everyone in the room**; the log
-says who did it.
+after a refresh — on the server, per room, along with the recipes you have
+unlocked. *Reset kitchen* in the build-phase pause menu restores the original
+layout, **for everyone in the room**; the log says who did it. It keeps the
+menu: reset un-wrecks the layout, it does not delete the days you spent on
+cards.
 
 ---
 
@@ -127,6 +156,8 @@ noticing. [A test](docs/docs.test.ts) now catches that much.
 | [Multiplayer](docs/multiplayer.md) | Three clocks, prediction, and what happens when a connection drops. |
 | [The content model](docs/content.md) | Items, transforms, combines, recipes and levels — everything that is data. Read this to add a dish. |
 | [The dining room](docs/dining-room.md) | Customers: arriving, seating, patience, eating, tips. |
+| [The shop](docs/the-shop.md) | The morning, the market stall, rent, and the patio they stand on. |
+| [The menu](docs/the-menu.md) | Recipe cards: how a kitchen chooses what it cooks, and the equipment that comes with it. |
 | [Art direction](docs/art-direction.md) | The look, the biomes, and the rendering gotchas behind both. |
 | [Performance](docs/performance.md) | The frame budget and the wire budget, and where each one goes. |
 | [Testing](docs/testing.md) | What is covered, and what is only ever checked by hand. |

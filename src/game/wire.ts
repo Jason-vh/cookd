@@ -1,6 +1,14 @@
 import type { ClientMessage, Frame, Layout, ServerMessage } from "./protocol";
 import { MAX_PLATES } from "../sim/plates";
-import type { ApplianceKind, CustomerState, Item, Motion, PlayerInput } from "../sim/types";
+import type {
+  ApplianceKind,
+  CustomerState,
+  Item,
+  Ledger,
+  Motion,
+  Offer,
+  PlayerInput,
+} from "../sim/types";
 
 /**
  * The edge of trust.
@@ -84,6 +92,12 @@ function optionalInt(value: unknown): number | null | undefined {
   return int(value) ?? undefined;
 }
 
+/** A string that is allowed to be absent. `undefined` means "present, and not a string". */
+function optionalStr(value: unknown, max: number): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  return str(value, max) ?? undefined;
+}
+
 function arr(value: unknown, max: number): unknown[] | null {
   return Array.isArray(value) && value.length <= max ? value : null;
 }
@@ -129,6 +143,16 @@ const MAX_PROCESSES = 8;
  * note on `APPLIANCE_KINDS` below is about.
  */
 const MAX_CONTENTS = MAX_PLATES;
+/**
+ * How many recipes a room can claim to have unlocked.
+ *
+ * Generous against the library rather than equal to it, because the client and
+ * the server can be one deploy apart and a newer server legitimately knows more
+ * dishes than we do. Unknown ids are dropped where the menu is *read* (see
+ * `unlockedRecipes`), which is the right place for that: rejecting the whole
+ * frame would freeze a kitchen over a recipe nobody had ordered yet.
+ */
+const MAX_UNLOCKED = 64;
 
 // --- items --------------------------------------------------------------------
 
@@ -252,6 +276,14 @@ function parseLayout(value: unknown): Layout | null {
   const raw = arr(value.appliances, MAX_APPLIANCES);
   if (!raw) return null;
 
+  // The menu. Bounded by the library's size rather than by a round number: a
+  // list longer than every recipe there is cannot be a menu, whatever it is.
+  const rawUnlocked = arr(value.unlocked, MAX_UNLOCKED);
+  if (!rawUnlocked) return null;
+  const unlocked = all(rawUnlocked, (entry) => str(entry, MAX_NAME));
+  const unlockedDay = int(value.unlockedDay);
+  if (!unlocked || unlockedDay === null || unlockedDay < 0) return null;
+
   const appliances = all(raw, (entry) => {
     if (!isRecord(entry)) return null;
     const id = int(entry.id);
@@ -266,9 +298,15 @@ function parseLayout(value: unknown): Layout | null {
     const source =
       entry.source === null || entry.source === undefined ? null : parseSpec(entry.source);
     if (source === undefined) return null;
-    return { id, kind, x, y, source };
+    const offer = parseOffer(entry.offer);
+    if (offer === undefined) return null;
+    const taken = optionalInt(entry.taken);
+    if (taken === undefined) return null;
+    const card = optionalStr(entry.card, MAX_NAME);
+    if (card === undefined) return null;
+    return { id, kind, x, y, source, offer, taken, card };
   });
-  return appliances === null ? null : { appliances };
+  return appliances === null ? null : { appliances, unlocked, unlockedDay };
 }
 
 /**
@@ -287,6 +325,8 @@ function parseLayout(value: unknown): Layout | null {
  */
 const APPLIANCE_KINDS: Record<ApplianceKind, true> = {
   wall: true,
+  stall: true,
+  cards: true,
   counter: true,
   board: true,
   fryer: true,
@@ -303,6 +343,27 @@ function isApplianceKind(value: string): value is ApplianceKind {
 }
 
 type Spec = NonNullable<Layout["appliances"][number]["source"]>;
+
+/**
+ * What a stall slot is selling. `undefined` for "present but malformed".
+ *
+ * The `good` tag is checked rather than trusted, because it is what decides
+ * whether a purchase hands over an appliance or mints a plate — the one wire
+ * field that can add crockery to a kitchen.
+ */
+function parseOffer(value: unknown): Offer | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) return undefined;
+  if (value.good === "plate") return { good: "plate" };
+  if (value.good !== "appliance") return undefined;
+  const kind = str(value.kind, MAX_NAME);
+  if (kind === null || !isApplianceKind(kind)) return undefined;
+  if (value.source === null || value.source === undefined) {
+    return { good: "appliance", kind, source: null };
+  }
+  const source = parseSpec(value.source);
+  return source === undefined ? undefined : { good: "appliance", kind, source };
+}
 
 /** Returns `undefined` for "present but malformed", distinct from a real absence. */
 function parseSpec(value: unknown): Spec | undefined {
@@ -344,6 +405,9 @@ function parseFrame(value: unknown): Frame | null {
   if (money === null || served === null || lost === null) return null;
   if (value.phase !== "service" && value.phase !== "build") return null;
 
+  const today = parseLedger(value.today);
+  if (!today) return null;
+
   const rawCustomers = arr(value.customers, MAX_ENTITIES);
   const rawPlayers = arr(value.players, MAX_ENTITIES);
   const rawAppliances = arr(value.appliances, MAX_APPLIANCES);
@@ -377,6 +441,7 @@ function parseFrame(value: unknown): Frame | null {
     money,
     served,
     lost,
+    today,
     customers,
     events,
     effects,
@@ -384,6 +449,29 @@ function parseFrame(value: unknown): Frame | null {
     appliances,
     acks,
   };
+}
+
+/** One day's takings. The `lost` map is keyed by recipe id, so it is bounded. */
+function parseLedger(value: unknown): Ledger | null {
+  if (!isRecord(value)) return null;
+  const day = int(value.day);
+  const earned = num(value.earned);
+  const tips = num(value.tips);
+  const rent = num(value.rent);
+  const served = int(value.served);
+  if (day === null || earned === null || tips === null) return null;
+  if (rent === null || served === null) return null;
+  if (!isRecord(value.lost)) return null;
+
+  const entries = Object.entries(value.lost);
+  if (entries.length > MAX_EVENTS) return null;
+  const lost: Record<string, number> = {};
+  for (const [key, raw] of entries) {
+    const count = int(raw);
+    if (key.length > MAX_NAME || count === null) return null;
+    lost[key] = count;
+  }
+  return { day, earned, tips, rent, served, lost };
 }
 
 function parseFrameCustomer(value: unknown): Frame["customers"][number] | null {
@@ -440,12 +528,13 @@ function parseFrameAppliance(value: unknown): Frame["appliances"][number] | null
   const item = parseNullableItem(value.item);
   if (item === undefined) return null;
   const heldBy = optionalInt(value.heldBy);
-  if (heldBy === undefined) return null;
+  const armedBy = optionalInt(value.armedBy);
+  if (heldBy === undefined || armedBy === undefined) return null;
 
   const motion = value.motion === null ? null : parseMotion(value.motion);
   if (motion === undefined) return null;
 
-  return { id, item, progress, overcook, motion, heldBy, justFinished, tip };
+  return { id, item, progress, overcook, motion, heldBy, justFinished, tip, armedBy };
 }
 
 /** Exhaustive by type — see the note on `APPLIANCE_KINDS`. */
@@ -494,9 +583,16 @@ function parseEffect(value: unknown): Frame["effects"][number] | null {
       return { kind: "paid", tile, amount, id, ttl };
     }
     case "binned":
-    case "walkout": {
+    case "walkout":
+    case "refused": {
       const tile = parseTile(value.tile);
       return tile ? { kind: value.kind, tile, id, ttl } : null;
+    }
+    case "spent": {
+      const tile = parseTile(value.tile);
+      const amount = num(value.amount);
+      if (!tile || amount === null) return null;
+      return { kind: "spent", tile, amount, id, ttl };
     }
     default:
       return null;

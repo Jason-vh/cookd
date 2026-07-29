@@ -1,5 +1,6 @@
-import { isLastOrders } from "../sim/queries";
-import type { World } from "../sim/types";
+import { RECIPE_BY_ID } from "../data/recipes";
+import { isLastOrders, rentTonight } from "../sim/queries";
+import type { Ledger, World } from "../sim/types";
 
 /**
  * DOM HUD. Kept out of the WebGL layer on purpose: text, layout and
@@ -39,6 +40,15 @@ export class Hud {
   private readonly stats = new Map<StatKey, Element>();
   /** Timers from `notify`, cancelled on teardown. */
   private readonly notices = new Set<ReturnType<typeof setTimeout>>();
+  /**
+   * The morning the summary has already been dismissed for.
+   *
+   * Shell state, not simulation state: one player folding the card away is not
+   * a thing the kitchen needs an opinion about, and it certainly is not a thing
+   * that should fold it away on somebody else's screen. Keyed by day so the
+   * next morning's card comes back on its own.
+   */
+  private dismissed = 0;
 
   constructor(root: HTMLElement) {
     root.innerHTML = `
@@ -158,7 +168,25 @@ export class Hud {
   }
 
   /**
-   * The end-of-day card.
+   * Fold away the end-of-day card, leaving the morning banner.
+   *
+   * Called by the shell when anybody presses confirm. The card must never trap
+   * a player: it is a report, the kitchen behind it is playable, and the same
+   * button that dismisses it is the one they already know.
+   */
+  dismissSummary(world: World): void {
+    this.dismissed = world.day;
+  }
+
+  /**
+   * The morning banner, and the day that just closed.
+   *
+   * The build phase is now the **morning of the upcoming day**, so this is two
+   * things stacked: a report on yesterday, and one unmissable instruction for
+   * today. Day one has no yesterday, which is exactly the case that has to work
+   * hardest — a player alone in a kitchen that will not start until they press
+   * something. That instruction is the entire tutorial budget, so it is spent
+   * on prominence rather than on a new screen.
    *
    * Built once and updated by `textContent`, rather than rebuilt as an HTML
    * string every frame. Reading `card.innerHTML` to compare forced the browser
@@ -171,21 +199,59 @@ export class Hud {
     this.banner.classList.toggle("show", show);
     if (!show) return;
     if (this.bannerCard.childElementCount === 0) this.buildBannerCard();
-    this.setBanner("title", `Day ${world.day} closed`);
+
+    const closed = world.today;
+    // A ledger for a day nobody played is not a report; day one has nothing to
+    // say and should not pretend otherwise.
+    const hasReport = closed.day < world.day && this.dismissed !== world.day;
+    this.bannerCard.classList.toggle("with-report", hasReport);
+
+    this.setBanner("title", `Day ${world.day} \u2014 morning`);
+    this.setBanner("open", "Press Start to open");
+    this.setBanner("rent", `Rent tonight $${rentTonight(world)} \u00b7 Balance $${world.money}`);
+    if (hasReport) this.setReport(closed, world.money);
+  }
+
+  /** Yesterday, in one card: what came in, what went out, and what was missed. */
+  private setReport(closed: Ledger, balance: number): void {
+    this.setBanner("report-title", `Day ${closed.day}`);
     this.setBanner(
-      "summary",
-      `$${world.money} earned \u00b7 ${world.served} served \u00b7 ${world.lost} walked out`,
+      "report",
+      [
+        `Earned $${closed.earned}`,
+        `Tips $${closed.tips}`,
+        `Rent \u2212$${closed.rent}`,
+        `Balance $${balance}`,
+      ].join(" \u00b7 "),
     );
-    this.setBanner("next", `Rearrange the kitchen, then open for day ${world.day + 1}.`);
+    const lost = Object.entries(closed.lost)
+      .map(([id, count]) => `${count} \u00d7 ${RECIPE_BY_ID.get(id)?.name ?? id}`)
+      .join(", ");
+    this.setBanner(
+      "report-service",
+      `${closed.served} served` + (lost ? ` \u00b7 walked out: ${lost}` : ""),
+    );
   }
 
   private buildBannerCard(): void {
+    const reportTitle = document.createElement("h2");
+    reportTitle.dataset.banner = "report-title";
+    reportTitle.className = "report-line";
+    const report = document.createElement("p");
+    report.dataset.banner = "report";
+    report.className = "report-line";
+    const service = document.createElement("p");
+    service.dataset.banner = "report-service";
+    service.className = "report-line";
+
     const title = document.createElement("h1");
     title.dataset.banner = "title";
-    const summary = document.createElement("p");
-    summary.dataset.banner = "summary";
-    const next = document.createElement("p");
-    next.dataset.banner = "next";
+    const open = document.createElement("p");
+    open.dataset.banner = "open";
+    open.className = "banner-open";
+    const rent = document.createElement("p");
+    rent.dataset.banner = "rent";
+
     const keys = document.createElement("p");
     keys.className = "banner-keys";
     for (const key of ["Enter", "Y"]) {
@@ -194,7 +260,7 @@ export class Hud {
       keys.append(span, " ");
     }
     keys.append("or the pause menu");
-    this.bannerCard.replaceChildren(title, summary, next, keys);
+    this.bannerCard.replaceChildren(reportTitle, report, service, title, open, rent, keys);
   }
 
   private setBanner(key: string, value: string): void {
@@ -211,7 +277,7 @@ export class Hud {
  * customers are coming, and the day ends when these ones do.
  */
 function dayPhase(world: World): string {
-  if (world.phase !== "service") return "Time";
+  if (world.phase !== "service") return "Preparing";
   if (world.dayTime <= 0) return "Closing";
   if (isLastOrders(world)) return "Last orders";
   return "Time";

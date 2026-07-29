@@ -8,9 +8,19 @@ import type { ApplianceKind, ItemSpec, Vec2 } from "../sim/types";
  *   S  sink            X  bin            .  floor          T  table
  *   D  door            t/l/c/p  crates: tomato / lettuce / cheese / potato
  *   f/w                crates: flour / water
+ *   ,  patio           $  market stall   ?  recipe card stand
  *
  * One grid, one collision system: the dining room is simply the western half
- * of the same rectangle.
+ * of the same rectangle, and the **patio ring** around the outside is more of
+ * the same rectangle again.
+ *
+ * The ring is what makes "outside" a place rather than a painted backdrop. The
+ * renderer has always drawn a paved patio under the kitchen; now the paving a
+ * player can see, the tiles collision allows and the map the simulation
+ * believes in are the same thing. It costs two columns and two rows, and it
+ * buys the market stall a place to stand and the wall-embedded ovens a back
+ * side to be reached from — the walk around the building being the honest
+ * price of using it.
  *
  * The **pass** is not an appliance kind — it is two ordinary counters standing
  * in the dividing wall. It used to be its own thing back when food vanished
@@ -56,6 +66,8 @@ export type TileSpec =
   | { kind: "wall" }
   /** Walkable floor, and where customers enter and leave from. */
   | { kind: "door" }
+  /** Walkable paving outside the walls. Nothing may be built on it. */
+  | { kind: "patio" }
   | { kind: "appliance"; appliance: ApplianceKind; source?: ItemSpec };
 
 const crate = (base: string): TileSpec => ({
@@ -67,6 +79,14 @@ const crate = (base: string): TileSpec => ({
 export const LEGEND: Record<string, TileSpec> = {
   ".": { kind: "floor" },
   "#": { kind: "wall" },
+  ",": { kind: "patio" },
+  // The stall is furniture the *level* owns, like the walls: immovable, and
+  // therefore never written to a save (see `snapshot`). Where the shop stands
+  // is a property of the place, not of anybody's build.
+  $: { kind: "appliance", appliance: "stall" },
+  // Same deal, one apron along: where the menu grows is a property of the
+  // place, not of anybody's build. Bare on most mornings — see `sim/cards.ts`.
+  "?": { kind: "appliance", appliance: "cards" },
   "=": { kind: "appliance", appliance: "counter" },
   B: { kind: "appliance", appliance: "board" },
   F: { kind: "appliance", appliance: "fryer" },
@@ -87,33 +107,56 @@ export const LEGEND: Record<string, TileSpec> = {
 };
 
 export const PARK_KITCHEN: LevelDef = {
-  id: "park-kitchen",
+  // `-2` because the patio ring moved every tile in the kitchen two columns
+  // east and two rows south. A save from before it describes a kitchen whose
+  // coordinates no longer mean the same thing, and there is no honest way to
+  // shift them: the layout a player built was relative to walls that have
+  // moved. A new id drops those files cleanly instead of loading them
+  // misaligned — which is exactly what the id is for.
+  id: "park-kitchen-2",
   name: "Park Kitchen",
   biome: "park",
   dayLength: 150,
-  plates: 6,
-  // Dining room (x 0..6) | dividing wall, walk-through gap and pass (x 7) |
-  // kitchen (x 8..19).
+  // Two spare over the seat count, as ever — the rule survives the kitchen
+  // getting smaller, which is the point of stating it as a rule.
+  plates: 4,
+  // Patio (x 0..1) | dining room (x 3..8) | dividing wall, walk-through gap
+  // and pass (x 9) | kitchen (x 10..20) | patio again (x 22..23).
   //
   // The sink starts next to the plate stack, so washing up and putting away is
   // one move by default. Whether that is where it belongs — against the run to
   // the pass, and the walk back from the tables — is the build phase's problem,
   // and the point of it.
+  //
+  // One board and two tables is a **deliberately thin** kitchen: the stall on
+  // the west apron is where the second of each comes from, and a shop nobody
+  // needs to visit teaches nothing.
+  //
+  // **The level is a starting point, not an endpoint.** There is no fryer, no
+  // oven, and no crate but tomato and lettuce, because a kitchen contains only
+  // what its menu needs and the menu is one salad. Equipment enters this world
+  // through the card stand (`?`), which delivers whatever a new recipe wants —
+  // so by day ten no two rooms are the same restaurant. Saves written against
+  // the older, richer layout keep it: this describes what a *new* room gets.
   rows: [
-    "####################",
-    "#......#tlcfwpPS==X#",
-    "#.T..T.#...........#",
-    "#........=B=.......#",
-    "D......=...........O",
-    "#......=...........O",
-    "#.T..T.#.=B=.......#",
-    "#......#.......===F#",
-    "####################",
+    ",,,,,,,,,,,,,,,,,,,,,,,,",
+    ",,,,,,,,,,,,,,,,,,,,,,,,",
+    ",,####################,,",
+    "$,#......#tl....PS==X#,,",
+    "$,#.T....#...........#,,",
+    "$,#........=B=.......#,,",
+    ",,D......=...........#,,",
+    "?,#......=...........#,,",
+    "?,#.T....#.===.......#,,",
+    ",,#......#...........#,,",
+    ",,####################,,",
+    ",,,,,,,,,,,,,,,,,,,,,,,,",
+    ",,,,,,,,,,,,,,,,,,,,,,,,",
   ],
   spawns: [
-    { x: 10, y: 4 },
-    { x: 13, y: 4 },
-    { x: 16, y: 4 },
+    { x: 12, y: 6 },
+    { x: 15, y: 6 },
+    { x: 18, y: 6 },
   ],
 };
 

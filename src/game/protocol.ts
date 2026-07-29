@@ -4,6 +4,7 @@ import type {
   Customer,
   Effect,
   Item,
+  Ledger,
   Phase,
   Player,
   PlayerInput,
@@ -25,7 +26,16 @@ import type {
  * when it changes.
  */
 
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped whenever a message shape changes in a way an older peer cannot read.
+ *
+ * v2 added the menu to the layout — which recipes a room has unlocked, and what
+ * is on the card stand. A v1 server sends layouts without it, and a v2 client
+ * rejects those wholesale (see `parseLayout`), so it would sit at "connecting"
+ * with nothing logged. The version check turns that into the one sentence it
+ * should be: refresh the page.
+ */
+export const PROTOCOL_VERSION = 2;
 
 // --- static half: the layout, which only changes in the build phase ----------
 
@@ -35,6 +45,32 @@ export type LayoutAppliance = {
   x: number;
   y: number;
   source: Appliance["source"];
+  /**
+   * What a stall slot is holding, and whether it has already been emptied.
+   *
+   * The shop rides the *layout* rather than the frame because it is the same
+   * kind of fact: rare, structural, and about where things are. A slot changes
+   * three times a morning and not at all during service, so paying for it
+   * twenty times a second would be as silly as it would be for a counter.
+   *
+   * Sent rather than recomputed, even though every client could roll the same
+   * stock from the seed and the day. What is *left* in the slots is not
+   * derivable — it depends on what somebody bought — and a shop that is
+   * half-derived and half-synced is a shop where "my friend sees a different
+   * stall" is one missed field away.
+   */
+  offer: Appliance["offer"];
+  taken: number | null;
+  /**
+   * What a card stand is holding this morning.
+   *
+   * Rides the layout for the same reasons the stall's offer does — rare,
+   * structural, and about where things are. Sent rather than recomputed even
+   * though every client could roll the same pair from the seed and the day,
+   * because what is *left* on the stand is not derivable: it depends on what
+   * somebody chose.
+   */
+  card: string | null;
 };
 
 /**
@@ -44,6 +80,21 @@ export type LayoutAppliance = {
  */
 export type Layout = {
   appliances: LayoutAppliance[];
+  /**
+   * The recipes this room has unlocked, oldest first, and the day the newest
+   * one arrived.
+   *
+   * Not appliances, and here anyway: the layout is the *structural* half of the
+   * world — the things that change a handful of times a day and never during
+   * service — and a menu is exactly that. Putting it in the frame would spend
+   * twenty messages a second on a list that changes every third morning.
+   *
+   * It is what customers order from, so a client that had it wrong would draw
+   * order bubbles for dishes this kitchen cannot make. `unlockRecipe` bumps the
+   * layout version even when it delivers nothing, so it cannot be missed.
+   */
+  unlocked: string[];
+  unlockedDay: number;
 };
 
 // --- dynamic half: sent continuously -----------------------------------------
@@ -70,6 +121,14 @@ export type FrameAppliance = {
   heldBy: number | null;
   justFinished: boolean;
   tip: number;
+  /**
+   * Who has a card lifted but not yet taken.
+   *
+   * In the frame rather than the layout, unlike the card itself: arming ticks
+   * down, clears when somebody walks away, and is drawn as a card hovering. It
+   * is the same sort of fact as `heldBy` and it travels the same way.
+   */
+  armedBy: number | null;
 };
 
 /**
@@ -107,6 +166,8 @@ export type Frame = {
   money: number;
   served: number;
   lost: number;
+  /** The day's own takings, for the end-of-day card. */
+  today: Ledger;
   customers: FrameCustomer[];
   events: World["events"];
   effects: Effect[];
@@ -159,9 +220,12 @@ export function encodeLayout(world: World): Layout {
       x: appliance.tile.x,
       y: appliance.tile.y,
       source: appliance.source,
+      offer: appliance.offer,
+      taken: appliance.taken,
+      card: appliance.card,
     });
   }
-  return { appliances };
+  return { appliances, unlocked: [...world.unlocked], unlockedDay: world.unlockedDay };
 }
 
 /**
@@ -189,6 +253,7 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
     money: world.money,
     served: world.served,
     lost: world.lost,
+    today: world.today,
     customers: world.customers.map((customer) => ({
       id: customer.id,
       state: customer.state,
@@ -229,6 +294,7 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
           appliance.motion !== null ||
           appliance.heldBy !== null ||
           appliance.justFinished ||
+          appliance.armedBy !== null ||
           appliance.tip > 0,
       )
       .map((appliance) => ({
@@ -240,6 +306,7 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
         heldBy: appliance.heldBy,
         justFinished: appliance.justFinished,
         tip: appliance.tip,
+        armedBy: appliance.armedBy,
       })),
     acks: Object.fromEntries(acks),
   };
@@ -257,6 +324,8 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
 export function applyLayout(world: World, layout: Layout): void {
   world.appliances.clear();
   world.applianceAt.fill(0);
+  world.unlocked = [...layout.unlocked];
+  world.unlockedDay = layout.unlockedDay;
   for (const saved of layout.appliances) {
     // Bounds-checked like a save is. `restore` has always done this and the
     // wire path never did, which is an odd place to be more trusting: a save is
@@ -273,6 +342,11 @@ export function applyLayout(world: World, layout: Layout): void {
       motion: null,
       heldBy: null,
       source: saved.source,
+      offer: saved.offer,
+      taken: saved.taken,
+      card: saved.card,
+      armedBy: null,
+      armTime: 0,
       tip: 0,
     });
     world.applianceAt[saved.y * world.width + saved.x] = saved.id;
@@ -319,6 +393,9 @@ export function applyFrame(world: World, frame: Frame): void {
   world.money = frame.money;
   world.served = frame.served;
   world.lost = frame.lost;
+  // Copied like the arrays below, and for the same reason: two worlds are fed
+  // from one frame, and one of them is replayed over.
+  world.today = { ...frame.today, lost: { ...frame.today.lost } };
   // Copied, never aliased. One frame is applied to two worlds — the one being
   // drawn and the one predicting local chefs — and the prediction world's
   // `step()` spawns customers, logs events and queues effects. Sharing the
@@ -353,6 +430,7 @@ export function applyFrame(world: World, frame: Frame): void {
     appliance.heldBy = null;
     appliance.justFinished = false;
     appliance.tip = 0;
+    appliance.armedBy = null;
     world.applianceAt[appliance.tile.y * world.width + appliance.tile.x] = appliance.id;
   }
   for (const snapshot of frame.appliances) {
@@ -365,6 +443,7 @@ export function applyFrame(world: World, frame: Frame): void {
     appliance.heldBy = snapshot.heldBy;
     appliance.justFinished = snapshot.justFinished;
     appliance.tip = snapshot.tip;
+    appliance.armedBy = snapshot.armedBy;
     // A held appliance is off the grid, or it would leave a solid phantom tile.
     if (snapshot.heldBy !== null) {
       world.applianceAt[appliance.tile.y * world.width + appliance.tile.x] = 0;

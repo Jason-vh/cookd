@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "../data/level";
-import { RECIPE_BY_ID } from "../data/recipes";
+import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
 import { DT, endDay, restartDay, step } from "./step";
-import { unreachableTables } from "./queries";
+import { canPlace, kitchenWarnings, unreachableTables } from "./queries";
 import { isDirty, specKey } from "./items";
 import { plateCount, platesInWorld } from "./plates";
-import type { Customer, Item, Player, PlayerInput, World } from "./types";
+import type { ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
 import {
   addPlayer,
   applianceAtTile,
@@ -13,6 +13,7 @@ import {
   emptyInput,
   isSolid,
   removePlayer,
+  spawnAppliance,
 } from "./world";
 
 /**
@@ -22,16 +23,49 @@ import {
  */
 
 /**
- * A kitchen with the door closed.
+ * A kitchen with the door closed, already open for business.
  *
- * Customers arrive on their own now, and a test about chopping a tomato should
- * not be at the mercy of who walked in while it ran. Tests that *are* about the
- * dining room open the door again by setting `nextArrivalIn`.
+ * Two things are being skipped past. Customers arrive on their own, and a test
+ * about chopping a tomato should not be at the mercy of who walked in while it
+ * ran — tests that *are* about the dining room open the door again by setting
+ * `nextArrivalIn`. And a world now wakes in the **build phase**, which is right
+ * for a player and wrong for a test about a fryer; `openWorld` is the one line
+ * that says "assume somebody pressed Start".
  */
 function makeWorld(): World {
   const world = createWorld(LEVEL, 1);
   world.nextArrivalIn = Infinity;
+  equip(world);
+  openWorld(world);
   return world;
+}
+
+/**
+ * Give the kitchen the equipment a fully-grown one has.
+ *
+ * The park kitchen is a **starting point** now: salad only, two crates, and no
+ * heat. Everything else arrives on a recipe card, which delivers it (see
+ * `sim/cards.ts`). These tests are about the cooking rules rather than about
+ * progression, so they equip the kitchen directly — on the tiles the level's
+ * ASCII used to put these things on, so every coordinate below still means what
+ * it says. The menu is opened up for the same reason: a customer cannot order a
+ * pizza the room has never unlocked, and half of these tests are about pizza.
+ */
+function equip(world: World): void {
+  for (const [base, tile] of Object.entries(CRATE)) {
+    if (!applianceAtTile(world, tile[0], tile[1])) {
+      spawnAppliance(world, "crate", { x: tile[0], y: tile[1] }, { base, processes: [] });
+    }
+  }
+  spawnAppliance(world, "oven", { x: OVEN[0], y: OVEN[1] });
+  spawnAppliance(world, "fryer", { x: FRYER[0], y: FRYER[1] });
+  world.unlocked = RECIPES.map((recipe) => recipe.id);
+}
+
+/** Put a world into service without going through a morning. */
+function openWorld(world: World): void {
+  world.phase = "service";
+  world.dayTime = world.dayLength;
 }
 
 function idle(): PlayerInput[] {
@@ -64,25 +98,31 @@ function hold(world: World, seconds: number, button: "use" | null = "use"): void
   for (let i = 0; i < Math.ceil(seconds / DT); i++) step(world, inputs);
 }
 
-// Tile coordinates from data/level.ts
+// Tile coordinates from data/level.ts. The kitchen sits two columns east and
+// two rows south of the grid's origin: the patio ring is part of the world.
 const CRATE = {
-  tomato: [8, 1],
-  lettuce: [9, 1],
-  cheese: [10, 1],
-  flour: [11, 1],
-  water: [12, 1],
-  potato: [13, 1],
+  tomato: [10, 3],
+  lettuce: [11, 3],
+  cheese: [12, 3],
+  flour: [13, 3],
+  water: [14, 3],
+  potato: [15, 3],
 } as const;
-const PLATES = [14, 1] as const;
-const SINK = [15, 1] as const;
-const BIN = [18, 1] as const;
-const BOARD = [10, 3] as const;
-const COUNTER = [9, 3] as const;
-const OVEN = [19, 4] as const;
-const FRYER = [18, 7] as const;
-const PASS = [7, 4] as const;
+const PLATES = [16, 3] as const;
+const SINK = [17, 3] as const;
+const BIN = [20, 3] as const;
+const BOARD = [12, 5] as const;
+const COUNTER = [11, 5] as const;
+// Not in the level any more: `equip` stands them here, as a card's delivery
+// would. An oven used to be embedded in the east wall; a delivered one lands on
+// an interior tile, which is the only place the game may put anything.
+const OVEN = [20, 6] as const;
+const FRYER = [20, 9] as const;
+const PASS = [9, 6] as const;
 /** A table in the dining room, approached from the tile above it. */
-const TABLE = [5, 2] as const;
+const TABLE = [4, 4] as const;
+/** The middle slot of the market stall, faced from the patio beside it. */
+const STALL = [0, 4] as const;
 
 /**
  * Sit somebody at a table with an order already placed — the state the delivery
@@ -334,15 +374,15 @@ describe("kitchen basics", () => {
     // eject them sideways out of the kitchen.
     const world = makeWorld();
     const player = world.players[0]!;
-    player.pos.x = 8.33;
-    player.pos.y = 2.32; // pressed flush against the crate row
+    player.pos.x = 10.33;
+    player.pos.y = 4.32; // pressed flush against the crate row
 
     const inputs = idle();
     inputs[0]!.move.x = 1;
     for (let i = 0; i < 60; i++) step(world, inputs);
 
-    expect(player.pos.y).toBeCloseTo(2.32, 6);
-    expect(player.pos.x).toBeGreaterThan(11);
+    expect(player.pos.y).toBeCloseTo(4.32, 6);
+    expect(player.pos.x).toBeGreaterThan(13);
     expect(player.pos.x).toBeLessThan(world.width);
   });
 
@@ -741,13 +781,263 @@ describe("day loop", () => {
     expect(applianceAtTile(world, BOARD[0], BOARD[1])).toBeNull();
 
     // Drop it one tile to the right, on what used to be counter-free floor.
-    face(world.players[0]!, 13, 3, 0, -1);
+    face(world.players[0]!, 15, 5, 0, -1);
     press(world, "grab");
-    expect(applianceAtTile(world, 13, 3)!.id).toBe(board.id);
+    expect(applianceAtTile(world, 15, 5)!.id).toBe(board.id);
 
     press(world, "start");
     expect(world.phase).toBe("service");
-    expect(world.day).toBe(2);
+  });
+
+  test("a room wakes into the morning, and the day turns at closing time", () => {
+    // The build phase is the morning of the day it precedes, not the wreckage
+    // of the one before. A fresh kitchen is therefore standing in day one's
+    // morning, and nothing happens until somebody opens it.
+    const world = createWorld(LEVEL, 1);
+    world.nextArrivalIn = Infinity;
+    expect(world.phase).toBe("build");
+    expect(world.day).toBe(1);
+
+    press(world, "start");
+    expect(world.phase).toBe("service");
+    expect(world.day).toBe(1); // still day one — opening does not advance it
+
+    world.dayTime = 0.05;
+    hold(world, 0.2, null);
+    expect(world.phase).toBe("build");
+    expect(world.day).toBe(2); // ...closing does
+  });
+
+  test("rent is deducted at close, and money is allowed to go negative", () => {
+    const world = makeWorld();
+    world.money = 10;
+    world.dayTime = 0.05;
+    hold(world, 0.2, null);
+
+    // Day one's rent is $30, against $10 in the till. Nothing else happens:
+    // there is no fail state here, only a kitchen that cannot afford an oven.
+    expect(world.money).toBe(-20);
+    expect(world.today.rent).toBe(30);
+    expect(world.phase).toBe("build");
+  });
+});
+
+/**
+ * The patio ring: the paving outside the walls, which is now real tiles.
+ *
+ * "Walkable = paved" is the whole claim. What a player can see, what collision
+ * allows and what the simulation believes about the map are one thing, so the
+ * stall has somewhere to stand and the ovens in the east wall have a back.
+ */
+/**
+ * Take every appliance of these kinds out of the world, as a sale would.
+ *
+ * The ids are collected before the loop rather than deleted while iterating the
+ * live map — a `Map` tolerates that, and relying on it is how a test starts
+ * depending on something nobody promised.
+ */
+function sellOff(world: World, kinds: ApplianceKind[]): void {
+  const doomed = [...world.appliances.values()].filter((a) => kinds.includes(a.kind));
+  for (const appliance of doomed) {
+    world.applianceAt[appliance.tile.y * world.width + appliance.tile.x] = 0;
+    world.appliances.delete(appliance.id);
+  }
+}
+
+/**
+ * What the kitchen says is wrong with it.
+ *
+ * The house rule for this whole class of mistake is **say it, do not prevent
+ * it** — the build phase's promise is that you may rearrange your own
+ * restaurant into something silly, and the stall only widened the ways to do
+ * that. The alternative was a shop that refuses to sell you things, and the
+ * honest version of that list is most of the kitchen.
+ */
+describe("what the kitchen says is wrong with it", () => {
+  test("a kitchen that works says nothing at all", () => {
+    // The one that matters most: a warning that fires on a healthy kitchen is a
+    // warning players learn to read past, and then the real one is invisible.
+    for (const day of [1, 2, 3, 8]) {
+      const world = makeWorld();
+      world.day = day;
+      expect(kitchenWarnings(world)).toEqual([]);
+    }
+  });
+
+  test("a dish whose station has been sold is named, because customers still order it", () => {
+    // Arrivals pick from what the *room* unlocked, not from what the kitchen can
+    // cook — so without this a room that sold the oven its pizza card delivered
+    // takes orders it can never fill and watches them walk out with no
+    // explanation.
+    const world = makeWorld();
+    world.unlocked = ["salad", "pizza"];
+    sellOff(world, ["oven"]);
+    expect(kitchenWarnings(world)).toEqual(["Pizza can't be made here"]);
+
+    // Take pizza back off the menu and there is nothing to say: the warning is
+    // about the gap between the menu and the kitchen, not about the oven.
+    world.unlocked = ["salad"];
+    expect(kitchenWarnings(world)).toEqual([]);
+  });
+
+  test("a kitchen that can cook nothing has one problem, not three", () => {
+    // Every surface capable of holding a knife, sold. Salad, fries and pizza all
+    // start with a chop, so listing them one by one would bury the actual fault.
+    const world = makeWorld();
+    sellOff(world, ["counter", "board"]);
+    expect(kitchenWarnings(world)).toEqual(["Nothing on the menu can be made here"]);
+
+    // Same sentence from the other end: the stations are there, the ingredients
+    // are not. The check walks the recipes rather than naming appliances, so it
+    // cannot drift from the content the way a hand-kept list would.
+    const starved = makeWorld();
+    sellOff(starved, ["crate"]);
+    expect(kitchenWarnings(starved)).toEqual(["Nothing on the menu can be made here"]);
+  });
+
+  test("selling the last table, or the last bin, is allowed and reported", () => {
+    const roomless = makeWorld();
+    sellOff(roomless, ["table"]);
+    expect(kitchenWarnings(roomless)).toEqual(["No tables — nobody can sit down"]);
+
+    // The bin is deliberately *not* on the stall's do-not-sell list: losing it
+    // costs a plate per ruined dish only until closing time, because closing up
+    // washes up. So it is a sentence, not a refusal.
+    const messy = makeWorld();
+    sellOff(messy, ["bin"]);
+    expect(kitchenWarnings(messy)).toEqual(["No bin — a ruined dish has nowhere to go"]);
+  });
+
+  test("a burnt dish costs a plate for the day, and not one minute longer", () => {
+    // This is the load-bearing fact behind leaving the bin sellable. If it ever
+    // stops being true — if food or dirt survives the night — the bin becomes
+    // structural and belongs on the essential list instead.
+    const world = makeWorld();
+    sellOff(world, ["bin"]);
+
+    // Take the kitchen's whole supply off the stack and bury every plate under
+    // a burnt pizza. With no bin there is now no legal move: nothing can be
+    // scraped, nothing can be plated, nothing can be served.
+    const stack = applianceAtTile(world, PLATES[0], PLATES[1])!;
+    const counter = applianceAtTile(world, COUNTER[0], COUNTER[1])!;
+    stack.item = null;
+    counter.item = {
+      id: world.nextId++,
+      base: "plate",
+      processes: [],
+      contents: [
+        { id: world.nextId++, base: "pizza", processes: ["sauced", "burnt"], contents: [] },
+      ],
+    };
+    expect(platesInWorld(world)).toBe(1);
+
+    // Closing up washes up. The food is gone, the plate is back on the stack,
+    // clean, and tomorrow starts whole.
+    endDay(world);
+    const home = applianceAtTile(world, PLATES[0], PLATES[1])!;
+    expect(platesInWorld(world)).toBe(1);
+    expect(plateCount(home.item)).toBe(1);
+    expect(isDirty(home.item)).toBe(false);
+    expect(home.item!.contents.filter((child) => child.base !== "plate")).toHaveLength(0);
+  });
+});
+
+describe("the patio ring", () => {
+  test("a chef can walk right round the building, and no further", () => {
+    const world = makeWorld();
+    const player = world.players[0]!;
+    player.pos = { x: 0.5, y: 0.5 };
+    player.prevPos = { ...player.pos };
+
+    // East along the top of the ring, then south down its far side. Walls stop
+    // them going in; the edge of the world stops them going out.
+    const walk = (dx: number, dy: number, ticks: number): void => {
+      const inputs = idle();
+      inputs[0]!.move = { x: dx, y: dy };
+      for (let i = 0; i < ticks; i++) step(world, inputs);
+    };
+
+    walk(1, 0, 400);
+    expect(player.pos.x).toBeGreaterThan(world.width - 2);
+    expect(player.pos.x).toBeLessThan(world.width);
+    expect(player.pos.y).toBeCloseTo(0.5, 3); // never entered the building
+
+    walk(0, 1, 400);
+    expect(player.pos.y).toBeGreaterThan(world.height - 2);
+    expect(player.pos.y).toBeLessThan(world.height);
+
+    walk(-1, 0, 400);
+    expect(player.pos.x).toBeGreaterThan(0);
+    expect(player.pos.x).toBeLessThan(2);
+  });
+
+  test("nothing may be built on the paving, but the doorway is the player's business", () => {
+    const world = makeWorld();
+    // Patio: refused, and the ghost turns red because it asks the same question.
+    expect(canPlace(world, 0, 0)).toBe(false);
+    expect(canPlace(world, world.width - 1, world.height - 1)).toBe(false);
+    // Kitchen floor: allowed.
+    expect(canPlace(world, COUNTER[0], COUNTER[1])).toBe(true);
+    // The doorway is allowed, deliberately: sealing your own dining room off is
+    // a mistake the build phase warns about rather than prevents.
+    expect(canPlace(world, world.door.x, world.door.y)).toBe(true);
+  });
+
+  test("an appliance in the wall can be worked from the patio side", () => {
+    // The ring gives wall-embedded appliances a back, and that is left working.
+    // Interaction keeps its one rule — face the tile — and the walk around the
+    // building is the honest cost of using the far side of one.
+    //
+    // The park kitchen no longer *ships* one: its ovens went with the trim, and
+    // a delivered appliance always lands on an interior tile. So the rule is
+    // tested on an oven stood in the wall by hand, which is what a level author
+    // does and what the legend still allows.
+    const world = makeWorld();
+    const wall = { x: 21, y: 7 };
+    spawnAppliance(world, "oven", wall);
+
+    takeFrom(world, CRATE.tomato);
+    // Stand *outside* the east wall, facing back in at the oven.
+    putOn(world, [wall.x, wall.y] as const, -1, 0);
+    expect(applianceAtTile(world, wall.x, wall.y)!.item?.base).toBe("tomato");
+    expect(world.players[0]!.carried).toBeNull();
+  });
+
+  test("a customer walks in over the paving, not through it", () => {
+    // The approach used to be a straight line drawn from off-grid to the door,
+    // which was fine while "outside" was painted scenery. It is tiles now, with
+    // a market stall standing on some of them, so the walk in is a real path
+    // over the same map everybody else uses.
+    const world = makeWorld();
+    world.nextArrivalIn = 0;
+    step(world, idle());
+    const customer = world.customers[0]!;
+    expect(customer.path.length).toBeGreaterThan(0);
+
+    for (const point of customer.path) {
+      const tile = { x: Math.floor(point.x), y: Math.floor(point.y) };
+      expect(isSolid(world, tile.x, tile.y)).toBe(false);
+    }
+    // Through the doorway, every time: the ring goes right round the building,
+    // but the only way *in* is the door.
+    expect(
+      customer.path.some(
+        (point) => Math.floor(point.x) === world.door.x && Math.floor(point.y) === world.door.y,
+      ),
+    ).toBe(true);
+  });
+
+  test("the stall stands on the paving, and is not something you can pick up", () => {
+    const world = makeWorld();
+    const stall = applianceAtTile(world, STALL[0], STALL[1])!;
+    expect(stall.kind).toBe("stall");
+
+    // Immovable, so the build phase cannot lift it and cannot swap onto it.
+    endDay(world);
+    face(world.players[0]!, STALL[0], STALL[1], -1, 0);
+    press(world, "grab");
+    expect(world.players[0]!.carriedAppliance).toBeNull();
+    expect(applianceAtTile(world, STALL[0], STALL[1])).toBe(stall);
   });
 });
 
@@ -938,7 +1228,8 @@ describe("the dining room", () => {
     counter.tile = { x: world.door.x + 1, y: world.door.y };
     world.applianceAt[counter.tile.y * world.width + counter.tile.x] = counter.id;
 
-    expect(unreachableTables(world)).toHaveLength(4);
+    expect(unreachableTables(world)).toHaveLength(2);
+    expect(kitchenWarnings(world)).toContain("2 table(s) can't be reached from the door");
 
     // Nobody can sit, so nobody does — they wait at the door and give up.
     world.nextArrivalIn = 0;

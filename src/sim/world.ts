@@ -1,11 +1,15 @@
+import { applianceDef } from "../data/appliances";
 import { LEGEND, type LevelDef } from "../data/level";
+import { STARTING_RECIPES } from "../data/progression";
 import { plateCount, stockPlates } from "./plates";
 import { nextRandom } from "./random";
+import { restockStall } from "./shop";
 import type {
   Appliance,
   ApplianceKind,
   EffectCue,
   ItemSpec,
+  Ledger,
   Player,
   PlayerInput,
   Vec2,
@@ -103,6 +107,21 @@ function makePlayer(id: number, name: string, spawn: Vec2): Player {
   };
 }
 
+/** A day's takings, before any of it has happened. */
+export function emptyLedger(day: number): Ledger {
+  return { day, earned: 0, tips: 0, rent: 0, served: 0, lost: {} };
+}
+
+/**
+ * Build a world from a level.
+ *
+ * It wakes in the **build phase**, on the morning of day one. A fresh room and
+ * a loaded one both do, and service starts only when somebody opens the day.
+ * The save already discards everything mid-day, so this makes the resume point
+ * honest rather than dropping players into a service they did not ask for — and
+ * it gives the morning somewhere to be: the room gathers, reads the stall,
+ * moves a counter, and *then* opens.
+ */
 export function createWorld(level: LevelDef, playerCount: number, seed = 1): World {
   const height = level.rows.length;
   const width = Math.max(...level.rows.map((r) => r.length));
@@ -112,23 +131,33 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     nextId: 1,
     nextPlayerId: 0,
     rngState: seed,
+    seed,
     width,
     height,
-    tiles: Array.from({ length: width * height }, () => ({ wall: false, door: false })),
+    tiles: Array.from({ length: width * height }, () => ({
+      wall: false,
+      door: false,
+      placeable: true,
+    })),
     applianceAt: Array.from({ length: width * height }, () => 0),
     appliances: new Map(),
     layoutVersion: 0,
     players: [],
     customers: [],
     door: { x: 0, y: Math.floor(height / 2) },
-    phase: "service",
+    phase: "build",
     day: 1,
-    dayTime: level.dayLength,
+    dayTime: 0,
     dayLength: level.dayLength,
     nextArrivalIn: 2,
     money: 0,
     served: 0,
     lost: 0,
+    today: emptyLedger(1),
+    // One dish, and it is the salad: every core verb, no burn risk, and a day
+    // one that paces itself. Everything else is chosen from a card.
+    unlocked: [...STARTING_RECIPES],
+    unlockedDay: 0,
     events: [],
     effects: [],
   };
@@ -141,19 +170,33 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
       if (!spec) throw new Error(`Unknown level char "${ch}" at ${x},${y}`);
       const idx = tileIndex(world, x, y);
       if (spec.kind === "wall") {
-        world.tiles[idx] = { wall: true, door: false };
+        world.tiles[idx] = { wall: true, door: false, placeable: false };
       } else if (spec.kind === "door") {
-        world.tiles[idx] = { wall: false, door: true };
+        world.tiles[idx] = { wall: false, door: true, placeable: true };
         world.door = { x, y };
+      } else if (spec.kind === "patio") {
+        world.tiles[idx] = { wall: false, door: false, placeable: false };
       } else if (spec.kind === "appliance") {
+        // The stall stands on the patio, so its tile has to be unplaceable for
+        // the same reason the paving around it is: nothing may be built there.
+        // Read from the ASCII rather than inferred, so a stall inside a kitchen
+        // would behave the same way.
+        if (!applianceDef(spec.appliance).movable) {
+          world.tiles[idx] = { wall: false, door: false, placeable: false };
+        }
         spawnAppliance(world, spec.appliance, { x, y }, spec.source ?? null);
       }
     }
   }
 
   // The kitchen's plates, clean and on the stack. Everything after this moves
-  // them around; nothing creates or destroys one — see `sim/plates.ts`.
+  // them around; the stall is the one place another can be made — see
+  // `sim/plates.ts`.
   stockPlates(world, level.plates);
+  restockStall(world);
+  // No cards: a fresh world wakes on the morning of day one, and the first
+  // stand is day two. A restored or reset world is handed a menu and a day it
+  // did not start with, and restocks for itself — see `setUnlocked`.
 
   for (let i = 0; i < playerCount; i++) addPlayer(world, level);
 
@@ -172,6 +215,16 @@ export function spawnAppliance(
   kind: ApplianceKind,
   tile: Vec2,
   source: ItemSpec | null = null,
+  /**
+   * Born straight into somebody's hands, for an appliance bought at the stall.
+   *
+   * It must **not** reach the grid on the way: `tile` is only where it would go
+   * home to if the buyer disconnected, and writing it there would overwrite
+   * whatever is standing on that tile — the stall itself, in the one case this
+   * exists for. An appliance that has never been put down is exactly a held
+   * one, and this is how it starts that way.
+   */
+  heldBy: number | null = null,
 ): Appliance {
   const appliance: Appliance = {
     id: world.nextId++,
@@ -183,11 +236,16 @@ export function spawnAppliance(
     justFinished: false,
     motion: null,
     source,
-    heldBy: null,
+    offer: null,
+    taken: null,
+    card: null,
+    armedBy: null,
+    armTime: 0,
+    heldBy,
     tip: 0,
   };
   world.appliances.set(appliance.id, appliance);
-  world.applianceAt[tileIndex(world, tile.x, tile.y)] = appliance.id;
+  if (heldBy === null) world.applianceAt[tileIndex(world, tile.x, tile.y)] = appliance.id;
   return appliance;
 }
 
@@ -199,11 +257,14 @@ export function spawnAppliance(
  * That is a thing a *player* is allowed to do to their own kitchen — the build
  * phase warns them and `canPlace` permits it — but it is not a thing the game
  * gets to do on their behalf while nobody is watching.
+ *
+ * Neither is the **patio**, for a plainer reason: it is not placeable at all,
+ * so an oven whose owner disconnected can never end up standing in the park.
  */
 export function isFreeTile(world: World, x: number, y: number): boolean {
   if (!inBounds(world, x, y)) return false;
   const tile = world.tiles[tileIndex(world, x, y)];
-  if (tile?.wall || tile?.door) return false;
+  if (!tile?.placeable || tile.door) return false;
   return (world.applianceAt[tileIndex(world, x, y)] ?? 0) === 0;
 }
 

@@ -1,8 +1,11 @@
-import { APPLIANCES } from "./data/appliances";
+import { APPLIANCES, ESSENTIAL, applianceDef } from "./data/appliances";
 import { LEGEND, LEVEL, type LevelDef } from "./data/level";
+import { BACKFILL_RECIPES } from "./data/progression";
+import { restockCards, setUnlocked } from "./sim/cards";
 import { MAX_PLATES, platesInWorld, stockPlates } from "./sim/plates";
+import { restockStall, stallSlots } from "./sim/shop";
 import type { ApplianceKind, ItemSpec, Vec2, World } from "./sim/types";
-import { nearestFreeTile, spawnAppliance, touchLayout } from "./sim/world";
+import { emptyLedger, nearestFreeTile, spawnAppliance, touchLayout } from "./sim/world";
 
 /**
  * The saved-kitchen format, and nothing else.
@@ -27,7 +30,7 @@ import { nearestFreeTile, spawnAppliance, touchLayout } from "./sim/world";
  * schema bump was therefore indistinguishable from "everyone loses their
  * build", and nothing said so.
  */
-const SCHEMA = 3;
+export const SCHEMA = 5;
 
 export type SavedAppliance = {
   kind: ApplianceKind;
@@ -61,6 +64,26 @@ export type Save = {
    * be restoring the washing-up, which is nobody's idea of resuming.
    */
   plates: number;
+  /**
+   * Which stall slots have already been emptied this morning.
+   *
+   * The stock itself is not stored: it is a pure function of the room's seed
+   * and the day, so writing it down would be writing down something we can
+   * always recompute. What *cannot* be recomputed is what somebody already
+   * bought — and without it, a room coming back from disk finds a full stall
+   * again, which turns "restart the server" into a way to reroll the shop.
+   */
+  stall: number[];
+  /**
+   * The recipes this kitchen has unlocked, and the day the newest arrived.
+   *
+   * The only part of a run that is neither money nor furniture, and the one
+   * that a reset deliberately keeps: reset un-wrecks the layout, it does not
+   * delete history. `unlockedDay` comes along because a save written in a card
+   * morning must not be offered the pair it has already spent.
+   */
+  unlocked: string[];
+  unlockedDay: number;
 };
 
 /**
@@ -76,12 +99,40 @@ export function saveSignature(world: World): string {
   for (const appliance of world.appliances.values()) {
     layout += `${appliance.id}:${appliance.kind}:${appliance.tile.x},${appliance.tile.y};`;
   }
-  return `${layout}|${world.money}|${world.day}|${platesInWorld(world)}`;
+  const stall = takenSlots(world).join(",");
+  const menu = world.unlocked.join(",");
+  return `${layout}|${world.money}|${world.day}|${platesInWorld(world)}|${stall}|${menu}|${world.unlockedDay}`;
 }
 
+/**
+ * Slots that have already handed something out, by index.
+ *
+ * A slot counts as emptied whether the offer was carried away (`taken`) or
+ * simply consumed, as a bought plate is — both are "there is nothing there any
+ * more", which is the only thing the save has to be able to say.
+ */
+function takenSlots(world: World): number[] {
+  const emptied: number[] = [];
+  for (const [index, slot] of stallSlots(world).entries()) {
+    if (slot.taken !== null || slot.offer === null) emptied.push(index);
+  }
+  return emptied;
+}
+
+/**
+ * What a kitchen is worth writing down.
+ *
+ * **Immovable appliances are skipped.** They are furniture of the *place*, not
+ * of anybody's build: the walls, and the market stall on the patio. Storing
+ * them would mean every save carrying a copy of the level, and a save written
+ * before a stall existed describing a kitchen that has none. `restore` rebuilds
+ * them from the level's own ASCII instead, which is where they came from and
+ * the only place that can still be right after the level changes.
+ */
 export function snapshot(world: World, levelId: string = LEVEL.id): Save {
   const appliances: SavedAppliance[] = [];
   for (const appliance of world.appliances.values()) {
+    if (!applianceDef(appliance.kind).movable) continue;
     appliances.push({
       kind: appliance.kind,
       x: appliance.tile.x,
@@ -96,6 +147,9 @@ export function snapshot(world: World, levelId: string = LEVEL.id): Save {
     money: world.money,
     day: world.day,
     plates: platesInWorld(world),
+    stall: takenSlots(world),
+    unlocked: [...world.unlocked],
+    unlockedDay: world.unlockedDay,
   };
 }
 
@@ -136,6 +190,30 @@ export function parseSave(value: unknown): Save | null {
   if (plates === null || plates < 0 || plates > MAX_PLATES) return null;
   if (!Array.isArray(value.appliances) || value.appliances.length > 4096) return null;
 
+  // Absent before schema 4. Bounded and integral, because it indexes the slots.
+  const stall: number[] = [];
+  if (value.stall !== undefined) {
+    if (!Array.isArray(value.stall) || value.stall.length > 64) return null;
+    for (const entry of value.stall) {
+      const index = finite(entry);
+      if (index === null || !Number.isInteger(index) || index < 0) return null;
+      stall.push(index);
+    }
+  }
+
+  // Absent before schema 5, and supplied by the migration. Bounded, and every
+  // entry a short string: this list is read straight into the order pool.
+  const unlocked: string[] = [];
+  if (value.unlocked !== undefined) {
+    if (!Array.isArray(value.unlocked) || value.unlocked.length > 64) return null;
+    for (const entry of value.unlocked) {
+      if (typeof entry !== "string" || entry.length > 32) return null;
+      unlocked.push(entry);
+    }
+  }
+  const unlockedDay = value.unlockedDay === undefined ? 0 : finite(value.unlockedDay);
+  if (unlockedDay === null || unlockedDay < 0) return null;
+
   const appliances: SavedAppliance[] = [];
   for (const entry of value.appliances) {
     if (!isRecord(entry)) return null;
@@ -156,6 +234,9 @@ export function parseSave(value: unknown): Save | null {
     money,
     day: Math.max(1, Math.floor(day)),
     plates: Math.floor(plates),
+    stall,
+    unlocked,
+    unlockedDay: Math.floor(unlockedDay),
   };
 }
 
@@ -189,7 +270,12 @@ const MIGRATIONS: Record<number, (save: Save) => Save | null> = {
   // written against the one level that existed at the time, so that is what
   // they are, and the appliance list — the part a player actually built — is
   // unchanged between the two versions.
-  1: (save) => ({ ...save, schema: 2, level: LEVEL.id }),
+  // The id is written out rather than read from `LEVEL`, which is what it used
+  // to do. `LEVEL.id` is whatever kitchen the game ships *today*, so a v1 save
+  // would silently be re-labelled as belonging to a level whose walls have
+  // since moved — and then restored into it, appliance by misplaced appliance.
+  // A migration must name the thing it actually meant.
+  1: (save) => ({ ...save, schema: 2, level: "park-kitchen" }),
   // v2 predates finite plates, so it cannot say how many the kitchen owns. The
   // rule the levels use — one per table, plus two — is recoverable from the
   // save's own appliance list, which is better than a constant: a kitchen
@@ -205,6 +291,20 @@ const MIGRATIONS: Record<number, (save: Save) => Save | null> = {
       entry.kind === "plates" ? { kind: entry.kind, x: entry.x, y: entry.y } : entry,
     ),
   }),
+  // v3 predates the stall, so nothing has been bought from one. It also
+  // predates the patio ring, which moved every tile in the kitchen — but that
+  // is not a migration, it is a *different level*, and the level id says so.
+  3: (save) => ({ ...save, schema: 4, stall: [] }),
+  // v4 predates the card stand, so it cannot say what its menu is — it did not
+  // have one. Those kitchens were played against `unlockDay`, which handed out
+  // fries on day two and pizza on day three, and their layouts still have the
+  // fryer and the oven standing in them. Backfilling the three they were
+  // playing with is the same philosophy as the essential-appliance top-up: a
+  // schema bump is not an excuse to take somebody's restaurant away.
+  //
+  // `unlockedDay: 0` says "nothing was unlocked recently", so no launch-day
+  // weighting and no morning that thinks it has already spent its cards.
+  4: (save) => ({ ...save, schema: 5, unlocked: [...BACKFILL_RECIPES], unlockedDay: 0 }),
 };
 
 export function migrate(save: Save): Save | null {
@@ -263,36 +363,46 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
   // Better to start fresh than to drop players into a bare rectangle.
   if (placed.size === 0) return { ok: false, reason: "empty" };
 
+  // The level's own furniture survives the clear: it was never in the file, and
+  // it belongs to the place rather than to the build. Put back first so a saved
+  // appliance can never land on the stall's tile.
+  const furniture = [...world.appliances.values()].filter(
+    (appliance) => !applianceDef(appliance.kind).movable,
+  );
   world.appliances.clear();
   world.applianceAt.fill(0);
+  for (const fixed of furniture) {
+    spawnAppliance(world, fixed.kind, fixed.tile, fixed.source);
+  }
   for (const saved of placed.values()) {
+    if ((world.applianceAt[saved.y * world.width + saved.x] ?? 0) !== 0) continue;
     spawnAppliance(world, saved.kind, { x: saved.x, y: saved.y }, saved.source ?? null);
   }
   topUp(world, level);
 
   world.money = migrated.money;
   world.day = migrated.day;
+  world.today = emptyLedger(migrated.day);
+  // Before either restock: the stall stocks for the menu and the stand rolls
+  // against it, so a world holding the wrong one would roll the wrong shop.
+  setUnlocked(world, migrated.unlocked, migrated.unlockedDay);
   // Wherever they were when the room went quiet, plates come back clean and on
   // the stack. See the note on `Save["plates"]`.
   stockPlates(world, migrated.plates);
+  // The stock is rolled again from the seed and the day — the same roll, so the
+  // same three things — and then emptied where the file says it was emptied.
+  restockStall(world);
+  const slots = stallSlots(world);
+  for (const index of migrated.stall) {
+    const slot = slots[index];
+    if (slot) slot.offer = null;
+  }
+  // And this morning's cards, if it is a card morning and the room has not
+  // already chosen — `unlockedDay` is what remembers that.
+  restockCards(world);
   touchLayout(world);
   return { ok: true };
 }
-
-/**
- * Appliances a kitchen cannot run without, and cannot get back on its own.
- *
- * Deliberately two entries rather than "everything the level ships". A save
- * that does not mention an oven is a kitchen with no oven, and that is the
- * player's business — they moved it, and one day they will have sold it. These
- * two are different: with plates finite, a room with nowhere to *keep* plates
- * or nowhere to *wash* them is a room that stops working partway through a day
- * and stays broken, because the broken state is what gets written back to disk.
- *
- * It is a real case, not a hypothetical: every save written before the sink
- * existed looks exactly like this.
- */
-const ESSENTIAL: ApplianceKind[] = ["plates", "sink"];
 
 /**
  * Give a restored kitchen back the essentials its save has none of.

@@ -51,6 +51,22 @@ export const PALETTE = {
   crate: 0x9c7a52,
   crateTop: 0x87683f,
   crateTrim: 0x765a37,
+  // The market stall: painted timber and a striped canvas awning. Warmer and
+  // more saturated than anything inside the kitchen, because it is *not* the
+  // kitchen — it should read as somewhere you go out to, from across the patio.
+  stallBody: 0x9c5f4a,
+  stallPost: 0x7a4636,
+  stallCounter: 0xd8bd93,
+  awning: 0xd8705c,
+  awningStripe: 0xf1ece0,
+  /** Shutters, drawn while the stall is closed for service. */
+  shutter: 0x6d5344,
+  // The recipe card stand, one apron along from the stall. Paper and pine:
+  // lighter than anything the stall is made of, because a card is the one thing
+  // out here that is not for sale.
+  cardFace: 0xf4ead6,
+  cardEdge: 0xd9c49a,
+  cardEasel: 0x8a6a45,
   ceramic: 0xf1ece0,
   bin: 0x4a453e,
   brass: 0xc9a86b,
@@ -129,6 +145,8 @@ export const PALETTE = {
   rewardTip: 0xb8e08a,
   /** Somebody gave up and left. */
   lossWalkout: 0xe08a6f,
+  /** Money going out: a purchase, or the rent. */
+  spend: 0xe0b8a0,
 } as const;
 
 /**

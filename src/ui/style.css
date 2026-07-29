@@ -174,6 +174,46 @@ body {
   font-size: 14px;
 }
 
+/*
+ * The end-of-day report, stacked above the morning.
+ *
+ * Hidden rather than removed: it appears and disappears every day, and a card
+ * that changes height by rebuilding its children makes the whole banner jump.
+ */
+#banner .card:not(.with-report) .report-line {
+  display: none;
+}
+
+#banner .report-line {
+  margin: 3px 0;
+}
+
+#banner h2.report-line {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+#banner .card.with-report .report-line:last-of-type {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+/*
+ * "Press Start to open" — the one instruction a solo player on day one cannot
+ * be allowed to miss. It is the whole tutorial, so it gets to be loud.
+ */
+#banner p.banner-open {
+  margin: 10px 0 4px;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text);
+}
+
 /* --- pause menu ----------------------------------------------------------- */
 
 #menu {
