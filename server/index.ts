@@ -4,6 +4,7 @@ import { Host } from "../src/game/host";
 import { DEFAULT_LEVEL_ID, levelById } from "../src/data/level";
 import {
   PROTOCOL_VERSION,
+  SEND_EVERY,
   encodeFrame,
   encodeLayout,
   layoutVersion,
@@ -34,7 +35,6 @@ import { loadSave, saveKitchen } from "./store";
 
 const PORT = Number(process.env.PORT ?? 5273);
 const TICK_MS = DT * 1000;
-const SEND_EVERY = 3; // 60Hz sim -> 20Hz on the wire
 const EMPTY_ROOM_TTL = 10 * 60 * 1000;
 const MAX_PLAYERS_PER_ROOM = 8;
 const MAX_PER_CONNECTION = 4;

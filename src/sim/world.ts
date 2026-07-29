@@ -129,6 +129,7 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
   const world: World = {
     tick: 0,
     nextId: 1,
+    predicting: false,
     nextPlayerId: 0,
     rngState: seed,
     seed,
@@ -376,11 +377,14 @@ function returnAppliance(world: World, appliance: Appliance): void {
  * like — only that it happened, where, and to whom.
  */
 export function effect(world: World, cue: EffectCue): void {
+  // A guess does not get to announce itself; see `World.predicting`.
+  if (world.predicting) return;
   world.effects.push({ ...cue, id: world.nextId++, ttl: 1 });
   if (world.effects.length > 32) world.effects.shift();
 }
 
 export function log(world: World, text: string): void {
+  if (world.predicting) return;
   world.events.push({ text, ttl: 3 });
   if (world.events.length > 6) world.events.shift();
 }

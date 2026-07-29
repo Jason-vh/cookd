@@ -1,12 +1,11 @@
 import { LEVEL, type LevelDef } from "../data/level";
 import { DT } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
-import { createWorld, emptyInput } from "../sim/world";
+import { emptyInput } from "../sim/world";
 import type { Game } from "./game";
 import type { MenuAction } from "./host";
 import {
   PROTOCOL_VERSION,
-  applyFrame,
   applyLayout,
   type Frame,
   type Layout,
@@ -14,7 +13,7 @@ import {
 } from "./protocol";
 import { SnapshotBuffer } from "./snapshots";
 import { Reconciler } from "./reconciler";
-import { Connection } from "./connection";
+import { Connection, type Socket } from "./connection";
 
 /**
  * The networked client.
@@ -33,6 +32,16 @@ import { Connection } from "./connection";
  * Everything is sampled onto tick boundaries before it reaches the renderer, so
  * `View` still receives a plain `World` plus one `alpha` and cannot tell the
  * difference between this and local play.
+ *
+ * **There is one world**, and it is the reconciler's: the server's last word
+ * with our own unacknowledged input replayed on top. Remote chefs and customers
+ * are then written over it from the playout clock, because nobody predicts
+ * those. It used to be two — one drawn, one predicted — with a handful of
+ * fields copied from the second into the first, which meant that everything
+ * nobody had thought to copy waited for the round trip. `carried` was one of
+ * them, so *picking anything up* cost 44ms on a perfect link and 212ms from
+ * another country (`latency.test.ts`), for an action whose whole job is to feel
+ * like a button.
  */
 
 /**
@@ -40,6 +49,16 @@ import { Connection } from "./connection";
  * tolerates one; the wire does not, because "absent" and "present but
  * undefined" are the same thing in JSON and only one of them is meant.
  */
+/**
+ * The two things here that are not pure: the socket, and the clock.
+ *
+ * Injectable so the whole client can be driven at synthetic latency with no
+ * browser and no server — which is the only way to *measure* how long the game
+ * takes to answer, rather than playing it and forming an opinion. See
+ * `latency.test.ts`.
+ */
+export type NetWiring = { open?: (url: string) => Socket; now?: () => number };
+
 function definedInputs(inputs: Inputs): Record<number, PlayerInput> {
   const out: Record<number, PlayerInput> = {};
   for (const [id, input] of Object.entries(inputs)) {
@@ -71,6 +90,9 @@ export class NetGame implements Game {
 
   private connection!: Connection;
 
+  /** Arrival times for the playout clock. Wall time in the browser. */
+  private readonly now: () => number;
+
   /** Told what went wrong, so the shell can put it in front of the player. */
   readonly onError: (message: string, fatal: boolean) => void;
 
@@ -84,6 +106,7 @@ export class NetGame implements Game {
     token: string,
     onError: (message: string, fatal: boolean) => void = () => {},
     level: LevelDef = LEVEL,
+    wiring: NetWiring = {},
   ) {
     this.room = room;
     this.name = name;
@@ -91,23 +114,28 @@ export class NetGame implements Game {
     this.onError = onError;
     this.level = level;
     this.wantedPlayers = Math.max(1, players);
-    this.world = createWorld(level, 0);
+    this.now = wiring.now ?? (() => performance.now());
     this.reconciler = new Reconciler(level);
-    this.connection = new Connection(url, {
-      message: (message) => this.receive(message),
-      status: (status) => {
-        this.status = status;
+    this.world = this.reconciler.prediction;
+    this.connection = new Connection(
+      url,
+      {
+        message: (message) => this.receive(message),
+        status: (status) => {
+          this.status = status;
+        },
+        hello: () => ({
+          t: "hello",
+          version: PROTOCOL_VERSION,
+          room: this.room,
+          name: this.name,
+          players: this.wantedPlayers,
+          token: this.token,
+        }),
+        hadFrames: () => this.snapshots.size > 0,
       },
-      hello: () => ({
-        t: "hello",
-        version: PROTOCOL_VERSION,
-        room: this.room,
-        name: this.name,
-        players: this.wantedPlayers,
-        token: this.token,
-      }),
-      hadFrames: () => this.snapshots.size > 0,
-    });
+      { open: wiring.open },
+    );
   }
 
   // --- messages --------------------------------------------------------------
@@ -169,7 +197,6 @@ export class NetGame implements Game {
 
   private applyLayout(layout: Layout): void {
     applyLayout(this.world, layout);
-    applyLayout(this.reconciler.prediction, layout);
     this.layoutIds = new Set(layout.appliances.map((a) => a.id));
   }
 
@@ -184,18 +211,10 @@ export class NetGame implements Game {
     // are between a reset and its layout message, so wait for it.
     if (frame.appliances.some((a) => !this.layoutIds.has(a.id))) return;
 
-    if (this.snapshots.push(frame, performance.now())) {
-      applyFrame(this.world, frame);
-      for (const snapshot of frame.players) this.seedPlayer(this.world, snapshot.id, snapshot);
-    }
+    this.snapshots.push(frame, this.now());
+    // Which both applies the frame and replays everything the server has not
+    // acknowledged yet on top of it.
     this.reconciler.reconcile(frame, this.localIds);
-  }
-
-  private seedPlayer(world: World, id: number, at: { x: number; y: number }): void {
-    const player = world.players.find((p) => p.id === id);
-    if (!player) return;
-    player.pos = { x: at.x, y: at.y };
-    player.prevPos = { x: at.x, y: at.y };
   }
 
   // --- the frame loop ---------------------------------------------------------
@@ -235,16 +254,13 @@ export class NetGame implements Game {
 
     // 2. The playout clock walks forward one tick and samples the timeline.
     this.snapshots.advance(DT * 1000);
-    const latest = this.snapshots.newest;
-    if (latest) applyFrame(this.world, latest);
 
     // 3. Remote chefs are sampled at this tick and the one before it, so the
     //    renderer's own interpolation and its walk-cycle speed both still work.
+    //    `predict` has just walked them along with our own, since it cannot tell
+    //    them apart; this is what puts them back where they were seen.
     for (const player of this.world.players) {
-      if (this.localIds.includes(player.id)) {
-        this.reconciler.draw(player);
-        continue;
-      }
+      if (this.localIds.includes(player.id)) continue;
       const now = this.snapshots.sample("players", player.id, this.snapshots.playout);
       const before = this.snapshots.sample(
         "players",
@@ -260,8 +276,8 @@ export class NetGame implements Game {
     }
 
     // Customers are nobody's chef, so they are always sampled — never
-    // predicted. `applyFrame` has just planted them at the newest frame's
-    // position; walking them back onto the playout clock is what keeps them in
+    // predicted. The last frame to arrive planted them where the server last
+    // saw them; walking them back onto the playout clock is what keeps them in
     // step with the remote chefs moving around them.
     for (const customer of this.world.customers) {
       const now = this.snapshots.sample("customers", customer.id, this.snapshots.playout);
@@ -277,6 +293,10 @@ export class NetGame implements Game {
       const facing = this.snapshots.facing("customers", customer.id);
       if (facing) customer.facing = facing;
     }
+
+    // 4. Last of all, because it is the only thing here that is about drawing
+    //    rather than about being right.
+    this.reconciler.show(this.localIds);
   }
 
   // --- shell actions ----------------------------------------------------------

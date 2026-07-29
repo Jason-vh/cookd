@@ -37,6 +37,16 @@ import type {
  */
 export const PROTOCOL_VERSION = 2;
 
+/**
+ * Ticks between broadcasts: a 60Hz simulation goes out at 20Hz.
+ *
+ * Here rather than in the server because it is a property of the *stream*, not
+ * of the process producing it: the client's playout delay is sized against it,
+ * and the measured cost of an action includes waiting for the next one. A test
+ * that measures latency has to be measuring the rate we actually ship.
+ */
+export const SEND_EVERY = 3;
+
 // --- static half: the layout, which only changes in the build phase ----------
 
 export type LayoutAppliance = {
@@ -357,17 +367,18 @@ export function applyLayout(world: World, layout: Layout): void {
 /**
  * Copy an item out of a frame, contents and all.
  *
- * One frame is applied to **two** worlds — the one being drawn and the one
- * predicting local chefs — and the prediction world then replays up to 240
- * ticks of `interactionSystem` over it. Handing both worlds the same `Item`
- * meant a predicted grab reached into the drawn world and moved things that
- * were still, as far as the server was concerned, where they had been.
+ * A frame **outlives being applied**: it stays in the playout timeline for a
+ * couple of seconds so remote chefs have something to interpolate between, and
+ * the world it was applied to then replays up to 240 ticks of
+ * `interactionSystem` over itself. Handing both the same `Item` means a
+ * predicted grab reaching backwards into the record of what the server said.
  *
  * It was survivable while items were only ever rewritten in place. It stopped
  * being survivable when a pile of plates became an item that *moves its
  * contents into another item*: one predicted grab at the plate stack took a
  * plate out of the pile everyone was looking at. This is the same rule the
- * customer and effect arrays already follow, for the same reason.
+ * customer and effect arrays already follow, for the same reason — and it is
+ * the reason `applyFrame` may be handed the same frame twice with no harm.
  */
 function cloneItem(item: Item | null): Item | null {
   if (item === null) return null;
@@ -393,15 +404,14 @@ export function applyFrame(world: World, frame: Frame): void {
   world.money = frame.money;
   world.served = frame.served;
   world.lost = frame.lost;
-  // Copied like the arrays below, and for the same reason: two worlds are fed
-  // from one frame, and one of them is replayed over.
+  // Copied like the arrays below, and for the same reason: a frame is kept
+  // after it is applied, and the world it was applied to is replayed over.
   world.today = { ...frame.today, lost: { ...frame.today.lost } };
-  // Copied, never aliased. One frame is applied to two worlds — the one being
-  // drawn and the one predicting local chefs — and the prediction world's
-  // `step()` spawns customers, logs events and queues effects. Sharing the
-  // arrays let it write straight into what was being drawn: orders flashed
-  // into view and vanished a frame later, worse the higher the latency,
-  // because more unacknowledged input means more ticks replayed.
+  // Copied, never aliased — see `cloneItem`. The world this is applied to
+  // predicts on top of it and the frame stays in the playout timeline, so a
+  // shared array is a prediction writing into the record of what the server
+  // said. Orders flashed into view and vanished a frame later, worse the higher
+  // the latency, because more unacknowledged input means more ticks replayed.
   world.customers = frame.customers.map((customer) => ({
     id: customer.id,
     state: customer.state,

@@ -148,6 +148,18 @@ export class Host {
     while (queue.length > MAX_QUEUE) queue.shift();
   }
 
+  /**
+   * How many ticks of input are waiting to be applied for this player.
+   *
+   * Every entry is a tick of latency between pressing something and the server
+   * acting on it, and the depth is not self-correcting: production and
+   * consumption are both 60Hz, so the queue only ever drains by *starving*, and
+   * anything that puts an extra input in it leaves it there.
+   */
+  queueDepth(id: number): number {
+    return this.queues.get(id)?.length ?? 0;
+  }
+
   /** Drive a single player directly, for local play with no network in between. */
   setInput(id: number, input: PlayerInput): void {
     this.last.set(id, input);

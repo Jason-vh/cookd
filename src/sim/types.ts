@@ -333,6 +333,18 @@ export type Effect = EffectCue & { id: number; ttl: number };
 export type World = {
   tick: number;
   nextId: number;
+  /**
+   * True for a world a client is guessing in, rather than one anybody's screen
+   * is the record of.
+   *
+   * The online client runs its own chefs ahead of the server and re-runs every
+   * unacknowledged tick each time a frame lands, so anything a predicted tick
+   * *announces* — a log line, a puff of coins — would be announced again on
+   * every frame until the server caught up, twenty times a second. What a
+   * prediction may do is move things; saying so out loud is the server's, and
+   * it arrives with the frame that confirms it.
+   */
+  predicting: boolean;
   /** Handed out to joining players; never reused, so ids stay unambiguous. */
   nextPlayerId: number;
   rngState: number;

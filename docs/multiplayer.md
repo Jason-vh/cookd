@@ -114,10 +114,18 @@ Between Europe and South Africa the round trip is ~180ms. Without prediction,
 every step you take would arrive a fifth of a second after you asked for it, and
 running a kitchen would feel like steering a boat.
 
-So the client keeps a second world, runs its own chefs in it immediately, and
-replays anything the server hasn't acknowledged yet on top of each frame that
-arrives. Inputs carry a sequence number; the server acknowledges the last one it
-applied; everything after that is re-run locally.
+So the client runs its own chefs immediately and replays anything the server
+hasn't acknowledged yet on top of each frame that arrives. Inputs carry a
+sequence number; the server acknowledges the last one it applied; everything
+after that is re-run locally.
+
+**The predicted world is the world being drawn.** There is one, and
+`reconciler.ts` owns it: the server's last word with our own outstanding input
+replayed over it, and then remote chefs and customers written across from the
+playout clock, because nobody predicts those. It used to be two worlds — one
+drawn, one predicted — with a few fields copied from the second into the first,
+which meant that anything nobody had thought to copy silently cost a round trip.
+`carried` was one of them; see [what a prediction may do](#what-a-prediction-may-do).
 
 For this to work the server must apply *exactly* the sequence the client
 predicted against, so inputs are queued and consumed **one per tick** rather
@@ -168,10 +176,53 @@ is exactly why it survived the first round of testing — a healthy connection
 never drops an input, so the convergence test showed a clean 0.000 and said
 nothing about it.
 
-**Only movement and facing are predicted.** Possession is not: an item that
-appears in your hands and then snaps back is far worse than 60ms of nothing.
-Pressing grab is confirmed by the server, and so is the chopping animation, so
-the whole interaction lands together rather than in pieces.
+### What a prediction may do
+
+Possession used to be the server's word alone, on the argument that an item
+which appears in your hands and then snaps back is worse than 60ms of nothing.
+The argument is sound; the number was a guess, and it was wrong. Measured
+(`game/latency.test.ts` — press a button, wait for the world the renderer is
+handed to show it, swept across the broadcast cycle):
+
+| round trip | move | grab, before | grab, now |
+| --- | --- | --- | --- |
+| offline | 1 tick | 1 tick | 1 tick |
+| 0ms | 8ms | 44ms | **8ms** |
+| 30ms | 8ms | 75ms | **8ms** |
+| 180ms | 10ms | 212ms | **10ms** |
+
+"60ms of nothing" was only ever true on a LAN. The cost was the round trip
+**plus ~35ms** — a tick's wait to be read, the server's queue, and the wait for
+the next of twenty frames a second — so a chef in another country spent a fifth
+of a second empty-handed, per grab, per chop, per plate, in a game whose whole
+subject is picking things up quickly.
+
+So a chef now picks things up in their own world, and the server's answer
+replaces the guess wholesale when it lands. What that costs is real and is the
+price of the trade: when two chefs go for the same counter, one of them sees an
+item for a round trip that was never theirs. That is rarer than *every grab you
+ever make* being late.
+
+**The morning is not predicted at all.** Build-phase interaction buys, sells and
+moves appliances — it *mints entities* and rewrites the layout — and a client
+guessing at that hands out ids the server will never agree with, once per
+replayed tick. Service interaction only ever moves items that already exist,
+which is a guess that can be wrong but cannot be made up. Nothing is lost by
+waiting: the morning has no clock, and an appliance landing a round trip late
+lands in a kitchen nobody is racing through.
+
+**A prediction may move things and may not talk.** A replayed tick is re-run
+from scratch every time a frame lands, so anything it *announces* — a log line,
+a puff of coins over a collected tip — would be announced twenty times a second
+until the server caught up. `World.predicting` makes `log` and `effect` no-ops in
+that world; the money moves immediately, and the kitchen says so once, when the
+frame confirming it arrives.
+
+**The correction is drawn, not simulated.** The offset that absorbs a bad
+prediction is written into the world at the very end of a tick and taken back out
+before anything simulates from it again (`show` and `hide`). Leaving it in would
+feed the correction into the next tick's movement and collision — a correction
+applied twice, and a chef who never quite arrives.
 
 ## Dropping out, and coming back
 

@@ -142,9 +142,15 @@ describe("disagreeing with the server", () => {
     // player last saw their chef. One frame of decay is applied immediately, so
     // it is not exactly `believed` — the property is that it is far nearer to
     // that than to the place the server just insisted on.
-    const player = { ...host.world.players[0]!, id };
-    reconciler.draw(player);
-    expect(believed - player.pos.x).toBeLessThan((believed - corrected) * 0.25);
+    reconciler.show([id]);
+    const drawn = reconciler.prediction.players[0]!.pos.x;
+    expect(believed - drawn).toBeLessThan((believed - corrected) * 0.25);
+
+    // And the correction is only ever *drawn*: taking it back out leaves the
+    // simulation standing exactly where the server put it, or the next tick
+    // would move from a position that was never true and correct it twice.
+    reconciler.hide();
+    expect(reconciler.prediction.players[0]!.pos.x).toBe(corrected);
   });
 
   test("the offset decays to nothing", () => {
@@ -160,8 +166,7 @@ describe("disagreeing with the server", () => {
     expect(initial).toBeGreaterThan(0.1);
 
     // ~200ms of drawing walks it off.
-    const player = { ...host.world.players[0]!, id };
-    for (let i = 0; i < 30; i++) reconciler.draw(player);
+    for (let i = 0; i < 30; i++) reconciler.show([id]);
     expect(Math.hypot(reconciler.errorOf(id).x, reconciler.errorOf(id).y)).toBeLessThan(0.01);
   });
 
@@ -206,8 +211,10 @@ describe("a session ending", () => {
   });
 
   test("drawing a chef the prediction does not know about is a no-op", () => {
-    const { host } = server();
     const reconciler = new Reconciler(LEVEL);
-    expect(reconciler.draw(host.world.players[0]!)).toBe(false);
+    expect(() => {
+      reconciler.show([7]);
+      reconciler.hide();
+    }).not.toThrow();
   });
 });

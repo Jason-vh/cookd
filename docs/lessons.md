@@ -12,14 +12,19 @@ that call site does.
 
 ## Bugs worth remembering
 
-- **Never hand two worlds the same arrays.** The client applies each frame to
-  the world it *draws* and the world it *predicts* in. Assigning the frame's
-  order list to both made them the same array, and the prediction world's
-  `step()` — which spawns customers, logs events and queues effects — wrote
-  straight into what was being drawn. Orders flashed into view and vanished a
-  frame later. It got worse with latency, because more unacknowledged input
-  means more ticks replayed, so more chances to invent one. `applyFrame` copies
-  now, and the customer list arrives the same way.
+- **Never let a world share state with a frame.** The client used to apply each
+  frame to two worlds — the one it *drew* and the one it *predicted* in — and
+  assigning the frame's order list to both made them the same array, so the
+  prediction's `step()` wrote straight into what was being drawn. Orders flashed
+  into view and vanished a frame later. It got worse with latency, because more
+  unacknowledged input means more ticks replayed, so more chances to invent one.
+  `applyFrame` copies now, and the customer list arrives the same way.
+
+  There is **one** world now, and the rule did not go away with the second one:
+  a frame outlives being applied. It sits in the playout timeline for a couple
+  of seconds, and the world it was applied to replays hundreds of ticks over
+  itself, so a shared reference is still a prediction reaching into the record
+  of what the server actually said.
 
   **The rule is about state, not about arrays**, and the wording nearly cost us
   the same bug twice. Items were still shared by reference long after the lists
@@ -29,6 +34,26 @@ that call site does.
   contents into another item**, and a single predicted grab at the plate stack
   took a plate out of the pile the player was looking at. A shared reference is
   a bug waiting for someone to write a mutation you had not thought of.
+- **A replayed tick must see the same buttons the first run saw.** Reconciling
+  re-runs every unacknowledged tick on top of the server's answer, starting from
+  a world whose latched `prev` is whatever the *last* predicted tick left there.
+  Grab and use are edge-triggered, so on the second run the button was already
+  down and nothing happened. Movement never noticed — it has no edges — which is
+  why this sat undiscovered until possession was predicted, whereupon every
+  picked-up item vanished on the next frame. Each history entry now carries the
+  `prev` it was first predicted against.
+
+  The general shape: **anything replayed has to carry the state its result
+  depended on**, not just its input. An edge is a fact about two ticks.
+- **A prediction may move things and may not talk.** The same replay makes
+  anything a predicted tick *announces* happen again on every frame that lands —
+  twenty times a second, until the server catches up. A predicted grab moves the
+  item; the log line and the puff of coins wait for the frame that confirms it
+  (`World.predicting`).
+- **A correction is drawn, not simulated.** The offset that absorbs a bad
+  prediction goes into the world at the end of a tick and comes back out before
+  anything simulates from it, or the next tick's movement and collision start
+  from a position that was never true and the correction is applied twice.
 - **A request that takes a round trip needs a latch.** A single controller once
   produced **four** chefs. Online, `addLocalPlayer` is a *request*: the server
   owns player ids, so it returns nothing and the answer arrives a round trip
@@ -124,7 +149,10 @@ Several of these are no longer only advice:
 
 | Lesson | Now enforced by |
 | --- | --- |
-| Never hand two worlds the same arrays — or the same items | `host.test.ts`, "frames must not be shared between worlds" |
+| Never let a world share state with a frame — arrays or items | `host.test.ts`, "frames must not be shared between worlds" |
+| A replayed tick sees the same buttons | `latency.test.ts`, "what we picked up stays picked up" |
+| A prediction may move things and may not talk | `latency.test.ts`, "a predicted tick says nothing out loud" |
+| A correction is drawn, not simulated | `reconciler.test.ts`, "a correction is carried as an offset" |
 | A round trip needs a latch | `input.test.ts`, "a pending online join is asked for once" |
 | A connected gamepad is not a player | `input.test.ts`, "a connected but untouched pad does not create a player" |
 | Never `world.players[id]` | `playerById` is the only lookup; ids are never array positions |

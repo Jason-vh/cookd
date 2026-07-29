@@ -61,11 +61,20 @@ export function step(world: World, inputs: Inputs, dt: number = DT): void {
  * What a client may predict is exactly what its own input causes directly:
  * where its chefs are, and what they are holding or working. Everything else is
  * the server's to say.
+ *
+ * **The morning is not predicted at all.** Build-phase interaction buys, sells
+ * and moves appliances — it *mints entities* and rewrites the layout — and a
+ * client guessing at that invents ids the server will never agree with, once per
+ * replayed tick, twenty times a second until the layout message lands. Service
+ * interaction only ever moves items that already exist, which is a guess that
+ * can be wrong but cannot be made up. Nothing is lost by waiting: the morning
+ * has no clock, and an appliance that lands a round trip late lands in an empty
+ * kitchen nobody is racing through.
  */
 export function predict(world: World, inputs: Inputs, dt: number = DT): void {
   world.tick++;
   movementSystem(world, inputs, dt);
-  interactionSystem(world, inputs);
+  if (world.phase === "service") interactionSystem(world, inputs);
   expire(world, dt);
   latch(world, inputs);
 }
