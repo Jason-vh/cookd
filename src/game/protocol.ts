@@ -19,11 +19,18 @@ import type {
  * we have already been bitten once by floating point in `movement.ts`. Lockstep
  * would promote that class of bug from "annoying" to "two players see different
  * kitchens and neither is wrong". State sync makes divergence structurally
- * impossible; measured, it costs about 30 KB/s per player.
+ * impossible.
  *
- * Messages are JSON. At this size the debuggability is worth more than the
- * bytes — the whole dynamic frame is ~1.5 KB, and the static half is only sent
- * when it changes.
+ * Messages are JSON, and at this size the debuggability is worth more than the
+ * bytes: a frame is ~900 bytes for a kitchen with one chef in it and ~1.3 KB
+ * with four, and the static half is only sent when it changes. The cost **per
+ * player** rises with the number of players, because everybody is sent the
+ * whole world and the other chefs are part of it.
+ *
+ * The figures live in `latency.test.ts`, which prints them, rather than in this
+ * comment — the last two numbers here and in `docs/multiplayer.md` were each
+ * measured once under conditions neither recorded, and spent months disagreeing
+ * by a factor of two.
  */
 
 /**

@@ -18,9 +18,12 @@ Near term:
 - **Multiplayer polish:** there is still no spectator mode and no proper
   "kitchen full" screen — just an error line and a closed socket. A player who
   stays away past the grace period also loses their name colour on return.
-- **Binary frames.** JSON is 723 bytes a frame and entirely fine at eight
-  players; if a room ever gets busy, the encoder is one file and the format is
-  already split static/dynamic.
+- **Binary frames.** JSON is ~1.3 KB a frame with four chefs in the kitchen, or
+  28 KB/s to each of them, and the cost per player rises with the players
+  because everybody is sent the whole world. That is fine for a room; it is
+  ~105 KB/s of egress for a room of four, and the box holds 200 of them. If that
+  ever becomes the limit, the encoder is one file and the format is already
+  split static/dynamic. See the table in [multiplayer.md](multiplayer.md).
 
 - **Upgrade appliances** — a double fryer, a pro board, an oven with a bell. The
   [stall](the-shop.md) exists and sells the kinds that already exist; the next

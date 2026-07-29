@@ -57,8 +57,34 @@ bitten once by floating point in `movement.ts` (`2.32 - 0.32 = 1.9999…`).
 Lockstep would promote that class of bug from "annoying" to "two players see
 different kitchens and neither is wrong".
 
-Measured, state sync costs **~14 KB/s per player**, which buys a whole category
-of impossible bug:
+State sync buys a whole category of impossible bug, and this is what it costs.
+Measured by `latency.test.ts`, in payload bytes — JSON, uncompressed, what
+`Bun.serve` actually puts on the wire:
+
+| the park kitchen, mid-service, with | per frame | down, per player | up, per player |
+| --- | --- | --- | --- |
+| 1 chef in it | 895 B | 18 KB/s | — |
+| 4 chefs standing | 1282 B | 26 KB/s | — |
+| 4 chefs cooking | 1327 B | **28 KB/s** | **7 KB/s** |
+
+**Chefs are what a frame grows with** — about 130 bytes each, and every client
+is sent all of them, because everybody is sent the whole world. So a room of
+four costs the server ~105 KB/s of egress, not four times a fixed price, which
+is the number that matters for a box holding 200 rooms. Upstream is a tick of
+input at 60Hz and nothing else.
+
+The dining room is a smaller part of it than it looks: the starting kitchen has
+two tables, so there are never more than two customers to describe. A room that
+has bought its way to eight tables is not measured here, and would be worth
+re-running the table for.
+
+This document claimed 14 KB/s and `protocol.ts` claimed 30 KB/s for months. Both
+were measured once, under conditions neither wrote down, and then a dining room
+was added to the game. A figure in prose with no conditions attached is a figure
+that will be wrong within a season; the test prints this table, so the next
+person can re-read it rather than re-derive it.
+
+Getting there took two rounds of work, on a bare kitchen with nobody in it:
 
 | | bytes |
 | --- | --- |
@@ -200,8 +226,9 @@ kitchen quiet. Since silence already means "carry on", the client stops sending
 altogether while a chef stands still: runs of idle input collapse, and only the first idle tick — the
 instruction to stop — goes out. A stationary chef cannot drift apart from the
 server either, because both integrate the same zero velocity, so there is
-nothing for the reconciler to correct. Idle upload falls from ~4 KB/s to 16 B/s,
-which is just the two-second keepalive.
+nothing for the reconciler to correct. A tick of input is ~115 bytes, so a chef
+being run costs **~7 KB/s upstream** and a chef standing still costs the
+two-second keepalive and nothing else.
 
 Measured against a 180ms latency proxy:
 

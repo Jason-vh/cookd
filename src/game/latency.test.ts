@@ -208,7 +208,10 @@ type Wire = { deliver(message: ServerMessage): void };
 class Peer implements Wire {
   readonly game: NetGame;
   readonly socket: FakeSocket;
-  private readonly down: Pipe;
+  /** Payload bytes over this connection, for the question of what it all costs. */
+  down = 0;
+  up = 0;
+  private readonly pipe: Pipe;
   private next: number;
   private held = emptyInput();
 
@@ -219,9 +222,12 @@ class Peer implements Wire {
     phase: number,
   ) {
     const up = new Pipe(rtt / 2);
-    this.down = new Pipe(rtt / 2);
+    this.pipe = new Pipe(rtt / 2);
     this.next = phase;
-    this.socket = new FakeSocket((data) => up.send(link.now, data));
+    this.socket = new FakeSocket((data) => {
+      this.up += data.length;
+      up.send(link.now, data);
+    });
     this.game = new NetGame("ws://test/ws", "TEST", name, 1, `token-${name}`, () => {}, LEVEL, {
       open: () => this.socket,
       now: () => link.now,
@@ -231,12 +237,14 @@ class Peer implements Wire {
   }
 
   deliver(message: ServerMessage): void {
-    this.down.send(this.link.now, JSON.stringify(message));
+    const data = JSON.stringify(message);
+    this.down += data.length;
+    this.pipe.send(this.link.now, data);
   }
 
   /** Called once per millisecond of virtual time by the `Link`. */
   step(now: number): void {
-    for (const data of this.down.due(now)) this.socket.emit("message", { data });
+    for (const data of this.pipe.due(now)) this.socket.emit("message", { data });
     if (now < this.next) return;
     this.next += TICK_MS;
     this.game.update(DT, () => this.inputs());
@@ -626,6 +634,96 @@ describe("watching somebody else cook", () => {
     }
     console.log(table("Ann steps -> Bea sees her move", rows));
     for (const [, spread] of rows) expect(spread.min).toBeGreaterThan(0);
+  });
+});
+
+/** A kitchen with `count` chefs in it, service open, each stood at something. */
+function kitchenOf(count: number): Link {
+  const link = new Link(30);
+  for (const name of ["Bea", "Cal", "Dev"].slice(0, count - 1)) link.join(name);
+  link.advance(500);
+  link.server.host.menu("startDay");
+
+  // A new kitchen owns two crates, so any more than two stand at counters.
+  // Which is what four people in a one-dish kitchen actually do.
+  const taken = new Set<number>();
+  for (const peer of link.peers) {
+    const at = (a: Appliance): boolean => isCrate(a) || a.kind === "counter";
+    standFacing(link.server.host.world, link.theirs(peer)!, at, taken);
+  }
+  link.advance(500);
+  expect(link.server.host.world.players).toHaveLength(count);
+  return link;
+}
+
+type Cost = { down: number; up: number; frame: number; customers: number };
+
+/** Bytes over the wire per player per second, and what a frame weighs. */
+function bandwidth(link: Link, busy: boolean, seconds = 10): Cost {
+  const from = link.peers.map((peer) => ({ down: peer.down, up: peer.up }));
+  const frames = link.server.frames;
+
+  for (let tick = 0; tick < seconds * 60; tick++) {
+    if (busy) {
+      const phase = Math.floor(tick / 12) % 2;
+      for (const peer of link.peers) {
+        peer.press({ move: { x: phase ? 1 : -1, y: 0 }, grab: tick % 24 === 0 });
+      }
+    }
+    link.advance(TICK_MS);
+  }
+
+  const mean = (of: (peer: Peer, i: number) => number): number =>
+    Math.round(link.peers.reduce((sum, peer, i) => sum + of(peer, i), 0) / link.peers.length);
+  const sent = link.server.frames - frames;
+  return {
+    down: mean((peer, i) => (peer.down - from[i]!.down) / seconds),
+    up: mean((peer, i) => (peer.up - from[i]!.up) / seconds),
+    frame: Math.round(mean((peer, i) => peer.down - from[i]!.down) / Math.max(1, sent)),
+    customers: link.server.host.world.customers.length,
+  };
+}
+
+describe("what it costs to keep everybody in step", () => {
+  test("the wire budget, measured rather than remembered", () => {
+    // Two documents disagreed about this by a factor of two for months, because
+    // it was measured once, under conditions nobody wrote down, and then
+    // appliances stopped repeating "still empty, still zero" twenty times a
+    // second. Payload bytes, JSON, no compression: what `Bun.serve` puts on the
+    // wire.
+    //
+    // Chefs are what the frame grows with — ~130 bytes each, and every client is
+    // sent all of them — so the number worth quoting names how many are in the
+    // kitchen. A single figure for "per player" is the thing that went wrong
+    // here twice.
+    const rows: string[] = [];
+    let worst = 0;
+
+    for (const [chefs, busy] of [
+      [1, false],
+      [4, false],
+      [4, true],
+    ] as const) {
+      const link = kitchenOf(chefs);
+      // A day already under way: customers walking in, sitting, ordering.
+      link.advance(4000);
+      const cost = bandwidth(link, busy);
+      worst = Math.max(worst, cost.frame);
+
+      rows.push(
+        `  ${chefs} chef${chefs > 1 ? "s" : ""}, ${cost.customers} in the room, ` +
+          `${busy ? "cooking " : "standing"} -> ${String(cost.frame).padStart(4)} B/frame,` +
+          ` down ${String(cost.down).padStart(5)} B/s, up ${String(cost.up).padStart(4)} B/s`,
+      );
+      link.dispose();
+    }
+
+    console.log(`\nper player, payload bytes:\n${rows.join("\n")}\n`);
+
+    // The budget a frame is held to, and the one `host.test.ts` asserts against
+    // a bare world. Over it means a frame has quietly started carrying
+    // something; far under it means the documented figures have drifted again.
+    expect(worst).toBeLessThan(1500);
   });
 });
 
