@@ -44,7 +44,9 @@ src/
     host.ts               owns a world + its clock; runs in a tab or on a server
     game.ts               the interface the shell talks to (local or networked)
     local.ts              offline play: a Host in this tab
-    net.ts                online play: sockets, interpolation, prediction
+    net.ts                online play: wires the three below together
+    connection.ts         the socket, and the business of keeping one
+    reconciler.ts         our own chefs, run ahead and corrected when wrong
     protocol.ts           wire format, and the only encode/decode
     wire.ts               the edge of trust: unknown bytes -> validated messages
     snapshots.ts          the received timeline, and the clock that reads it

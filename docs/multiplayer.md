@@ -2,6 +2,18 @@
 
 # Multiplayer
 
+The client is four pieces, and the split is the same one the problem has:
+
+| | |
+| --- | --- |
+| `game/connection.ts` | The socket, and the business of keeping one. Backoff, and knowing when to stop. |
+| `game/snapshots.ts` | The received timeline, and the playout clock that reads it. |
+| `game/reconciler.ts` | Our own chefs, run ahead of the server and corrected when it disagrees. |
+| `game/net.ts` | Wires those three to a `World` the renderer cannot tell from a local one. |
+
+Each of the first three is pure enough to test without a socket, which is the
+point: all three had bugs that only appear on a bad link or during a deploy.
+
 One server, many kitchens. A **room code** picks the kitchen; the code lives in
 the URL hash, so sharing the link is the entire invite flow. A room is created
 the moment someone uses its code and is kept warm for ten minutes after the last
