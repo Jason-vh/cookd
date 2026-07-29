@@ -6,7 +6,9 @@ import { PLAYER_SPEED } from "../sim/world";
 import { chopImpact, chopLift, ease, isChefMotion, lerp, workPhase } from "./anim";
 import { disposeSubtree } from "./dispose";
 import { setGhost } from "./ghost";
-import { buildChef, buildCustomer, makeNameTag, PLAYER_COLORS, type ChefParts } from "./meshes";
+import { buildChef, buildCustomer, type ChefParts } from "./person-mesh";
+import { makeNameTag } from "./sprites";
+import { PALETTE } from "./palette";
 
 /**
  * Chefs and customers.
@@ -73,7 +75,7 @@ export class PeopleViews {
   }
 
   colorOf(playerId: number): number {
-    return PLAYER_COLORS[this.colors.get(playerId) ?? 0] ?? PLAYER_COLORS[0];
+    return PALETTE.chefs[this.colors.get(playerId) ?? 0] ?? PALETTE.chefs[0];
   }
 
   syncChefs(world: World, alpha: number, dt: number, time: number): void {
@@ -100,10 +102,10 @@ export class PeopleViews {
   /** The lowest palette slot nobody on screen is using. */
   private freeColorSlot(): number {
     const taken = new Set(this.colors.values());
-    for (let slot = 0; slot < PLAYER_COLORS.length; slot++) {
+    for (let slot = 0; slot < PALETTE.chefs.length; slot++) {
       if (!taken.has(slot)) return slot;
     }
-    return this.colors.size % PLAYER_COLORS.length;
+    return this.colors.size % PALETTE.chefs.length;
   }
 
   private syncChef(

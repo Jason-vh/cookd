@@ -7,7 +7,7 @@ import { chopLift, ease, workPhase } from "./anim";
 import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";
 import { setGhost, setGhostOpacity } from "./ghost";
-import { buildAppliance, type ApplianceParts } from "./meshes";
+import { buildAppliance, type ApplianceParts } from "./appliance-meshes";
 import { PALETTE } from "./palette";
 
 /**

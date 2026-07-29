@@ -6,7 +6,7 @@ import { ease } from "./anim";
 import type { ApplianceViews } from "./appliance-views";
 import { Bubble } from "./bubble";
 import { disposeSubtree } from "./dispose";
-import { buildHighlight, buildTipStack } from "./meshes";
+import { buildHighlight, buildTipStack } from "./overlay-meshes";
 import { PALETTE } from "./palette";
 
 /**

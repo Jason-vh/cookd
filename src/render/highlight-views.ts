@@ -5,7 +5,7 @@ import type { World } from "../sim/types";
 import { applianceAtTile } from "../sim/world";
 import type { ApplianceViews } from "./appliance-views";
 import { disposeSubtree } from "./dispose";
-import { buildHighlight } from "./meshes";
+import { buildHighlight } from "./overlay-meshes";
 import { PALETTE } from "./palette";
 import type { PeopleViews } from "./people-views";
 

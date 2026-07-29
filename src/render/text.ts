@@ -160,12 +160,26 @@ function context(element: HTMLCanvasElement): CanvasRenderingContext2D {
   return ctx;
 }
 
+/**
+ * A square canvas and its context.
+ *
+ * The same four lines appeared in `meshes.ts`, twice in `environment.ts` and
+ * once here — which, for a file whose own header is an essay about carrying a
+ * fix once, was one site too many.
+ */
+export function canvas2d(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const element = document.createElement("canvas");
+  element.width = size;
+  element.height = size;
+  return [element, context(element)];
+}
+
 /** A palette entry as CSS, for the many places a colour number meets a canvas. */
 export function cssHex(color: number): string {
   return `#${color.toString(16).padStart(6, "0")}`;
 }
 
-function roundRect(
+export function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,

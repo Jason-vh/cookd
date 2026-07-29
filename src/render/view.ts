@@ -11,7 +11,7 @@ import { createEnvironment } from "./environment";
 import { HighlightViews } from "./highlight-views";
 import { ItemViews } from "./item-views";
 import { mergeStatic } from "./merge";
-import { buildDoorway, buildWall, floorTexture } from "./meshes";
+import { buildDoorway, buildWall, floorTexture } from "./shell-meshes";
 import { PALETTE } from "./palette";
 import { PeopleViews } from "./people-views";
 import { Popups } from "./popups";

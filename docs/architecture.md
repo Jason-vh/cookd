@@ -65,7 +65,11 @@ src/
     bubble.ts             the order floating over a table: dish model + patience ring
     dial.ts               the work gauge over a busy appliance
     popups.ts             floating "+$12" text
-    meshes.ts             appliances, walls, chefs, customers, highlights
+    appliance-meshes.ts   appliance bodies, tops and details
+    shell-meshes.ts       the kitchen's own fabric: walls, doorway, floor
+    person-mesh.ts        one rig, two costumes: chefs and customers
+    overlay-meshes.ts     drawn over the kitchen: tile highlight, tip coins
+    sprites.ts            name tags and appliance labels
     models.ts             sculpted models for every ingredient and dish
     primitives.ts         shared geometry/material factories and caches
     text.ts               text as a texture or a sprite, in one place
