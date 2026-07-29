@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PROTOCOL_VERSION } from "../src/game/protocol";
@@ -295,3 +295,63 @@ function positionOf(client: Client, seat: number): { x: number; y: number } | nu
   const player = frame.frame.players.find((p) => p.id === seat);
   return player ? { x: player.x, y: player.y } : null;
 }
+
+describe("shutting down", () => {
+  test("a redeploy does not cost a room its day", async () => {
+    // Rooms are only persisted on a layout change, a phase change, an eviction
+    // or the last player leaving — so a room mid-service holds its takings and
+    // its day counter in memory alone. A deploy is the most likely reason this
+    // process ever stops, which made the one case with no save also the common
+    // one. Verified by reverting the handler: this file never appears.
+    //
+    // Its own server on its own port, because the point is to kill it.
+    const port = 5397;
+    const dir = await mkdtemp(join(tmpdir(), "cookd-shutdown-"));
+    const proc = Bun.spawn(["bun", "run", "server/index.ts"], {
+      env: { ...process.env, PORT: String(port), COOKD_SAVE_DIR: dir },
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    try {
+      for (let i = 0; i < 200; i++) {
+        try {
+          if ((await fetch(`http://127.0.0.1:${port}/health`)).ok) break;
+        } catch {
+          /* not up yet */
+        }
+        await Bun.sleep(25);
+      }
+
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      await new Promise((resolve) => socket.addEventListener("open", resolve, { once: true }));
+      socket.send(
+        JSON.stringify({
+          t: "hello",
+          version: PROTOCOL_VERSION,
+          room: "SHUTDOWN",
+          name: "Ann",
+          players: 1,
+          token: "t",
+        }),
+      );
+      await Bun.sleep(300);
+
+      // Opening the next day bumps `world.day`, which `saveSignature` covers —
+      // so the room is dirty. Killed one millisecond later, before any write
+      // could plausibly have finished on its own.
+      socket.send(JSON.stringify({ t: "menu", action: "endDay" }));
+      await Bun.sleep(60);
+      socket.send(JSON.stringify({ t: "menu", action: "startDay" }));
+      await Bun.sleep(1);
+
+      proc.kill("SIGTERM");
+      await proc.exited;
+      expect(proc.exitCode).toBe(0);
+
+      const saved: unknown = JSON.parse(await readFile(join(dir, "SHUTDOWN.json"), "utf8"));
+      expect(saved).toMatchObject({ day: 2 });
+    } finally {
+      proc.kill();
+    }
+  }, 20_000);
+});

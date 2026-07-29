@@ -192,10 +192,15 @@ function evictColdestRoom(): boolean {
  * safe — no retry, no complaint, and the layout gone at the next eviction.
  */
 function persist(room: Room): void {
-  if (!room.writable) return;
+  void persisted(room);
+}
+
+/** The same write, awaitable — for shutdown, which has to know when it landed. */
+function persisted(room: Room): Promise<void> {
+  if (!room.writable) return Promise.resolve();
   const signature = saveSignature(room.host.world);
-  if (signature === room.saved) return;
-  void writeThrough(room, signature);
+  if (signature === room.saved) return Promise.resolve();
+  return writeThrough(room, signature);
 }
 
 /**
@@ -291,7 +296,7 @@ function monotonic(): number {
 // --- the loop ----------------------------------------------------------------
 
 let previous = monotonic();
-setInterval(() => {
+const loop = setInterval(() => {
   const now = monotonic();
   const elapsed = (now - previous) / 1000;
   previous = now;
@@ -397,7 +402,7 @@ function affordMessage(data: SocketData, now: number): boolean {
   return true;
 }
 
-Bun.serve<SocketData, "/ws">({
+const listener = Bun.serve<SocketData, "/ws">({
   port: PORT,
   idleTimeout: 60,
   // Nothing we accept is remotely this big; the default is 16 MB, which is 16 MB
@@ -622,3 +627,51 @@ Bun.serve<SocketData, "/ws">({
 });
 
 console.log(`cookd server on http://localhost:${PORT}`);
+
+// --- shutting down -----------------------------------------------------------
+
+/**
+ * Write every kitchen before the process goes away.
+ *
+ * There was nothing here, and the gap was not small. Rooms are only persisted
+ * on a layout change, a phase change, an eviction, or the last player leaving —
+ * so a room mid-service has its day's takings and its day counter only in
+ * memory. `saveSignature` covers `money` and `day` deliberately, which means a
+ * redeploy during a busy evening silently rolled every live room back to its
+ * last checkpoint. Deploys are the single most likely reason this process ever
+ * stops, so the one case with no save was also the common one.
+ *
+ * Docker sends SIGTERM and waits ten seconds before SIGKILL. A save is under
+ * 2 KB and there are at most `MAX_ROOMS` of them, so this finishes in
+ * milliseconds; the timeout below exists only so that a wedged disk cannot turn
+ * a clean stop into a kill.
+ */
+const SHUTDOWN_TIMEOUT = 5000;
+
+let stopping = false;
+
+async function shutdown(signal: string): Promise<void> {
+  // SIGTERM then SIGINT, or an impatient operator pressing Ctrl-C twice, must
+  // not start a second sweep while the first is still writing.
+  if (stopping) return;
+  stopping = true;
+  console.log(`[cookd] ${signal} — saving ${rooms.size} room(s)`);
+
+  // Stop taking input first: a tick landing mid-write would make the signature
+  // we just wrote stale the moment it hit the disk.
+  clearInterval(loop);
+  // Not awaited: `stop()` resolves when the last connection closes, and a client
+  // that has stopped reading would hold the saves hostage behind it.
+  void listener.stop();
+
+  const writes = [...rooms.values()].map((room) => persisted(room));
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT));
+  await Promise.race([Promise.all(writes), timeout]);
+
+  console.log("[cookd] saved, exiting");
+  process.exit(0);
+}
+
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => void shutdown(signal));
+}
