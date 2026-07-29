@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
-import { mealLeft } from "../sim/systems/customers";
+import { mealLeft } from "../sim/queries";
 import { specKey } from "../sim/items";
 import type { Appliance, Item, World } from "../sim/types";
 import { chopImpact, workPhase } from "./anim";

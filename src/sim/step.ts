@@ -1,7 +1,8 @@
 import type { Inputs, World } from "./types";
 import { log } from "./world";
 import { applianceSystem } from "./systems/appliances";
-import { customerSystem, unreachableTables } from "./systems/customers";
+import { customerSystem } from "./systems/customers";
+import { unreachableTables } from "./queries";
 import { interactionSystem } from "./systems/interaction";
 import { movementSystem } from "./systems/movement";
 

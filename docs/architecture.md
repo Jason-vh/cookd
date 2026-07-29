@@ -27,6 +27,7 @@ src/
     pathing.ts            BFS over walkable tiles: customer routes and reachability
     random.ts             the one PRNG — deterministic, shared with the scenery
     step.ts               fixed-timestep tick: runs the systems in order
+    queries.ts            read-only questions about the world; safe for the renderer
     systems/
       movement.ts         circle-vs-tile collision, player separation
       interaction.ts      grab/place/combine/deliver, build-phase appliance moving

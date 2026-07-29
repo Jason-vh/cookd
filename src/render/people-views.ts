@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { CUSTOMER_SPEED } from "../sim/systems/customers";
+
 import { DT } from "../sim/step";
 import type { ChefMotion, Customer, Player, World } from "../sim/types";
-import { PLAYER_SPEED } from "../sim/world";
+import { CUSTOMER_SPEED, PLAYER_SPEED } from "../sim/world";
 import { chopImpact, chopLift, ease, isChefMotion, lerp, workPhase } from "./anim";
 import { disposeSubtree } from "./dispose";
 import { setGhost } from "./ghost";

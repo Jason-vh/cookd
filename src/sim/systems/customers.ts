@@ -3,7 +3,7 @@ import { DIRTY } from "../../data/ingredients";
 import { isDirty, isPlate, specKey } from "../items";
 import { pathTo, reachableFrom, seatsAround } from "../pathing";
 import type { Appliance, Customer, Vec2, World } from "../types";
-import { effect, log, random, tileIndex } from "../world";
+import { CUSTOMER_SPEED, effect, log, random, tileIndex } from "../world";
 
 /**
  * Customers: the order queue made physical.
@@ -18,28 +18,11 @@ import { effect, log, random, tileIndex } from "../world";
  * itself.
  */
 
-/** Tiles per second. Slower than a chef: they are on their day off. */
-export const CUSTOMER_SPEED = 2.4;
-
 /** A beat of calm between sitting down and asking for something. */
 const DECIDE_TIME = 3;
 /** How long a table stays occupied after the food lands. Throughput lives here. */
-const EAT_TIME = 12;
+export const EAT_TIME = 12;
 
-/**
- * How much of the meal is left, 1..0.
- *
- * Exported as a function rather than exporting `EAT_TIME`, because the render
- * layer wants the *fraction* and was computing it itself as
- * `customer.timer / EAT_TIME`. That is this module's arithmetic living in
- * another module's file: `timer` is reused by four states with four different
- * meanings, and the day the eating state stopped counting down from EAT_TIME
- * the plates would have quietly stopped emptying, with nothing to point at.
- */
-export function mealLeft(customer: Customer): number {
-  if (customer.state !== "eating") return 1;
-  return Math.max(0, Math.min(1, customer.timer / EAT_TIME));
-}
 /** How long someone will stand at a full door before giving up. */
 const DOOR_WAIT = 14;
 /** Arrivals stop this long before closing time, so the day can finish cleanly. */
@@ -334,15 +317,6 @@ export function tableOf(world: World, customer: Customer): Appliance | null {
   return customer.table === null ? null : (world.appliances.get(customer.table) ?? null);
 }
 
-/** The customer sitting at this table and waiting to be fed, if there is one. */
-export function customerAt(world: World, table: Appliance): Customer | null {
-  return (
-    world.customers.find(
-      (customer) => customer.table === table.id && customer.state === "ordering",
-    ) ?? null
-  );
-}
-
 /**
  * Take whatever is on the table as this customer's dinner, if it is what they
  * asked for. Returns the reward paid, or null when it is not their dish.
@@ -371,15 +345,4 @@ export function acceptDelivery(world: World, table: Appliance, customer: Custome
   world.served++;
   log(world, `${recipe.name} delivered  +$${recipe.reward}`);
   return recipe.reward;
-}
-
-/** Tables a customer can actually reach. Used by the build phase to warn. */
-export function unreachableTables(world: World): Appliance[] {
-  const reachable = reachableFrom(world, world.door);
-  const stranded: Appliance[] = [];
-  for (const appliance of world.appliances.values()) {
-    if (appliance.kind !== "table") continue;
-    if (!pickSeat(world, appliance.tile, reachable)) stranded.push(appliance);
-  }
-  return stranded;
 }

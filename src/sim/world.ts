@@ -7,6 +7,8 @@ export const TILE = 1;
 export const PLAYER_RADIUS = 0.32;
 /** Tiles per second. */
 export const PLAYER_SPEED = 4.2;
+/** Tiles per second. Slower than a chef: they are on their day off. */
+export const CUSTOMER_SPEED = 2.4;
 
 export function emptyInput(): PlayerInput {
   return { move: { x: 0, y: 0 }, grab: false, use: false, start: false, menu: false };

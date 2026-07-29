@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
 import type { Appliance, World } from "../sim/types";
 import { playerById } from "../sim/world";
-import { canPlace, targetTile } from "../sim/systems/interaction";
+import { canPlace, targetTile } from "../sim/queries";
 import { chopLift, ease, workPhase } from "./anim";
 import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";

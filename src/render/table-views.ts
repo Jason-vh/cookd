@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
-import { unreachableTables } from "../sim/systems/customers";
+import { unreachableTables } from "../sim/queries";
 import type { World } from "../sim/types";
 import { ease } from "./anim";
 import type { ApplianceViews } from "./appliance-views";

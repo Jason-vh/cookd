@@ -1,5 +1,4 @@
 import { applianceDef } from "../../data/appliances";
-import { ingredient } from "../../data/ingredients";
 import { COMBINE_INDEX, pairKey } from "../../data/recipes";
 import { isBurnt, isDirty, isPlate, makeItem, specKey } from "../items";
 import type { Appliance, Inputs, Item, Player, World } from "../types";
@@ -12,10 +11,8 @@ import {
   tileIndex,
   touchLayout,
 } from "../world";
-import { acceptDelivery, customerAt } from "./customers";
-
-/** How far in front of the player we look for something to interact with. */
-const REACH = 0.75;
+import { acceptDelivery } from "./customers";
+import { canPlace, customerAt, itemLabel, targetAppliance, targetTile } from "../queries";
 
 export function interactionSystem(world: World, inputs: Inputs): void {
   for (const player of world.players) {
@@ -35,18 +32,6 @@ export function interactionSystem(world: World, inputs: Inputs): void {
     const target = targetAppliance(world, player);
     player.workingOn = input.use && target ? target.id : null;
   }
-}
-
-export function targetTile(player: Player): { x: number; y: number } {
-  return {
-    x: Math.floor(player.pos.x + player.facing.x * REACH),
-    y: Math.floor(player.pos.y + player.facing.y * REACH),
-  };
-}
-
-export function targetAppliance(world: World, player: Player): Appliance | null {
-  const t = targetTile(player);
-  return applianceAtTile(world, t.x, t.y);
 }
 
 // --- service phase -----------------------------------------------------------
@@ -272,18 +257,6 @@ function buildGrab(world: World, player: Player): void {
   player.carriedAppliance = appliance.id;
 }
 
-/**
- * Can a carried appliance be set down here? Shared with the render layer so the
- * placement ghost and the rule that governs it can never disagree.
- */
-export function canPlace(world: World, tx: number, ty: number): boolean {
-  if (!inBounds(world, tx, ty)) return false;
-  const idx = tileIndex(world, tx, ty);
-  if (world.tiles[idx]?.wall) return false;
-  const existing = applianceAtTile(world, tx, ty);
-  return !existing || applianceDef(existing.kind).movable;
-}
-
 function tileOccupiedByPlayer(world: World, tx: number, ty: number, ignore: number): boolean {
   const r = PLAYER_RADIUS;
   for (const player of world.players) {
@@ -311,16 +284,4 @@ function pushOutOfTile(player: Player, tx: number, ty: number): void {
   else if (smallest === fromRight) player.pos.x = tx + 1 + r;
   else if (smallest === fromTop) player.pos.y = ty - r;
   else player.pos.y = ty + 1 + r;
-}
-
-/** Display name for the HUD, e.g. "Chopped Tomato" or "Plate: Pizza". */
-export function itemLabel(item: Item): string {
-  const base = ingredient(item.base).name;
-  if (item.base === "plate") {
-    if (isDirty(item)) return "Dirty plate";
-    return item.contents.length ? `Plate: ${itemLabel(item.contents[0]!)}` : "Plate";
-  }
-  if (item.processes.length === 0) return base;
-  if (item.processes.includes("burnt")) return `Burnt ${base}`;
-  return `${base} (${item.processes.join(", ")})`;
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { LEVEL } from "../data/level";
 import { RECIPE_BY_ID } from "../data/recipes";
 import { DT, step } from "./step";
-import { unreachableTables } from "./systems/customers";
+import { unreachableTables } from "./queries";
 import { specKey } from "./items";
 import type { Customer, Player, PlayerInput, World } from "./types";
 import { applianceAtTile, createWorld, emptyInput, isSolid } from "./world";

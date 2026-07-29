@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
-import { canPlace, targetTile } from "../sim/systems/interaction";
+import { canPlace, targetTile } from "../sim/queries";
 import type { World } from "../sim/types";
 import { applianceAtTile } from "../sim/world";
 import type { ApplianceViews } from "./appliance-views";

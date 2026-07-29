@@ -119,6 +119,11 @@ Several of these are no longer only advice:
 | Optional parameters in the middle of a signature | `AdvanceOptions`, a named object |
 | Don't trust what arrives over a socket | `game/wire.ts` and `wire.test.ts` |
 | Casts hide the bugs types were meant to catch | `.oxlintrc.json` bans type assertions outright |
+| A control meaning two things needs a latch spanning the boundary | `Latch`, and `menu-controller.test.ts` — one test per historical instance |
+| `src/sim` is pure | `layering.test.ts` |
+| The renderer reads the world and never writes it | `layering.test.ts` |
+| One list of a union, not several | `Record<K, true>` instead of `Set`, in `wire.ts` |
+| Content the renderer cannot draw | `models.test.ts` |
 
 The ones without a row are still only advice, which is worth knowing when you
 are about to break one.

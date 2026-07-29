@@ -1,4 +1,4 @@
-import { LAST_ORDERS } from "../sim/systems/customers";
+import { isLastOrders } from "../sim/queries";
 import type { World } from "../sim/types";
 
 /**
@@ -213,7 +213,7 @@ export class Hud {
 function dayPhase(world: World): string {
   if (world.phase !== "service") return "Time";
   if (world.dayTime <= 0) return "Closing";
-  if (world.dayTime <= LAST_ORDERS) return "Last orders";
+  if (isLastOrders(world)) return "Last orders";
   return "Time";
 }
 
