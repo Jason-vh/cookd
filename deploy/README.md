@@ -1,33 +1,50 @@
 # Deploying cookd
 
-Runbook for `cookd.vhtm.eu` on the `vhtm-eu` VM. Conventions come from
-[`Jason-vh/vhtm.eu`](https://github.com/Jason-vh/vhtm.eu); this file only covers
-what is specific to cookd.
+Runbook for `cookd.vhtm.eu`, which runs alone on the `cookd` exe.dev VM in
+Frankfurt.
 
 | | |
 | --- | --- |
-| Domain | `cookd.vhtm.eu` |
+| Domain | `cookd.vhtm.eu` (CNAME → `cookd.exe.xyz`) |
+| VM | `cookd`, region `fra` |
 | VM port | `3010` |
-| Deploy dir | `/home/exedev/apps/cookd` |
+| Deploy dir | `/home/exedev/cookd` |
 | Runner | `gh-actions-runner-cookd.service`, label `cookd-prod` |
 | Compose project | `cookd` |
 | Database | **none** |
+
+## Why its own VM
+
+cookd used to share the `vhtm-eu` box with eight other apps. That box is in
+Los Angeles, and cookd is the only thing on it where a round trip is felt
+rather than measured: every keystroke is a simulation input, and prediction can
+hide latency only up to a point. Frankfurt is roughly 150 ms closer for the
+people who actually play it.
+
+Having the VM to itself removes most of the vhtm.eu apparatus. There is no
+shared Caddy, so no `deploy/caddy.snippet` and no host matching — the exe.dev
+proxy forwards straight to the container. There is no port inventory, so `3010`
+is just a number both ends agree on. There is no shared Postgres, so no
+`apps-net`. What is left is a Dockerfile, a compose file and a workflow.
+
+**The container must not bind loopback.** The exe.dev proxy reaches the VM over
+`eth0`, not from inside it, so `127.0.0.1:3010:3000` — correct on the shared box,
+where Caddy was the only client — answers nothing here. This is the one line
+that does not survive the move unchanged.
 
 ## What makes cookd different from the other apps
 
 **No Postgres.** The only persistent state is one small JSON file per kitchen,
 written a few times a day. Being able to `cat` and `rm` a save is worth more
-than any query ability we would use, so convention 4 (one DB per app) is
-deliberately skipped — there is nothing to put in a database.
+than any query ability we would use, so there is nothing to put in a database.
 
 **State lives in a Docker volume,** `cookd-saves`, mounted at `/app/saves`. This
 matters more than it looks: every deploy rebuilds the container, and without the
 volume each push would silently reset everyone's kitchen. If you ever move the
 app, move the volume.
 
-**WebSockets.** The client and the game socket share one origin — Caddy's
-`reverse_proxy` upgrades transparently, so the snippet is the same one line
-every other app uses. The only untested link in the chain is exe.dev's edge; see
+**WebSockets.** The client and the game socket share one origin, and the exe.dev
+edge passes the upgrade through untouched — verified end to end, see
 [smoke test](#smoke-test).
 
 **One process, one instance.** The server holds every live kitchen in memory and
@@ -37,18 +54,35 @@ loses that day's progress, not their kitchen.
 
 ## First-time setup
 
-1. **Port** — `3010`, already added to the
-   [inventory](https://github.com/Jason-vh/vhtm.eu/blob/main/apps/README.md).
-2. **DNS** — at Porkbun: `cookd.vhtm.eu CNAME vhtm-eu.exe.xyz`, then register
-   with the edge:
+1. **VM** — `ssh exe.dev new --name=cookd`, with the account region set to
+   `fra` (`ssh exe.dev set-region fra`). Regions are per account, so this only
+   works if new VMs are meant to land in Frankfurt.
+2. **Proxy** — point it at the app port and open it up:
    ```bash
-   ssh exe.dev domain add vhtm-eu cookd.vhtm.eu
+   ssh exe.dev share port cookd 3010
+   ssh exe.dev share set-public cookd   # otherwise visitors get an exe.dev login
    ```
-3. **Runner** — on the VM as `exedev`, follow
-   [infra/README.md](https://github.com/Jason-vh/vhtm.eu/blob/main/infra/README.md#adding-a-new-runner)
-   with `<repo>` = `cookd`, label `cookd-prod`.
-4. **Secrets** — none. cookd has no database and no API keys.
-5. Push to `main`.
+3. **DNS** — at Porkbun: `cookd.vhtm.eu CNAME cookd.exe.xyz`, then register with
+   the edge once DNS resolves:
+   ```bash
+   ssh exe.dev domain add cookd cookd.vhtm.eu
+   ```
+   A domain can only be registered on one VM, so remove it from the old one
+   first. Until it is registered the edge answers `421 Misdirected Request`.
+4. **Runner** — on the VM as `exedev`, install a self-hosted runner for this
+   repo labeled `cookd-prod`, as `gh-actions-runner-cookd.service`.
+5. **Secrets** — none. cookd has no database and no API keys.
+6. Push to `main`.
+
+If SSH to the VM says *"Please complete registration by running: ssh exe.dev"*
+while `ssh exe.dev` itself works, your agent is offering the wrong key. Pin the
+identity for the VMs too:
+
+```
+Host exe.dev *.exe.xyz
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+```
 
 ## Smoke test
 
@@ -57,33 +91,32 @@ loses that day's progress, not their kitchen.
 curl -s localhost:3010/health
 
 # From anywhere: does the edge pass a WebSocket upgrade through?
-curl -isS -o /dev/null -w '%{http_code}\n' \
+curl -isS --http1.1 \
   -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
   -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
   https://cookd.vhtm.eu/ws
 ```
 
-A `101` means the upgrade went through end to end. Anything else (`200`, `400`,
-`502`) means something in the chain is terminating the upgrade — check Caddy
-first, then the edge. **If the edge does not pass WebSockets, that is the one
-thing that would block this deployment**, and it is worth testing before
-anything else.
+`--http1.1` is not optional. HTTP/2 has no `Upgrade:` mechanism, so curl
+negotiates h2, the headers are ignored, and you get a perfectly healthy-looking
+`200` that proves nothing. A `101` means the upgrade went through end to end.
+Anything else means something in the chain is terminating it.
 
 Then open <https://cookd.vhtm.eu>, join a kitchen, and open the same link in a
 second browser.
 
 ## Health
 
-`GET /health` returns live rooms:
+`GET /health` returns counts, deliberately not room codes:
 
 ```json
-{ "ok": true, "rooms": [{ "code": "MAIN", "players": 3, "clients": 2, "day": 4 }] }
+{ "ok": true, "rooms": 1, "maxRooms": 200, "clients": 0, "behind": 0, "dropped": 0 }
 ```
 
 ## Debugging
 
 ```bash
-cd /home/exedev/apps/cookd
+cd /home/exedev/cookd
 docker compose --env-file .env.production logs -f --tail=100
 docker compose --env-file .env.production ps
 docker compose --env-file .env.production restart
@@ -98,12 +131,25 @@ docker run --rm -v cookd_cookd-saves:/s alpine rm /s/MAIN.json
 
 The volume is namespaced by the compose project, hence `cookd_cookd-saves`.
 
+## Moving the saves to another box
+
+The only state, and the only step of a migration that cannot be redone:
+
+```bash
+# on the old VM
+docker run --rm -v cookd_cookd-saves:/s -v /tmp:/b alpine tar czf /b/saves.tgz -C /s .
+# via your workstation
+scp old.exe.xyz:/tmp/saves.tgz . && scp saves.tgz new.exe.xyz:/tmp/
+# on the new VM, once the first deploy has created the volume
+docker run --rm -v cookd_cookd-saves:/s -v /tmp:/b alpine tar xzf /b/saves.tgz -C /s
+```
+
 ## Rollback
 
 There are no migrations and no schema, so rollback is just an older image:
 
 ```bash
-cd /home/exedev/apps/cookd
+cd /home/exedev/cookd
 git checkout <previous-sha>
 docker compose --env-file .env.production up -d --build
 ```

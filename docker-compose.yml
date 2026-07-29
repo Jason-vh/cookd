@@ -11,13 +11,9 @@ services:
       # there" and "everyone starts again on Tuesday".
       - cookd-saves:/app/saves
     ports:
-      - "127.0.0.1:${COOKD_APP_HOST_PORT:-3010}:3000"
-    networks:
-      - apps-net
+      # Deliberately not loopback. The exe.dev proxy reaches the VM over eth0,
+      # so a 127.0.0.1 binding would be visible to nothing but the VM itself.
+      - "${COOKD_APP_HOST_PORT:-3010}:3000"
 
 volumes:
   cookd-saves:
-
-networks:
-  apps-net:
-    external: true

@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DEPLOY_DIR: /home/exedev/apps/cookd
+  DEPLOY_DIR: /home/exedev/cookd
 
 jobs:
   deploy:
@@ -52,11 +52,6 @@ jobs:
           cd "$DEPLOY_DIR"
           docker compose --env-file .env.production up -d --build --remove-orphans
           docker compose --env-file .env.production ps
-
-      - name: Reload Caddy (picks up deploy/caddy.snippet)
-        run: |
-          sudo /usr/bin/caddy validate --config /etc/caddy/Caddyfile
-          sudo /usr/bin/systemctl reload caddy
 
       - name: Smoke test
         run: |
