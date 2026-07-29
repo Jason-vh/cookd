@@ -61,6 +61,28 @@ function bool(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
+/**
+ * An integer that is allowed to be absent: `null` for a real absence,
+ * `undefined` for "present, and not an integer".
+ *
+ * The distinction is the whole point, and it was missing. Four sites wrote
+ *
+ *     const table = value.table === null ? null : int(value.table);
+ *     if (table === undefined) return null;
+ *
+ * where `int` returns `number | null` and never `undefined` — so the guard could
+ * not fire and the parser it was guarding *coerced* instead of rejecting.
+ * `heldBy: "3"` parsed as `heldBy: null`, and `null` means "on the grid", so a
+ * malformed frame drew a held appliance back as a solid tile players walk into.
+ *
+ * The comparison is legal TypeScript, which is why nothing caught it: comparing
+ * a `number | null` against `undefined` is a permitted, always-false test.
+ */
+function optionalInt(value: unknown): number | null | undefined {
+  if (value === null || value === undefined) return null;
+  return int(value) ?? undefined;
+}
+
 function arr(value: unknown, max: number): unknown[] | null {
   return Array.isArray(value) && value.length <= max ? value : null;
 }
@@ -238,20 +260,34 @@ function parseLayout(value: unknown): Layout | null {
   return appliances === null ? null : { appliances };
 }
 
-const APPLIANCE_KINDS: ReadonlySet<string> = new Set<ApplianceKind>([
-  "wall",
-  "counter",
-  "board",
-  "fryer",
-  "oven",
-  "crate",
-  "plates",
-  "bin",
-  "table",
-]);
+/**
+ * Every appliance kind, as a `Record` rather than a `Set`.
+ *
+ * This is the difference between a list that has to be *remembered* and one the
+ * compiler insists on. `new Set<ApplianceKind>([...])` accepts an array that
+ * omits members — a literal missing an element is still assignable — so adding
+ * a `sink` to `data/appliances.ts` widened the union and compiled cleanly here,
+ * while every `layout` message containing a sink was silently rejected. The
+ * client never applies the layout, `layoutIds` stays empty, every frame is
+ * dropped, and the kitchen freezes at "connecting" with nothing logged.
+ *
+ * `Record<ApplianceKind, true>` is missing-property-checked, so the same change
+ * is now a build error naming the key.
+ */
+const APPLIANCE_KINDS: Record<ApplianceKind, true> = {
+  wall: true,
+  counter: true,
+  board: true,
+  fryer: true,
+  oven: true,
+  crate: true,
+  plates: true,
+  bin: true,
+  table: true,
+};
 
 function isApplianceKind(value: string): value is ApplianceKind {
-  return APPLIANCE_KINDS.has(value);
+  return Object.hasOwn(APPLIANCE_KINDS, value);
 }
 
 type Spec = NonNullable<Layout["appliances"][number]["source"]>;
@@ -266,17 +302,18 @@ function parseSpec(value: unknown): Spec | undefined {
   return processes === null ? undefined : { base, processes };
 }
 
-const CUSTOMER_STATES: ReadonlySet<string> = new Set<CustomerState>([
-  "arriving",
-  "waiting",
-  "deciding",
-  "ordering",
-  "eating",
-  "leaving",
-]);
+/** Exhaustive by type — see the note on `APPLIANCE_KINDS`. */
+const CUSTOMER_STATES: Record<CustomerState, true> = {
+  arriving: true,
+  waiting: true,
+  deciding: true,
+  ordering: true,
+  eating: true,
+  leaving: true,
+};
 
 function isCustomerState(value: string): value is CustomerState {
-  return CUSTOMER_STATES.has(value);
+  return Object.hasOwn(CUSTOMER_STATES, value);
 }
 
 function parseFrame(value: unknown): Frame | null {
@@ -349,7 +386,7 @@ function parseFrameCustomer(value: unknown): Frame["customers"][number] | null {
   if (id === null || x === null || y === null || fx === null || fy === null) return null;
   if (recipeId === null || remaining === null || patience === null || timer === null) return null;
   if (state === null || !isCustomerState(state)) return null;
-  const table = value.table === null ? null : int(value.table);
+  const table = optionalInt(value.table);
   if (table === undefined) return null;
   return { id, state, x, y, fx, fy, table, recipeId, remaining, patience, timer };
 }
@@ -368,8 +405,8 @@ function parseFramePlayer(value: unknown): Frame["players"][number] | null {
 
   const carried = parseNullableItem(value.carried);
   if (carried === undefined) return null;
-  const carriedAppliance = value.carriedAppliance === null ? null : int(value.carriedAppliance);
-  const workingOn = value.workingOn === null ? null : int(value.workingOn);
+  const carriedAppliance = optionalInt(value.carriedAppliance);
+  const workingOn = optionalInt(value.workingOn);
   if (carriedAppliance === undefined || workingOn === undefined) return null;
 
   return { id, name, away, x, y, fx, fy, carried, carriedAppliance, workingOn };
@@ -387,7 +424,7 @@ function parseFrameAppliance(value: unknown): Frame["appliances"][number] | null
 
   const item = parseNullableItem(value.item);
   if (item === undefined) return null;
-  const heldBy = value.heldBy === null ? null : int(value.heldBy);
+  const heldBy = optionalInt(value.heldBy);
   if (heldBy === undefined) return null;
 
   const motion = value.motion === null ? null : parseMotion(value.motion);
@@ -396,10 +433,17 @@ function parseFrameAppliance(value: unknown): Frame["appliances"][number] | null
   return { id, item, progress, overcook, motion, heldBy, justFinished, tip };
 }
 
-const MOTIONS: ReadonlySet<string> = new Set<Motion>(["chop", "knead", "mix", "fry", "bake"]);
+/** Exhaustive by type — see the note on `APPLIANCE_KINDS`. */
+const MOTIONS: Record<Motion, true> = {
+  chop: true,
+  knead: true,
+  mix: true,
+  fry: true,
+  bake: true,
+};
 
 function isMotion(value: string): value is Motion {
-  return MOTIONS.has(value);
+  return Object.hasOwn(MOTIONS, value);
 }
 
 function parseMotion(value: unknown): Motion | undefined {

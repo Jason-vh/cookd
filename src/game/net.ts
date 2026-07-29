@@ -1,5 +1,5 @@
 import { LEVEL, type LevelDef } from "../data/level";
-import { DT, step } from "../sim/step";
+import { DT, predict } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
 import { createWorld, emptyInput, isIdleInput } from "../sim/world";
 import type { Game } from "./game";
@@ -382,9 +382,15 @@ export class NetGame implements Game {
       if (player) player.facing = { x: snapshot.fx, y: snapshot.fy };
     }
 
-    const acked = Math.min(...this.localIds.map((id) => frame.acks[id] ?? 0));
+    // A seat the server has not acked *anything* for is not "acked at zero" —
+    // it is a seat with nothing outstanding. Reading it as zero meant that
+    // adding a second local player mid-session retained the entire history and
+    // replayed all 240 entries through the simulation on a single frame, which
+    // is a visible hitch; and if a seat ever left `acks` without a fresh
+    // `welcome`, it pinned the replay at 240 ticks per frame, forever.
+    const acked = Math.min(this.seq, ...this.localIds.map((id) => frame.acks[id] ?? this.seq));
     this.history = this.history.filter((entry) => entry.seq > acked);
-    for (const entry of this.history) step(this.prediction, entry.inputs);
+    for (const entry of this.history) predict(this.prediction, entry.inputs);
 
     // Whatever we got wrong becomes an offset to be walked off, not a teleport.
     for (const [id, was] of believed) {
@@ -438,7 +444,7 @@ export class NetGame implements Game {
       this.send({ t: "input", seq: this.seq, inputs: definedInputs(mine) });
       this.sentIdle = idle;
     }
-    step(this.prediction, mine);
+    predict(this.prediction, mine);
 
     // 2. The playout clock walks forward one tick and samples the timeline.
     this.playout += DT * 1000;

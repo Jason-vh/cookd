@@ -173,6 +173,23 @@ export function addPlayer(world: World, level: LevelDef, name = ""): Player {
 }
 
 /**
+ * Add a player whose id and position we already know.
+ *
+ * For rebuilding a roster from a server snapshot, where a spawn point is not
+ * just unnecessary but misleading: `applyFrame` used to call `addPlayer` with
+ * the module-level `LEVEL`, picking a spawn from whichever level the *client*
+ * was compiled with, and then overwrite it two lines later. Harmless, and
+ * exactly the sort of stale assumption the level registry exists to remove —
+ * on any second level it would have been reading the wrong table.
+ */
+export function adoptPlayer(world: World, id: number, name: string, at: Vec2): Player {
+  const player = makePlayer(id, name, { x: at.x - 0.5, y: at.y - 0.5 });
+  world.players.push(player);
+  world.nextPlayerId = Math.max(world.nextPlayerId, id + 1);
+  return player;
+}
+
+/**
  * Remove a player and everything they were holding onto.
  *
  * Food they carried is destroyed rather than dropped: there is no such thing as

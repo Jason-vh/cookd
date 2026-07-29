@@ -1,5 +1,4 @@
-import { LEVEL } from "../data/level";
-import { addPlayer, touchLayout } from "../sim/world";
+import { adoptPlayer, touchLayout } from "../sim/world";
 import type { Appliance, Customer, Effect, Phase, Player, PlayerInput, World } from "../sim/types";
 
 /**
@@ -338,10 +337,7 @@ export function applyFrame(world: World, frame: Frame): void {
   for (const snapshot of frame.players) {
     let player = world.players.find((p) => p.id === snapshot.id);
     if (!player) {
-      player = addPlayer(world, LEVEL, snapshot.name);
-      player.id = snapshot.id;
-      player.pos = { x: snapshot.x, y: snapshot.y };
-      player.prevPos = { x: snapshot.x, y: snapshot.y };
+      player = adoptPlayer(world, snapshot.id, snapshot.name, { x: snapshot.x, y: snapshot.y });
     }
     player.name = snapshot.name;
     player.away = snapshot.away;

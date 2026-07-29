@@ -16,5 +16,9 @@
     "noEmit": true,
     "types": ["vite/client", "bun"]
   },
-  "include": ["src"]
+  // `src` only, once — which quietly left the 600-line authoritative game
+  // server, its save store and the build config unchecked, while `bun run
+  // check` reported success. The lint is type-aware and did cover them, so this
+  // was less bad than it sounds, but "types are gated" was not true.
+  "include": ["src", "server", "docs", "vite.config.ts"]
 }

@@ -26,7 +26,46 @@ export function step(world: World, inputs: Inputs, dt: number = DT): void {
   applianceSystem(world, dt);
   customerSystem(world, dt);
   phaseSystem(world, inputs, dt);
+  expire(world, dt);
+  latch(world, inputs);
+}
 
+/**
+ * Advance only the parts of the world a client is allowed to guess at.
+ *
+ * The networked client runs its own chefs ahead of the server and replays the
+ * unacknowledged ones every time a frame lands (see `net.ts`). It used to do
+ * that with the full `step`, which was wrong in three ways:
+ *
+ *  - **It changed the phase.** `phaseSystem` fires on a local `start` press, so
+ *    predicting one flipped the prediction world into `service` while the
+ *    server was still in `build`. `interactionSystem` then took the *service*
+ *    branch for a round trip, so a grab held across the transition predicted a
+ *    completely different action — and `workingOn` is one of the few predicted
+ *    fields that is actually drawn.
+ *  - **It spawned customers.** `customerSystem` runs a full grid flood fill
+ *    every tick, on every predicted tick *and* every replayed one, to produce
+ *    people that `applyFrame` overwrites a moment later. On a slow link that is
+ *    the client's largest simulation cost, spent entirely on results nobody
+ *    sees.
+ *  - **It advanced the RNG.** Those spawns drew from `random(world)`, so the
+ *    prediction's stream diverged from the server's permanently. Harmless only
+ *    because nothing predicted from it is kept.
+ *
+ * What a client may predict is exactly what its own input causes directly:
+ * where its chefs are, and what they are holding or working. Everything else is
+ * the server's to say.
+ */
+export function predict(world: World, inputs: Inputs, dt: number = DT): void {
+  world.tick++;
+  movementSystem(world, inputs, dt);
+  interactionSystem(world, inputs);
+  expire(world, dt);
+  latch(world, inputs);
+}
+
+/** Age out the transient log lines and one-shot cues. */
+function expire(world: World, dt: number): void {
   for (let i = world.events.length - 1; i >= 0; i--) {
     const event = world.events[i]!;
     event.ttl -= dt;
@@ -37,8 +76,15 @@ export function step(world: World, inputs: Inputs, dt: number = DT): void {
     cue.ttl -= dt;
     if (cue.ttl <= 0) world.effects.splice(i, 1);
   }
+}
 
-  // Latch inputs for next tick's edge detection.
+/**
+ * Remember this tick's buttons, so the next one can detect an edge.
+ *
+ * Prediction needs this as much as a full tick does: without it a held `grab`
+ * would re-fire on every replayed tick, which is up to 240 of them.
+ */
+function latch(world: World, inputs: Inputs): void {
   for (const player of world.players) {
     const input = inputs[player.id];
     if (!input) continue;

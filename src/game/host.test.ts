@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { Host } from "./host";
 import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutVersion } from "./protocol";
-import { PLAYER_SPEED, emptyInput, isIdleInput } from "../sim/world";
+import { PLAYER_SPEED, addPlayer, createWorld, emptyInput, isIdleInput } from "../sim/world";
+import { endDay, predict, step } from "../sim/step";
+import { LEVEL } from "../data/level";
 import { saveSignature } from "../save";
-import type { Customer, PlayerInput } from "../sim/types";
+import type { Customer, Inputs, PlayerInput } from "../sim/types";
 
 /**
  * These exercise the multiplayer machinery without a socket in sight. `Host` is
@@ -481,3 +483,66 @@ function customer(id: number, recipeId: string): Customer {
     tip: 0,
   };
 }
+
+describe("what a client is allowed to guess at", () => {
+  test("prediction never changes the phase", () => {
+    // `step` runs `phaseSystem`, which fires on a local `start` press. Predicting
+    // one therefore flipped the *prediction* world into service while the server
+    // was still in build, and `interactionSystem` took the service branch for a
+    // round trip — so a grab held across the transition predicted an entirely
+    // different action, and `workingOn` is drawn.
+    const world = createWorld(LEVEL, 0);
+    const id = addPlayer(world, LEVEL, "Ann").id;
+    endDay(world);
+    expect(world.phase).toBe("build");
+
+    const pressing: Inputs = { [id]: { ...emptyInput(), start: true } };
+    for (let i = 0; i < 10; i++) predict(world, pressing);
+    expect(world.phase).toBe("build");
+    expect(world.day).toBe(1);
+
+    // The authoritative tick still opens the day, which is the whole point of
+    // the split: the server decides, the client draws. Released first, because
+    // `predict` latched the held button — which is itself the behaviour the
+    // third test below pins down.
+    step(world, { [id]: emptyInput() });
+    step(world, pressing);
+    expect(world.phase).toBe("service");
+  });
+
+  test("prediction spawns no customers and burns no randomness", () => {
+    // Predicted customers are overwritten by the next frame, so producing them
+    // costs a grid flood fill per tick for nothing — and advancing the shared
+    // RNG stream guarantees the client diverges from the server permanently.
+    const world = createWorld(LEVEL, 0);
+    const id = addPlayer(world, LEVEL, "Ann").id;
+    const seed = world.rngState;
+
+    const walking: Inputs = { [id]: { ...emptyInput(), move: { x: 1, y: 0 } } };
+    for (let i = 0; i < 600; i++) predict(world, walking);
+
+    expect(world.customers).toEqual([]);
+    expect(world.rngState).toBe(seed);
+    // ...but it does move the chef, which is the part a client owns.
+    expect(world.players[0]!.pos.x).toBeGreaterThan(11);
+  });
+
+  test("prediction still latches buttons, so a held grab fires once", () => {
+    // Without the latch a held button re-fires on every replayed tick, and a
+    // replay can be 240 of them.
+    const world = createWorld(LEVEL, 0);
+    const player = addPlayer(world, LEVEL, "Ann");
+    const crate = [...world.appliances.values()].find((a) => a.source?.base === "tomato")!;
+    player.pos = { x: crate.tile.x + 0.5, y: crate.tile.y + 1.5 };
+    player.facing = { x: 0, y: -1 };
+
+    const holding: Inputs = { [player.id]: { ...emptyInput(), grab: true } };
+    predict(world, holding);
+    const first = player.carried;
+    expect(first).not.toBeNull();
+
+    // Still held: the same item, not a fresh one off the crate.
+    for (let i = 0; i < 20; i++) predict(world, holding);
+    expect(player.carried).toBe(first);
+  });
+});
