@@ -129,14 +129,11 @@ body {
 
 /* --- controls help -------------------------------------------------------- */
 
-
-
 @keyframes help-fade {
   to {
     opacity: 0.22;
   }
 }
-
 
 /* --- build-phase banner --------------------------------------------------- */
 
@@ -246,8 +243,6 @@ body {
   opacity: 0.75;
 }
 
-
-
 #notice {
   position: absolute;
   left: 24px;
@@ -270,10 +265,18 @@ body {
   text-transform: uppercase;
   color: #8d8f9c;
 }
-.connection.online { color: #8fd694; }
-.connection.connecting { color: #f0b24a; }
-.connection.offline { color: #e2584b; }
-.connection:empty { display: none; }
+.connection.online {
+  color: #8fd694;
+}
+.connection.connecting {
+  color: #f0b24a;
+}
+.connection.offline {
+  color: #e2584b;
+}
+.connection:empty {
+  display: none;
+}
 
 /* --- join screen ----------------------------------------------------------- */
 
@@ -287,7 +290,9 @@ body {
   backdrop-filter: blur(6px);
   z-index: 40;
 }
-#join.open { display: flex; }
+#join.open {
+  display: flex;
+}
 
 .join-card {
   width: 320px;
@@ -333,7 +338,10 @@ body {
   outline: none;
   border-color: #6f8fd6;
 }
-#join-room { text-transform: uppercase; letter-spacing: 0.14em; }
+#join-room {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
 
 .join-actions {
   display: flex;
@@ -355,7 +363,9 @@ body {
   background: #3f6f52;
   border-color: #4e8a66;
 }
-.join-card button:hover { filter: brightness(1.12); }
+.join-card button:hover {
+  filter: brightness(1.12);
+}
 
 .join-hint {
   margin: 16px 0 0;
@@ -363,7 +373,6 @@ body {
   color: #6f717d;
   line-height: 1.5;
 }
-
 
 /* --- controls, shown only inside the pause menu ---------------------------- */
 

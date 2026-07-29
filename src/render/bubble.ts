@@ -65,7 +65,12 @@ export class Bubble {
     const pulse = urgent ? 1 + Math.sin(performance.now() * 0.012) * 0.07 : 1;
     this.dial.apply({
       progress: ratio,
-      color: ratio > 0.5 ? PALETTE.progressGood : ratio > 0.25 ? PALETTE.progressCook : PALETTE.progressBurn,
+      color:
+        ratio > 0.5
+          ? PALETTE.progressGood
+          : ratio > 0.25
+            ? PALETTE.progressCook
+            : PALETTE.progressBurn,
       alpha: this.alpha,
       flash: this.pop,
       scale: pulse * this.alpha * (1 + this.pop * 0.2),

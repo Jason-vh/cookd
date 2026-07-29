@@ -38,17 +38,26 @@ describe("KitchenCamera", () => {
 
   test("zooms out to hold two local chefs at opposite ends", () => {
     const together = rig();
-    settle(together, [{ x: 10, z: 4 }, { x: 10.5, z: 4.5 }]);
+    settle(together, [
+      { x: 10, z: 4 },
+      { x: 10.5, z: 4.5 },
+    ]);
 
     const apart = rig();
-    settle(apart, [{ x: 1, z: 1 }, { x: 19, z: 8 }]);
+    settle(apart, [
+      { x: 1, z: 1 },
+      { x: 19, z: 8 },
+    ]);
 
     expect(height(apart)).toBeGreaterThan(height(together));
   });
 
   test("never zooms out past the whole kitchen", () => {
     const spread = rig();
-    settle(spread, [{ x: -50, z: -50 }, { x: 70, z: 60 }]);
+    settle(spread, [
+      { x: -50, z: -50 },
+      { x: 70, z: 60 },
+    ]);
 
     const whole = rig();
     settle(whole, []);

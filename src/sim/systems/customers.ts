@@ -211,9 +211,7 @@ function claimTable(world: World, reachable: Set<number>): Appliance | null {
 
 /** Every chair at this table the door can actually reach. */
 function reachableSeats(world: World, tile: Vec2, reachable: Set<number>): Vec2[] {
-  return seatsAround(world, tile).filter((seat) =>
-    reachable.has(tileIndex(world, seat.x, seat.y)),
-  );
+  return seatsAround(world, tile).filter((seat) => reachable.has(tileIndex(world, seat.x, seat.y)));
 }
 
 /**
@@ -226,12 +224,7 @@ function pickSeat(world: World, tile: Vec2, reachable: Set<number>): Vec2 | null
   return reachableSeats(world, tile, reachable)[0] ?? null;
 }
 
-function seat(
-  world: World,
-  customer: Customer,
-  table: Appliance,
-  reachable: Set<number>,
-): void {
+function seat(world: World, customer: Customer, table: Appliance, reachable: Set<number>): void {
   // Which chair is a coin toss, drawn once, here — the only place a seat is
   // actually taken. A fixed side made a full dining room look choreographed,
   // every customer at the same o'clock of their own table.
@@ -337,11 +330,7 @@ export function customerAt(world: World, table: Appliance): Customer | null {
  * table with the order bubble still showing what was wanted, and picking it
  * back up undoes the mistake at the cost of the walk.
  */
-export function acceptDelivery(
-  world: World,
-  table: Appliance,
-  customer: Customer,
-): number | null {
+export function acceptDelivery(world: World, table: Appliance, customer: Customer): number | null {
   const plate = table.item;
   if (!plate || !isPlate(plate) || isDirty(plate) || plate.contents.length !== 1) return null;
 

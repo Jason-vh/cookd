@@ -109,7 +109,10 @@ function persist(room: Room): void {
 }
 
 function normaliseRoom(raw: string): string {
-  const code = (raw || "main").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  const code = (raw || "main")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 8);
   return code || "MAIN";
 }
 
@@ -220,7 +223,8 @@ async function serveStatic(pathname: string): Promise<Response> {
   if (await file.exists()) return new Response(file);
   // Unknown paths fall back to the app so /ROOMCODE style links work.
   const index = Bun.file(staticRoot + "index.html");
-  if (await index.exists()) return new Response(index, { headers: { "content-type": "text/html" } });
+  if (await index.exists())
+    return new Response(index, { headers: { "content-type": "text/html" } });
   return new Response("cookd: run `bun run build` first", { status: 404 });
 }
 
@@ -231,7 +235,8 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
   async fetch(request, server) {
     const url = new URL(request.url);
     if (url.pathname === "/ws") {
-      if (server.upgrade(request, { data: { client: null } })) return undefined as unknown as Response;
+      if (server.upgrade(request, { data: { client: null } }))
+        return undefined as unknown as Response;
       return new Response("expected a websocket", { status: 400 });
     }
     if (url.pathname === "/health") {
@@ -260,20 +265,31 @@ Bun.serve<{ client: Client | null }, Record<string, never>>({
 
       if (message.t === "hello") {
         if (message.version !== PROTOCOL_VERSION) {
-          socket.send(JSON.stringify({ t: "error", message: "Version mismatch — refresh the page" }));
+          socket.send(
+            JSON.stringify({ t: "error", message: "Version mismatch — refresh the page" }),
+          );
           socket.close();
           return;
         }
         const code = normaliseRoom(message.room);
         const room = roomFor(code, await loadSave(code));
         if (!room) {
-          socket.send(JSON.stringify({ t: "error", message: "Server is full — try again shortly" }));
+          socket.send(
+            JSON.stringify({ t: "error", message: "Server is full — try again shortly" }),
+          );
           socket.close();
           return;
         }
         const name = sanitiseName(message.name) || "Chef";
         const token = String(message.token ?? "").slice(0, 64);
-        const client: Client = { id: crypto.randomUUID(), room: code, players: [], name, token, socket };
+        const client: Client = {
+          id: crypto.randomUUID(),
+          room: code,
+          players: [],
+          name,
+          token,
+          socket,
+        };
 
         // Same browser already connected? This is a reconnect that beat the old
         // socket's close, so take the seats over rather than doubling up.

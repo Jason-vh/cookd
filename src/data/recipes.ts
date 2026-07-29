@@ -10,6 +10,10 @@ import { specKey } from "../sim/items";
  * module load so the sim never scans arrays at runtime.
  */
 
+// One row per transform, one line each: this is a table, and reading down the
+// `duration` or `station` column is the point. The formatter would explode each
+// row into eight lines and that reading would be gone, so it is pinned.
+// prettier-ignore
 export const TRANSFORMS: Transform[] = [
   // --- prep station: hold USE to work. Any counter can do this; a chopping
   // board is simply faster (see `speed` in data/appliances.ts). ------------
@@ -33,6 +37,7 @@ export const TRANSFORMS: Transform[] = [
   { station: "bake", mode: "auto", motion: "bake", duration: 8.0, burnAfter: 8.0, input: { base: "pizza", processes: ["sauced", "topped"] }, output: { base: "pizza", processes: ["sauced", "topped", "baked"] } },
 ];
 
+// prettier-ignore
 export const COMBINES: Combine[] = [
   // Dough is made, not found: flour + water is the first step of a pizza.
   { a: { base: "flour", processes: [] }, b: { base: "water", processes: [] }, output: { base: "dough", processes: [] } },
@@ -41,6 +46,7 @@ export const COMBINES: Combine[] = [
   { a: { base: "lettuce", processes: ["chopped"] }, b: { base: "tomato", processes: ["chopped"] }, output: { base: "salad", processes: [] } },
 ];
 
+// prettier-ignore
 export const RECIPES: Recipe[] = [
   { id: "salad", name: "Garden Salad", dish: { base: "salad", processes: [] }, patience: 60, reward: 8 },
   { id: "fries", name: "Fries", dish: { base: "fries", processes: ["fried"] }, patience: 55, reward: 6 },
@@ -51,7 +57,14 @@ export const RECIPES: Recipe[] = [
 export const RECIPE_STEPS: Record<string, string[]> = {
   salad: ["Chop lettuce", "Chop tomato", "Combine", "Plate"],
   fries: ["Chop potato", "Fry", "Plate"],
-  pizza: ["Flour + water", "Knead dough", "Chop tomato twice -> sauce", "Chop cheese -> top", "Bake", "Plate"],
+  pizza: [
+    "Flour + water",
+    "Knead dough",
+    "Chop tomato twice -> sauce",
+    "Chop cheese -> top",
+    "Bake",
+    "Plate",
+  ],
 };
 
 // --- derived lookup tables ---------------------------------------------------

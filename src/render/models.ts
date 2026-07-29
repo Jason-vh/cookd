@@ -117,7 +117,10 @@ const cheese: Builder = (parent, item, y) => {
     [-0.085, 0.02, 0.9],
   ];
   for (const [hx, hy, scale] of holes) {
-    const hole = new THREE.Mesh(cylinder(0.026, 0.026, 0.014), material(PALETTE.cheeseHole, "food"));
+    const hole = new THREE.Mesh(
+      cylinder(0.026, 0.026, 0.014),
+      material(PALETTE.cheeseHole, "food"),
+    );
     hole.position.set(hx, hy, 0.082);
     hole.rotation.x = Math.PI / 2;
     hole.scale.setScalar(scale);
@@ -152,9 +155,21 @@ const dough: Builder = (parent, item, y) => {
  * with only a few pieces left floating in it.
  */
 const crushedTomato: Builder = (parent, _item, y) => {
-  const pool = put(parent, mesh(cylinder(0.2, 0.17, 0.045, 18), PALETTE.sauce, "food"), 0, y + 0.022, 0);
+  const pool = put(
+    parent,
+    mesh(cylinder(0.2, 0.17, 0.045, 18), PALETTE.sauce, "food"),
+    0,
+    y + 0.022,
+    0,
+  );
   // A slightly wider, flatter skim on top reads as glossy liquid.
-  const skim = put(parent, mesh(cylinder(0.185, 0.185, 0.012, 18), PALETTE.sauceShine, "food"), 0, 0.028, 0);
+  const skim = put(
+    parent,
+    mesh(cylinder(0.185, 0.185, 0.012, 18), PALETTE.sauceShine, "food"),
+    0,
+    0.028,
+    0,
+  );
   pool.add(skim);
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2 + 0.7;
@@ -171,13 +186,31 @@ const crushedTomato: Builder = (parent, _item, y) => {
 };
 
 const flour: Builder = (parent, _item, y) => {
-  const sack = put(parent, mesh(roundedBox(0.26, 0.3, 0.2, 0.06), PALETTE.flourSack, "cloth"), 0, y + 0.15, 0);
+  const sack = put(
+    parent,
+    mesh(roundedBox(0.26, 0.3, 0.2, 0.06), PALETTE.flourSack, "cloth"),
+    0,
+    y + 0.15,
+    0,
+  );
   // Folded top: a thinner slab, rotated so the crease catches the light.
-  const fold = put(parent, mesh(roundedBox(0.27, 0.06, 0.1, 0.03), PALETTE.flourSack, "cloth"), 0, 0.16, 0);
+  const fold = put(
+    parent,
+    mesh(roundedBox(0.27, 0.06, 0.1, 0.03), PALETTE.flourSack, "cloth"),
+    0,
+    0.16,
+    0,
+  );
   fold.rotation.z = 0.12;
   sack.add(fold);
   // A dusty band, the one thing that says "flour" and not "sandbag".
-  const band = put(parent, mesh(roundedBox(0.265, 0.09, 0.205, 0.03), PALETTE.doughDust, "food"), 0, -0.02, 0);
+  const band = put(
+    parent,
+    mesh(roundedBox(0.265, 0.09, 0.205, 0.03), PALETTE.doughDust, "food"),
+    0,
+    -0.02,
+    0,
+  );
   sack.add(band);
 };
 
@@ -187,14 +220,32 @@ const flour: Builder = (parent, _item, y) => {
  * only thing that says "water" is a surface you can actually see into.
  */
 const water: Builder = (parent, _item, y) => {
-  const pail = put(parent, mesh(cylinder(0.16, 0.12, 0.24, 18), PALETTE.pail, "enamel"), 0, y + 0.12, 0);
+  const pail = put(
+    parent,
+    mesh(cylinder(0.16, 0.12, 0.24, 18), PALETTE.pail, "enamel"),
+    0,
+    y + 0.12,
+    0,
+  );
 
   // Filled to the brim, and sitting *proud* of the body. The body is a solid
   // cylinder, so a realistically recessed surface is simply inside it and
   // invisible — the bucket read as empty.
-  const surface = put(parent, mesh(cylinder(0.152, 0.152, 0.02, 18), PALETTE.water, "ceramic"), 0, 0.125, 0);
+  const surface = put(
+    parent,
+    mesh(cylinder(0.152, 0.152, 0.02, 18), PALETTE.water, "ceramic"),
+    0,
+    0.125,
+    0,
+  );
   pail.add(surface);
-  const shine = put(parent, mesh(cylinder(0.045, 0.045, 0.008, 12), PALETTE.waterShine, "ceramic"), 0.045, 0.138, -0.035);
+  const shine = put(
+    parent,
+    mesh(cylinder(0.045, 0.045, 0.008, 12), PALETTE.waterShine, "ceramic"),
+    0.045,
+    0.138,
+    -0.035,
+  );
   pail.add(shine);
 
   const rim = put(parent, mesh(torus(0.16, 0.016), PALETTE.pailRim, "metal"), 0, 0.12, 0);
@@ -288,7 +339,11 @@ const choppedCheese: Builder = (parent, item, y) => {
     const r = 0.015 + (i / 18) * 0.075;
     const shred = put(
       parent,
-      mesh(roundedBox(0.13, 0.018, 0.03, 0.008), i % 4 === 0 ? PALETTE.cheeseRind : PALETTE.cheese, "food"),
+      mesh(
+        roundedBox(0.13, 0.018, 0.03, 0.008),
+        i % 4 === 0 ? PALETTE.cheeseRind : PALETTE.cheese,
+        "food",
+      ),
       Math.cos(a) * r,
       y + 0.02 + (i % 4) * 0.017,
       Math.sin(a) * r,
@@ -382,9 +437,21 @@ const salad: Builder = (parent, item, y) => {
 
 const fries: Builder = (parent, item, y) => {
   // Tapered four-sided cylinder = a chip carton, rotated to face the camera.
-  const carton = put(parent, mesh(cylinder(0.17, 0.11, 0.22, 4), PALETTE.carton, "food"), 0, y + 0.11, 0);
+  const carton = put(
+    parent,
+    mesh(cylinder(0.17, 0.11, 0.22, 4), PALETTE.carton, "food"),
+    0,
+    y + 0.11,
+    0,
+  );
   carton.rotation.y = Math.PI / 4;
-  const lip = put(parent, mesh(cylinder(0.175, 0.17, 0.03, 4), PALETTE.cartonLip, "food"), 0, y + 0.215, 0);
+  const lip = put(
+    parent,
+    mesh(cylinder(0.175, 0.17, 0.03, 4), PALETTE.cartonLip, "food"),
+    0,
+    y + 0.215,
+    0,
+  );
   lip.rotation.y = Math.PI / 4;
 
   for (let i = 0; i < 7; i++) {

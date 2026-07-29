@@ -75,7 +75,10 @@ export class JoinScreen {
   }
 
   private confirmOnline(): void {
-    const room = (this.roomField.value || "MAIN").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    const room = (this.roomField.value || "MAIN")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 8);
     const name = this.nameField.value.trim().slice(0, 16) || "Chef";
     this.hide();
     this.options.onPlayOnline(room || "MAIN", name);

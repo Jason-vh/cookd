@@ -75,7 +75,13 @@ export function snapshot(world: World): Save {
       ...(appliance.source ? { source: appliance.source } : {}),
     });
   }
-  return { schema: SCHEMA, level: levelFingerprint(), appliances, money: world.money, day: world.day };
+  return {
+    schema: SCHEMA,
+    level: levelFingerprint(),
+    appliances,
+    money: world.money,
+    day: world.day,
+  };
 }
 
 /**

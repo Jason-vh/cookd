@@ -396,7 +396,10 @@ describe("the pizza pipeline", () => {
     takeFrom(world, CRATE.tomato);
     putOn(world, BOARD);
     chopOn(world, BOARD, 3.0);
-    expect(applianceAtTile(world, BOARD[0], BOARD[1])!.item!.processes).toEqual(["chopped", "crushed"]);
+    expect(applianceAtTile(world, BOARD[0], BOARD[1])!.item!.processes).toEqual([
+      "chopped",
+      "crushed",
+    ]);
     takeFrom(world, BOARD);
     putOn(world, COUNTER);
     expect(specKey(applianceAtTile(world, COUNTER[0], COUNTER[1])!.item!)).toBe("pizza|sauced");
@@ -407,13 +410,17 @@ describe("the pizza pipeline", () => {
     chopOn(world, BOARD, 2.1);
     takeFrom(world, BOARD);
     putOn(world, COUNTER);
-    expect(specKey(applianceAtTile(world, COUNTER[0], COUNTER[1])!.item!)).toBe("pizza|sauced,topped");
+    expect(specKey(applianceAtTile(world, COUNTER[0], COUNTER[1])!.item!)).toBe(
+      "pizza|sauced,topped",
+    );
 
     // Bake.
     takeFrom(world, COUNTER);
     putOn(world, OVEN, 1, 0);
     hold(world, 8.2, null);
-    expect(specKey(applianceAtTile(world, OVEN[0], OVEN[1])!.item!)).toBe("pizza|sauced,topped,baked");
+    expect(specKey(applianceAtTile(world, OVEN[0], OVEN[1])!.item!)).toBe(
+      "pizza|sauced,topped,baked",
+    );
 
     // Plate it up, then serve.
     takeFrom(world, PLATES);
@@ -435,7 +442,12 @@ describe("the pizza pipeline", () => {
   test("a burnt pizza cannot be plated", () => {
     const world = makeWorld();
     const counter = applianceAtTile(world, COUNTER[0], COUNTER[1])!;
-    counter.item = { id: 1, base: "pizza", processes: ["sauced", "topped", "baked", "burnt"], contents: [] };
+    counter.item = {
+      id: 1,
+      base: "pizza",
+      processes: ["sauced", "topped", "baked", "burnt"],
+      contents: [],
+    };
 
     takeFrom(world, PLATES);
     putOn(world, COUNTER);

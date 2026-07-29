@@ -425,10 +425,7 @@ export class NetGame implements Game {
     return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
   }
 
-  private sampleFacing(
-    kind: "players" | "customers",
-    id: number,
-  ): { x: number; y: number } | null {
+  private sampleFacing(kind: "players" | "customers", id: number): { x: number; y: number } | null {
     const latest = this.buffer[this.buffer.length - 1]?.frame[kind].find(
       (entity) => entity.id === id,
     );

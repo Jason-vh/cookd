@@ -1,14 +1,6 @@
 import { LEVEL } from "../data/level";
 import { addPlayer } from "../sim/world";
-import type {
-  Appliance,
-  Customer,
-  Effect,
-  Phase,
-  Player,
-  PlayerInput,
-  World,
-} from "../sim/types";
+import type { Appliance, Customer, Effect, Phase, Player, PlayerInput, World } from "../sim/types";
 
 /**
  * What goes over the wire, and nothing else.
@@ -219,7 +211,6 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
     acks: Object.fromEntries(acks),
   };
 }
-
 
 // --- decoding ----------------------------------------------------------------
 

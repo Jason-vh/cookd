@@ -1,0 +1,63 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  // Why this file exists
+  // ====================
+  // The render layer grew a component system out of three.js `userData`, which
+  // is `Record<string, any>`: `object.userData.knife as THREE.Object3D` compiles
+  // whatever the builder actually put there. Renaming the key in `meshes.ts`
+  // type-checked cleanly and broke the chop animation at runtime. The server had
+  // the same shape at the socket: `JSON.parse(raw) as ClientMessage` is a
+  // promise the compiler cannot keep, and one `{move:{x:NaN}}` turned every chef
+  // in the room into `{x:null,y:null}` permanently.
+  //
+  // Both bugs are the same bug: a cast is a place where we told the compiler to
+  // stop checking. So casts are banned outright, and the type-aware `no-unsafe-*`
+  // family catches `any` *flowing* out of untyped third-party surfaces before it
+  // reaches a cast at all.
+  //
+  // The escape hatch is a disable comment with a reason. That is the point: it
+  // is greppable, it shows up in review, and there are currently zero of them.
+
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise"],
+
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+
+  "rules": {
+    // --- the ratchet ---------------------------------------------------------
+    // `as const` and `satisfies` are still allowed; those narrow rather than
+    // assert. Everything else must be a validated parse or a real annotation.
+    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "off",
+
+    // Type-aware (needs `--type-aware`, i.e. oxlint-tsgolint). These are what
+    // catch `any` escaping @types/three and Bun.serve in the first place.
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+
+    // --- deliberately off ----------------------------------------------------
+    // `noUnusedLocals`/`noUnusedParameters` in tsconfig already cover this, and
+    // oxlint's version disagrees about `_`-prefixed parameters.
+    "no-unused-vars": "off",
+    // The simulation uses `null` as a load-bearing "empty slot" throughout
+    // (`item: Item | null`), distinct from "absent". That is a design decision,
+    // not an oversight.
+    "unicorn/no-null": "off",
+    // `import "./ui/style.css"` is how Vite is told to bundle the stylesheet.
+    "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }]
+  },
+
+  "ignorePatterns": ["dist/**", "node_modules/**", "saves/**"]
+}

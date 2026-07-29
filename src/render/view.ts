@@ -53,7 +53,17 @@ export class View {
 
   private applianceObjects = new Map<number, THREE.Object3D>();
   private itemObjects = new Map<number, { object: THREE.Object3D; key: string }>();
-  private chefs = new Map<number, ChefParts & { phase: number; pop: number; lastCarried: number; tag?: THREE.Sprite; tagName?: string; wasAway?: boolean }>();
+  private chefs = new Map<
+    number,
+    ChefParts & {
+      phase: number;
+      pop: number;
+      lastCarried: number;
+      tag?: THREE.Sprite;
+      tagName?: string;
+      wasAway?: boolean;
+    }
+  >();
   private customers = new Map<number, ChefParts & { phase: number; slump: number }>();
   /** Order bubble per table appliance id. */
   private bubbles = new Map<number, Bubble>();
@@ -73,7 +83,10 @@ export class View {
   /** Palette slot per player, so a name tag matches its chef. */
   private tagColors = new Map<number, number>();
   private dialState: Record<number, { alpha: number; flash: number }> = {};
-  private heldState: Record<number, { alpha: number; x: number; z: number; pop: number; started: boolean }> = {};
+  private heldState: Record<
+    number,
+    { alpha: number; x: number; z: number; pop: number; started: boolean }
+  > = {};
   /** This frame's delta, shared by everything that eases. */
   private frameDt = 1 / 60;
   /** Reused every frame so following allocates nothing. */
@@ -279,9 +292,10 @@ export class View {
         // Slow, uneven ember glow: an oven does not blink, it breathes.
         // Kept low on purpose: pushed hard the emissive washes the dark glass
         // out to flat orange paint. It should read as embers behind a window.
-        const heat = appliance.motion === "bake"
-          ? 0.3 + Math.sin(phase) * 0.12 + Math.sin(phase * 3.3) * 0.05
-          : 0;
+        const heat =
+          appliance.motion === "bake"
+            ? 0.3 + Math.sin(phase) * 0.12 + Math.sin(phase * 3.3) * 0.05
+            : 0;
         for (const g of glass) g.emissiveIntensity = heat;
       }
 
@@ -311,7 +325,13 @@ export class View {
    */
   private placeApplianceObject(world: World, appliance: Appliance, object: THREE.Object3D): void {
     const held = appliance.heldBy !== null ? playerById(world, appliance.heldBy) : undefined;
-    const state = (this.heldState[appliance.id] ??= { alpha: 0, x: 0, z: 0, pop: 0, started: false });
+    const state = (this.heldState[appliance.id] ??= {
+      alpha: 0,
+      x: 0,
+      z: 0,
+      pop: 0,
+      started: false,
+    });
 
     if (held) {
       const tile = targetTile(held);
@@ -417,12 +437,14 @@ export class View {
       this.lastEffectId = cue.id;
       if (cue.kind === "served") {
         const player = playerById(world, cue.playerId);
-        if (player) this.popups.spawn(`+$${cue.amount}`, "#ffd479", player.pos.x, 1.5, player.pos.y);
+        if (player)
+          this.popups.spawn(`+$${cue.amount}`, "#ffd479", player.pos.x, 1.5, player.pos.y);
       } else if (cue.kind === "tipped") {
         // A different colour from the delivery reward, because it is a
         // different decision being paid for: coming back to clear the table.
         const player = playerById(world, cue.playerId);
-        if (player) this.popups.spawn(`+$${cue.amount}`, "#b8e08a", player.pos.x, 1.5, player.pos.y);
+        if (player)
+          this.popups.spawn(`+$${cue.amount}`, "#b8e08a", player.pos.x, 1.5, player.pos.y);
       } else if (cue.kind === "paid") {
         this.popups.spawn(`+$${cue.amount}`, "#ffd479", cue.tile.x + 0.5, 1.5, cue.tile.y + 0.5);
       } else if (cue.kind === "walkout") {
@@ -500,15 +522,16 @@ export class View {
       const swing = Math.sin(chef.phase * 2) * speed;
       const carrying = player.carried !== null || player.carriedAppliance !== null;
 
-      const station = player.workingOn !== null ? world.appliances.get(player.workingOn) : undefined;
+      const station =
+        player.workingOn !== null ? world.appliances.get(player.workingOn) : undefined;
       // Fryers and ovens cook by themselves; standing at one is not an action.
       const motion = isChefMotion(station?.motion ?? null) ? station!.motion : null;
 
       // Baseline pose, overwritten below by whichever pose is active. Every
       // channel a pose touches must be reset here, or it sticks once the pose
       // ends (a chef who kneaded once would lean forever).
-      chef.body.position.y = 0.28 + Math.abs(Math.sin(chef.phase * 2)) * 0.05 * speed
-        + Math.sin(time * 2.2) * 0.008;
+      chef.body.position.y =
+        0.28 + Math.abs(Math.sin(chef.phase * 2)) * 0.05 * speed + Math.sin(time * 2.2) * 0.008;
       chef.body.position.z = 0;
       chef.body.rotation.x = 0.16 * speed;
       chef.head.rotation.x = -0.1 * speed;
@@ -686,7 +709,8 @@ export class View {
         person.armL.rotation.z = 0.2;
         person.armR.rotation.z = -0.2;
         // A restless glance around the room, faster the longer they have waited.
-        person.head.rotation.y = Math.sin(time * (0.7 + slump * 1.6) + customer.id) * 0.24 * (0.3 + slump);
+        person.head.rotation.y =
+          Math.sin(time * (0.7 + slump * 1.6) + customer.id) * 0.24 * (0.3 + slump);
       } else {
         person.legL.rotation.x = -swing * 0.85;
         person.legR.rotation.x = swing * 0.85;
@@ -911,8 +935,7 @@ export class View {
         this.highlights.set(player.id, mesh);
       }
       const tile = targetTile(player);
-      const inside =
-        tile.x >= 0 && tile.y >= 0 && tile.x < world.width && tile.y < world.height;
+      const inside = tile.x >= 0 && tile.y >= 0 && tile.x < world.width && tile.y < world.height;
       mesh.visible = inside;
       if (!inside) continue;
 
@@ -951,7 +974,6 @@ const WORLD_POS = new THREE.Vector3();
  * `buildTable` so they settle into it rather than hover.
  */
 const SEAT_HEIGHT = 0.3;
-
 
 /**
  * Radians per second of the eating bob. Offset per customer by their id, so a

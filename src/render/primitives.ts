@@ -42,14 +42,21 @@ export function box(w: number, h: number, d: number): THREE.BufferGeometry {
 }
 
 export function sphere(radius: number, segments = 20): THREE.BufferGeometry {
-  return cached(`sph:${radius},${segments}`, () =>
-    new THREE.SphereGeometry(radius, segments, Math.round(segments * 0.7)),
+  return cached(
+    `sph:${radius},${segments}`,
+    () => new THREE.SphereGeometry(radius, segments, Math.round(segments * 0.7)),
   );
 }
 
-export function cylinder(rTop: number, rBottom: number, h: number, sides = 24): THREE.BufferGeometry {
-  return cached(`cyl:${rTop},${rBottom},${h},${sides}`, () =>
-    new THREE.CylinderGeometry(rTop, rBottom, h, sides),
+export function cylinder(
+  rTop: number,
+  rBottom: number,
+  h: number,
+  sides = 24,
+): THREE.BufferGeometry {
+  return cached(
+    `cyl:${rTop},${rBottom},${h},${sides}`,
+    () => new THREE.CylinderGeometry(rTop, rBottom, h, sides),
   );
 }
 
@@ -62,12 +69,18 @@ export function cone(radius: number, h: number, sides = 12): THREE.BufferGeometr
 }
 
 /** Surface of revolution from a 2D profile — the honest way to model crockery. */
-export function lathe(key: string, points: [number, number][], segments = 32): THREE.BufferGeometry {
-  return cached(`lat:${key}`, () =>
-    new THREE.LatheGeometry(
-      points.map(([x, y]) => new THREE.Vector2(x, y)),
-      segments,
-    ),
+export function lathe(
+  key: string,
+  points: [number, number][],
+  segments = 32,
+): THREE.BufferGeometry {
+  return cached(
+    `lat:${key}`,
+    () =>
+      new THREE.LatheGeometry(
+        points.map(([x, y]) => new THREE.Vector2(x, y)),
+        segments,
+      ),
   );
 }
 
@@ -105,7 +118,10 @@ export function material(color: number, surface: SurfaceName = "wood"): THREE.Me
 }
 
 /** Double-sided variant, needed for open shells like lathed plates. */
-export function shellMaterial(color: number, surface: SurfaceName = "ceramic"): THREE.MeshStandardMaterial {
+export function shellMaterial(
+  color: number,
+  surface: SurfaceName = "ceramic",
+): THREE.MeshStandardMaterial {
   const key = `${color}:${surface}:shell`;
   let found = materials.get(key);
   if (!found) {

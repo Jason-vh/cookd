@@ -128,7 +128,12 @@ export class Popups {
 
   private make(): THREE.Sprite {
     const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false, fog: false }),
+      new THREE.SpriteMaterial({
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+        fog: false,
+      }),
     );
     sprite.renderOrder = 20;
     setLayer(sprite, LAYER.UI);

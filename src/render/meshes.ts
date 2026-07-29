@@ -264,7 +264,11 @@ function buildBin(group: THREE.Group, h: number): THREE.Object3D {
 
   // A couple of bands break up the taper and catch the light.
   for (const t of [0.32, 0.66]) {
-    const band = mesh(cylinder(0.34 + 0.1 * t + 0.012, 0.34 + 0.1 * t + 0.012, 0.035, 20), PALETTE.steelDark, "metal");
+    const band = mesh(
+      cylinder(0.34 + 0.1 * t + 0.012, 0.34 + 0.1 * t + 0.012, 0.035, 20),
+      PALETTE.steelDark,
+      "metal",
+    );
     band.position.y = bodyH * t;
     bin.add(band);
   }
@@ -487,7 +491,6 @@ function buildPerson(color: number, role: "chef" | "customer"): ChefParts {
   };
 }
 
-
 // --- tips --------------------------------------------------------------------
 
 /**
@@ -629,7 +632,11 @@ export function makeNameTag(text: string, color: number): THREE.Sprite {
 type LabelStyle = { background: string; color: string; size: number };
 const DEFAULT_STYLE: LabelStyle = { background: "rgba(10,11,16,0.72)", color: "#ffffff", size: 60 };
 
-export function makeLabel(text: string, key = text, style: LabelStyle = DEFAULT_STYLE): THREE.Sprite {
+export function makeLabel(
+  text: string,
+  key = text,
+  style: LabelStyle = DEFAULT_STYLE,
+): THREE.Sprite {
   let sprite = labelCache.get(key);
   if (!sprite) {
     const element = document.createElement("canvas");

@@ -131,13 +131,7 @@ export type Recipe = {
  * The order *is* the customer: there is no separate ticket entity, so a lost
  * order and a person walking out are necessarily the same event.
  */
-export type CustomerState =
-  | "arriving"
-  | "waiting"
-  | "deciding"
-  | "ordering"
-  | "eating"
-  | "leaving";
+export type CustomerState = "arriving" | "waiting" | "deciding" | "ordering" | "eating" | "leaving";
 
 export type Customer = {
   id: number;

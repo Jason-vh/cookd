@@ -29,7 +29,10 @@ const input = new InputManager();
 const identity = loadIdentity();
 const params = new URLSearchParams(location.search);
 /** `cookd.example/#KITCHEN` — a shareable link *is* the room. */
-const roomFromUrl = location.hash.replace("#", "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const roomFromUrl = location.hash
+  .replace("#", "")
+  .toUpperCase()
+  .replace(/[^A-Z0-9]/g, "");
 const forceLocal = params.has("local");
 
 let game: Game = new LocalGame(null, 1);
@@ -309,7 +312,11 @@ function frame(now: number): void {
   game.update(elapsed, poll);
   menuWasOpen = menu.isOpen;
   if (shouldRender(now)) view.render(game.world, game.alpha, game.localIds);
-  hud.update(game.world, { status: game.status, ping: game.ping, room: game.status === "local" ? "" : roomOf() });
+  hud.update(game.world, {
+    status: game.status,
+    ping: game.ping,
+    room: game.status === "local" ? "" : roomOf(),
+  });
 }
 
 function idleInputs(): Inputs {

@@ -18,6 +18,8 @@ export type ApplianceDef = {
   price: number;
 };
 
+// A table, read down its columns — see the note on TRANSFORMS in recipes.ts.
+// prettier-ignore
 export const APPLIANCES: Record<ApplianceKind, ApplianceDef> = {
   wall: { stations: [], speed: 1, kind: "wall", label: "Wall", color: 0x4a4a55, height: 1.15, acceptsItems: false, movable: false, price: 0 },
   counter: { stations: ["prep"], speed: 1, kind: "counter", label: "Counter", color: 0x9a7b58, height: 0.62, acceptsItems: true, movable: true, price: 15 },
