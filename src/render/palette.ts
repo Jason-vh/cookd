@@ -125,6 +125,16 @@ export const PALETTE = {
 
   // --- used crockery ---
   plateDirty: 0xd8d2c4,
+  /**
+   * The enamel band around a plate's rim.
+   *
+   * Crockery is the one pale disc in the kitchen that is not food, and it has to
+   * say so from across the room: a raw pizza base, a flattened round of dough
+   * and a plate are the same silhouette in nearly the same cream. Dusty teal is
+   * the house accent, no ingredient is anywhere near it, and a stack shows one
+   * band per plate — which is how you count them.
+   */
+  plateRim: 0x7f9ba0,
   crumbs: 0xa8895f,
 
   // --- feedback ---

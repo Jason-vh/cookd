@@ -136,7 +136,21 @@ const dough: Builder = (parent, item, y) => {
     put(parent, mesh(cylinder(0.26, 0.24, 0.055), PALETTE.dough, "food"), 0, y + 0.03, 0);
     put(parent, mesh(torus(0.25, 0.028), PALETTE.dough, "food"), 0, y + 0.05, 0).rotation.x =
       Math.PI / 2;
-    put(parent, mesh(cylinder(0.2, 0.2, 0.008), PALETTE.doughDust, "food"), 0, y + 0.06, 0);
+    // Flour in patches, not as a full disc. The disc was the same near-white
+    // circle a plate is, on the same silhouette, and the two were being mixed
+    // up; scattered dust reads as a floured surface instead of as glaze.
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.5;
+      const r = 0.05 + Math.abs(wobble(52, i)) * 0.13;
+      const dust = put(
+        parent,
+        mesh(sphere(0.045 + Math.abs(wobble(53, i)) * 0.02, 8), PALETTE.doughDust, "food"),
+        Math.cos(a) * r,
+        y + 0.058,
+        Math.sin(a) * r,
+      );
+      dust.scale.set(1, 0.12, 1);
+    }
     return;
   }
   const ball = put(parent, mesh(sphere(0.155), PALETTE.dough, "food"), 0, y + 0.12, 0);
@@ -592,6 +606,12 @@ function addPlate(parent: THREE.Object3D, item: Item, y: number): void {
   dish.position.y = y;
   parent.add(dish);
 
+  // The enamel band, and the whole reason a plate is legible: it separates
+  // crockery from every pale food disc, and it draws one line per plate in a
+  // pile so a stack of three can be counted rather than guessed at.
+  const rim = put(parent, mesh(torus(0.322, 0.012), PALETTE.plateRim, "enamel"), 0, y + 0.074, 0);
+  rim.rotation.x = Math.PI / 2;
+
   // Leftovers, so a used plate reads as used from the far side of the room
   // rather than as a clean one someone forgot to pick up. With plates finite
   // this is load-bearing rather than decorative: a dirty plate refuses food,
@@ -609,8 +629,14 @@ function addPlate(parent: THREE.Object3D, item: Item, y: number): void {
   }
 }
 
-/** Height of one plate in a pile. Thin enough to stack, thick enough to count. */
-const PLATE_PITCH = 0.05;
+/**
+ * Height of one plate in a pile. Thin enough to stack, thick enough to count.
+ *
+ * Thicker than a real plate is, deliberately: at this camera angle a truthful
+ * 5cm pitch put four rims inside one plate's own height, so a pile read as a
+ * single plate with a slightly odd edge.
+ */
+const PLATE_PITCH = 0.078;
 
 const plate: Builder = (parent, item, y) => {
   // A plate's contents are either a meal or *more plates* — see `sim/plates.ts`.
