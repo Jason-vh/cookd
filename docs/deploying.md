@@ -1,4 +1,4 @@
-<!-- Running cookd anywhere. The vhtm.eu runbook is in deploy/README.md. -->
+<!-- Running cookd anywhere. The production runbook is in deploy/README.md. -->
 
 # Deploying
 
@@ -40,8 +40,9 @@ docker compose up -d --build
 and without one each push silently resets everyone's kitchen — the single most
 important line in `docker-compose.yml`.
 
-The live deployment is `cookd.vhtm.eu`; its runbook, ports and first-time setup
-are in [`deploy/README.md`](../deploy/README.md).
+The live deployment is `cookd.vhtm.eu`, alone on an exe.dev VM in Frankfurt; its
+runbook, ports and first-time setup are in
+[`deploy/README.md`](../deploy/README.md).
 
 **A room code is the only thing standing between a stranger and your
 kitchen**, and anyone in a room can reset it. Codes are four characters from an
