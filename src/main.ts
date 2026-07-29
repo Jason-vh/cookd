@@ -123,6 +123,25 @@ let previousNav: MenuNav = { up: false, down: false, confirm: false, menu: false
  */
 let menuKeyDown = false;
 
+/**
+ * The button that confirmed a menu item, held down across the boundary.
+ *
+ * `Enter` confirms in the menu **and** is the `start` button in play, and the
+ * gamepad's `A` confirms and grabs. Picking "Close up early" therefore closed
+ * the menu into the build phase and then, while the key was still down, read as
+ * a fresh `start` press — which opens the next day. The kitchen shut and
+ * reopened between two frames, so the menu item looked like it did nothing at
+ * all, and the only trace was the day counter going up.
+ *
+ * Swallowing a single frame is not enough: a key is held for a tenth of a
+ * second, which is six of them. It has to be *released* before play sees it,
+ * exactly like `menuKeyDown` for the menu key. This is the third variant of
+ * the same bug in this file — the general rule is that a control which means
+ * two things either side of a boundary needs a latch that spans the boundary,
+ * never an edge test on one side of it.
+ */
+let confirmHeld = false;
+
 function openMenu(): void {
   menu.show(game.world);
   previousNav = { ...previousNav, menu: true, confirm: true, back: true };
@@ -133,6 +152,7 @@ function closeMenu(): void {
 }
 
 function runMenuAction(): void {
+  confirmHeld = true;
   switch (menu.confirm()) {
     case "resume":
       closeMenu();
@@ -262,6 +282,20 @@ function frame(now: number): void {
     if (menu.isOpen || menuWasOpen) return idleInputs();
 
     const polled = input.poll(game.localIds);
+
+    // ...and the confirm button stays swallowed until it is let go. See
+    // `confirmHeld`.
+    if (confirmHeld) {
+      let stillDown = false;
+      for (const id of game.localIds) {
+        const one = polled[id];
+        if (!one) continue;
+        if (one.grab || one.start) stillDown = true;
+        one.grab = false;
+        one.start = false;
+      }
+      confirmHeld = stillDown;
+    }
     const pressed = game.localIds.some((id) => polled[id]?.menu);
     if (pressed && !menuKeyDown) {
       menuKeyDown = true;

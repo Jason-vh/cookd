@@ -1127,7 +1127,10 @@ not needed and would be premature.** What actually keeps this fast:
   id and reused, and an item's mesh is only rebuilt when its canonical key
   changes (`tomato` → `tomato|chopped`);
 - geometries, materials and label textures are shared/cached; the floor is one
-  textured quad;
+  textured quad. Text textures are **measured and fitted to the string** rather
+  than drawn into a shared box: a fixed box clips anything longer than it (which
+  is how `walked out` first reached the screen as a smear) and wastes texture on
+  anything shorter;
 - the HUD updates by diffing text, never by re-rendering, and it no longer
   renders a per-order row at all — the order bubbles live in the 3D scene,
   where they cost one shader quad and one cached model each;
