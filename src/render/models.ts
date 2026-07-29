@@ -506,12 +506,27 @@ const plate: Builder = (parent, item, y) => {
   }
 
   // Contents go in their own group so the meal can be emptied without the
-  // crockery going with it — see `setPlateFullness` in view.ts.
+  // crockery going with it — see `setPlateFullness` in item-views.ts.
   const contents = new THREE.Group();
+  contents.name = CONTENTS;
   for (const child of item.contents) addModel(contents, child, y + 0.03);
   parent.add(contents);
-  parent.userData.contents = contents;
 };
+
+/**
+ * Name of the group holding a plate's food.
+ *
+ * This used to be `parent.userData.contents`, read back with a cast. `name` is
+ * a real, typed field on `Object3D` and `getObjectByName` is three.js's own way
+ * to ask the question, so the link between writer and reader is one the
+ * compiler and the library both understand.
+ */
+const CONTENTS = "contents";
+
+/** The food on a plate, separate from the plate. Absent for anything else. */
+export function contentsOf(model: THREE.Object3D): THREE.Object3D | undefined {
+  return model.getObjectByName(CONTENTS);
+}
 
 /** Anything burnt collapses to the same charred lump — a clear, readable fail. */
 const burnt: Builder = (parent, item, y) => {

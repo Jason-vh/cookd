@@ -6,6 +6,7 @@ import { buildIngredientSample } from "./models";
 import { LAYER, setLayer } from "./layers";
 import { PALETTE, type SurfaceName } from "./palette";
 import { cylinder, mesh, roundedBox, sphere, torus } from "./primitives";
+import { cssHex, textSprite } from "./text";
 
 /**
  * Meshes for the kitchen itself: appliances, walls, chefs and the flat
@@ -20,56 +21,106 @@ import { cylinder, mesh, roundedBox, sphere, torus } from "./primitives";
 
 export const PLAYER_COLORS = PALETTE.chefs;
 
+/**
+ * A mesh's material as the standard material it is.
+ *
+ * `Mesh.material` is `Material | Material[]`, so reading `.emissive` off it
+ * needs narrowing. Everything `primitives.mesh` builds is a single
+ * MeshStandardMaterial; this asserts that once, loudly, instead of once per
+ * call site and silently.
+ */
+function standardMaterial(target: THREE.Mesh): THREE.MeshStandardMaterial {
+  const material = target.material;
+  if (Array.isArray(material) || !(material instanceof THREE.MeshStandardMaterial)) {
+    throw new Error("expected a single MeshStandardMaterial");
+  }
+  return material;
+}
+
 // --- appliances --------------------------------------------------------------
 
-export function buildAppliance(appliance: Appliance): THREE.Object3D {
+/**
+ * The moving parts of one appliance, named and typed.
+ *
+ * These used to live in `object.userData`, which three.js types as
+ * `Record<string, any>`. Every reader therefore looked like
+ * `object.userData.knife as THREE.Object3D | undefined` — a cast asserting
+ * something the compiler had no way to check, because the only thing that made
+ * it true was a line in this file setting that exact key.
+ *
+ * Renaming `userData.knife` here type-checked cleanly and broke the chop
+ * animation at runtime. There were thirteen of these keys and ten readers, and
+ * two of the readers (`oilGlow`, `dial`) cast without a `| undefined`, so a
+ * missing one would not even fail politely.
+ *
+ * Now the parts a builder produces and the parts an animator consumes are the
+ * same declaration, and getting it wrong is a build error.
+ */
+export type ApplianceParts = {
+  root: THREE.Object3D;
+  /** Contextual name, hidden until a chef looks at it. */
+  label?: THREE.Object3D;
+  /** Board: swings with the chop. */
+  knife?: THREE.Object3D;
+  /** Fryer: the oil surface, and its own emissive material so it can glow. */
+  oil?: THREE.Mesh;
+  oilGlow?: THREE.MeshStandardMaterial;
+  basket?: THREE.Object3D;
+  /** Oven: one per camera-facing door. */
+  glass?: THREE.MeshStandardMaterial[];
+  /** Bin: flips open when something goes in. */
+  lid?: THREE.Object3D;
+};
+
+export function buildAppliance(appliance: Appliance): ApplianceParts {
   const def = applianceDef(appliance.kind);
-  const group = new THREE.Group();
+  const root = new THREE.Group();
+  const parts: ApplianceParts = { root };
   const h = def.height;
   const w = 0.94;
+
+  const look = APPLIANCE_LOOK[appliance.kind];
 
   // Most appliances are a box with details bolted on. A few earn their own
   // silhouette instead — see buildBin.
   if (appliance.kind === "bin") {
-    group.add(buildBin(group, h));
+    root.add(buildBin(parts, h));
   } else if (appliance.kind === "table") {
-    buildTable(group, h);
+    buildTable(root, h);
   } else {
-    const [bodyColor, bodySurface] = bodyLook(appliance.kind);
-    const body = mesh(roundedBox(w, h, w, 0.07), bodyColor, bodySurface);
+    const body = mesh(roundedBox(w, h, w, 0.07), look.body[0], look.body[1]);
     body.position.y = h / 2;
-    group.add(body);
+    root.add(body);
 
-    const top = topLook(appliance.kind);
-    if (top) {
-      const slab = mesh(roundedBox(w * 0.9, 0.08, w * 0.9, 0.03), top[0], top[1]);
+    if (look.top) {
+      const slab = mesh(roundedBox(w * 0.9, 0.08, w * 0.9, 0.03), look.top[0], look.top[1]);
       slab.position.y = h + 0.01;
-      group.add(slab);
+      root.add(slab);
     }
-    addDetails(group, appliance, h);
+    addDetails(parts, appliance, h);
   }
 
   if (appliance.source) {
     // Crates show an actual sample of what they dispense.
     const marker = buildIngredientSample(appliance.source.base);
     marker.position.y = h + 0.06;
-    group.add(marker);
+    root.add(marker);
   }
 
   // Labels are contextual: hidden until a chef looks at the appliance. Keeping
   // the world label-free is what lets the diorama read as a diorama.
-  const label = labelFor(appliance);
+  const label = appliance.source ? ingredient(appliance.source.base).name : look.label;
   if (label) {
     const sprite = makeLabel(label);
     // Just above the progress bar. depthTest is off, so it draws over a chef
     // standing in front rather than fighting them for space.
     sprite.position.y = h + (appliance.source ? 1.15 : 0.98);
     sprite.visible = false;
-    group.add(sprite);
-    group.userData.label = sprite;
+    root.add(sprite);
+    parts.label = sprite;
   }
 
-  return group;
+  return parts;
 }
 
 /**
@@ -124,45 +175,45 @@ function buildTable(group: THREE.Group, h: number): void {
   }
 }
 
-function bodyLook(kind: Appliance["kind"]): [number, SurfaceName] {
-  switch (kind) {
-    // Enamel bodies for anything that would really be enamelled steel.
-    case "oven":
-      return [PALETTE.ovenBody, "enamel"];
-    case "fryer":
-      return [PALETTE.fryerBody, "enamel"];
-    case "plates":
-      return [PALETTE.steel, "enamel"];
-    case "crate":
-      return [PALETTE.crate, "wood"];
-    case "bin":
-      return [PALETTE.bin, "enamel"];
-    default:
-      return [PALETTE.wood, "wood"];
-  }
-}
+/**
+ * How each kind of appliance looks, as one table.
+ *
+ * This was five parallel `switch (kind)` statements — `bodyLook`, `topLook`,
+ * `addDetails`, `labelFor`, and the animation branches in `view.ts` — so adding
+ * a sink meant finding all five and remembering the fifth. Worse, `labelFor`
+ * had already drifted from the `label` in `data/appliances.ts`: the data said
+ * "Chopping board" and "Plate stack", the switch said "Chop" and `null`. Two
+ * sources of truth for one string, and no way to notice.
+ *
+ * `Record<ApplianceKind, ...>` rather than a partial map, so adding a kind to
+ * the simulation fails the build here rather than rendering an untextured box.
+ */
+type Look = {
+  body: [number, SurfaceName];
+  top?: [number, SurfaceName];
+  /**
+   * What the contextual label says. Absent means no label — a counter does not
+   * need to introduce itself. Crates override this with what they dispense.
+   */
+  label?: string;
+};
 
-function topLook(kind: Appliance["kind"]): [number, SurfaceName] | null {
-  switch (kind) {
-    case "board":
-      return [PALETTE.boardTop, "wood"];
-    case "counter":
-      return [PALETTE.woodTop, "wood"];
-    case "crate":
-      return [PALETTE.crateTop, "wood"];
-    case "oven":
-      return [PALETTE.ovenGlass, "enamel"];
-    case "fryer":
-      return [PALETTE.ceramic, "enamel"];
-    case "bin":
-      return [PALETTE.steelDark, "enamel"];
-    default:
-      return null;
-  }
-}
+const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
+  // Enamel bodies for anything that would really be enamelled steel.
+  wall: { body: [PALETTE.wood, "wood"] },
+  counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"] },
+  board: { body: [PALETTE.wood, "wood"], top: [PALETTE.boardTop, "wood"], label: "Chop" },
+  fryer: { body: [PALETTE.fryerBody, "enamel"], top: [PALETTE.ceramic, "enamel"], label: "Fryer" },
+  oven: { body: [PALETTE.ovenBody, "enamel"], top: [PALETTE.ovenGlass, "enamel"], label: "Oven" },
+  crate: { body: [PALETTE.crate, "wood"], top: [PALETTE.crateTop, "wood"] },
+  plates: { body: [PALETTE.steel, "enamel"] },
+  bin: { body: [PALETTE.bin, "enamel"], top: [PALETTE.steelDark, "enamel"], label: "Bin" },
+  table: { body: [PALETTE.wood, "wood"], label: "Table" },
+};
 
 /** Small silhouette details: this is what stops every appliance reading as a box. */
-function addDetails(group: THREE.Group, appliance: Appliance, h: number): void {
+function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): void {
+  const group = parts.root;
   switch (appliance.kind) {
     case "oven": {
       // Dark glass door on both camera-facing sides.
@@ -173,14 +224,14 @@ function addDetails(group: THREE.Group, appliance: Appliance, h: number): void {
         const door = mesh(roundedBox(0.56, 0.34, 0.04, 0.02), PALETTE.ovenGlass, "enamel");
         // Own material instance: the glass glows while something is baking, and
         // materials are shared by colour+surface elsewhere.
-        const glass = (door.material as THREE.MeshStandardMaterial).clone();
+        const glass = standardMaterial(door).clone();
         glass.emissive.setHex(PALETTE.ember);
         glass.emissiveIntensity = 0;
         door.material = glass;
         door.position.set(x, h * 0.5, z);
         door.rotation.y = ry;
         group.add(door);
-        (group.userData.glass ??= []).push(glass);
+        (parts.glass ??= []).push(glass);
         const handle = mesh(cylinder(0.025, 0.025, 0.6), PALETTE.brass, "metal");
         handle.rotation.z = Math.PI / 2;
         handle.rotation.y = ry;
@@ -192,19 +243,19 @@ function addDetails(group: THREE.Group, appliance: Appliance, h: number): void {
     case "fryer": {
       const oil = mesh(roundedBox(0.6, 0.06, 0.6, 0.02), PALETTE.oil, "ceramic");
       // Own material instance so the oil can glow into the bloom pass.
-      const glow = (oil.material as THREE.MeshStandardMaterial).clone();
+      const glow = standardMaterial(oil).clone();
       glow.emissive.setHex(PALETTE.oil);
       glow.emissiveIntensity = 0.4;
       oil.material = glow;
       oil.position.y = h + 0.05;
       group.add(oil);
-      group.userData.oil = oil;
-      group.userData.oilGlow = glow;
+      parts.oil = oil;
+      parts.oilGlow = glow;
       const basket = mesh(cylinder(0.03, 0.03, 0.34), PALETTE.brass, "metal");
       basket.position.set(0.3, h + 0.2, 0.3);
       basket.rotation.z = 0.4;
       group.add(basket);
-      group.userData.basket = basket;
+      parts.basket = basket;
       break;
     }
     case "board": {
@@ -223,7 +274,7 @@ function addDetails(group: THREE.Group, appliance: Appliance, h: number): void {
       knife.add(handle);
 
       group.add(knife);
-      group.userData.knife = knife;
+      parts.knife = knife;
       break;
     }
     case "crate": {
@@ -254,7 +305,7 @@ function addDetails(group: THREE.Group, appliance: Appliance, h: number): void {
  * "rubbish" from across the kitchen, and the lid gives the act of binning
  * something a beat of feedback.
  */
-function buildBin(group: THREE.Group, h: number): THREE.Object3D {
+function buildBin(parts: ApplianceParts, h: number): THREE.Object3D {
   const bin = new THREE.Group();
   const bodyH = h * 0.86;
 
@@ -288,7 +339,7 @@ function buildBin(group: THREE.Group, h: number): THREE.Object3D {
   knob.position.set(0, 0.13, 0.44);
   lid.add(knob);
   bin.add(lid);
-  group.userData.lid = lid;
+  parts.lid = lid;
 
   // Pedal: the detail that names the object.
   const pedal = mesh(roundedBox(0.26, 0.05, 0.14, 0.02), PALETTE.steelDark, "metal");
@@ -296,24 +347,6 @@ function buildBin(group: THREE.Group, h: number): THREE.Object3D {
   bin.add(pedal);
 
   return bin;
-}
-
-function labelFor(appliance: Appliance): string | null {
-  if (appliance.source) return ingredient(appliance.source.base).name;
-  switch (appliance.kind) {
-    case "board":
-      return "Chop";
-    case "fryer":
-      return "Fryer";
-    case "oven":
-      return "Oven";
-    case "bin":
-      return "Bin";
-    case "table":
-      return "Table";
-    default:
-      return null;
-  }
 }
 
 // --- walls -------------------------------------------------------------------
@@ -394,6 +427,12 @@ export function buildCustomer(index: number): ChefParts {
   return buildPerson(color, "customer");
 }
 
+function eye(x: number): THREE.Mesh {
+  const ball = mesh(sphere(0.028), PALETTE.eye, "ceramic");
+  ball.position.set(x, 0.04, 0.14);
+  return ball;
+}
+
 function buildPerson(color: number, role: "chef" | "customer"): ChefParts {
   const root = new THREE.Group();
   // Chefs are drawn slightly larger than life against the kitchen: readability
@@ -442,11 +481,6 @@ function buildPerson(color: number, role: "chef" | "customer"): ChefParts {
   nose.position.set(0, -0.01, 0.15);
   head.add(nose);
 
-  const eye = (x: number): THREE.Mesh => {
-    const e = mesh(sphere(0.028), 0x2a2b33, "ceramic");
-    e.position.set(x, 0.04, 0.14);
-    return e;
-  };
   head.add(eye(-0.06), eye(0.06));
 
   const makeArm = (x: number): THREE.Object3D => {
@@ -563,118 +597,44 @@ function ringTexture(): THREE.Texture {
   return ringCache;
 }
 
-const labelCache = new Map<string, THREE.SpriteMaterial>();
-
 /**
- * A name tag above a chef.
- *
- * Unlike appliance labels this is **fitted to the text**: a fixed-width pill
- * gives "Bo" the same box as "Cassandra", which at eight players on screen
- * means half the tags are mostly empty space with unreadably small text in the
- * middle. The sprite's world scale is derived from the measured canvas, so
- * every name renders at the same physical letter height.
+ * A name tag above a chef. Only exists online, where there is a name to show.
  */
-const nameTagCache = new Map<string, { material: THREE.SpriteMaterial; aspect: number }>();
-
 const TAG_HEIGHT = 0.42;
+const TAG_FONT = "700 32px system-ui, -apple-system, Segoe UI, sans-serif";
 
 export function makeNameTag(text: string, color: number): THREE.Sprite {
-  const key = `${text}:${color}`;
-  let entry = nameTagCache.get(key);
-  if (!entry) {
-    const font = "700 64px system-ui, -apple-system, Segoe UI, sans-serif";
-    const [measureCanvas, measureCtx] = canvas2d(8);
-    measureCtx.font = font;
-    const textWidth = measureCtx.measureText(text).width;
-    void measureCanvas;
-
-    const padding = 34;
-    const width = Math.ceil(textWidth + padding * 2);
-    const height = 128;
-    const element = document.createElement("canvas");
-    element.width = width;
-    element.height = height;
-    const ctx = element.getContext("2d")!;
-    ctx.fillStyle = "rgba(10,11,16,0.6)";
-    roundRect(ctx, 0, 26, width, 76, 38);
-    ctx.fill();
-    ctx.font = font;
-    ctx.fillStyle = `#${color.toString(16).padStart(6, "0")}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, width / 2, 65);
-
-    const texture = new THREE.CanvasTexture(element);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
-    texture.anisotropy = 8;
-    entry = {
-      material: new THREE.SpriteMaterial({
-        map: texture,
-        depthTest: false,
-        depthWrite: false,
-        transparent: true,
-        fog: false,
-        toneMapped: false,
-      }),
-      aspect: width / height,
-    };
-    nameTagCache.set(key, entry);
-  }
-  const sprite = new THREE.Sprite(entry.material);
-  sprite.scale.set(TAG_HEIGHT * entry.aspect, TAG_HEIGHT, 1);
-  sprite.renderOrder = 11;
-  setLayer(sprite, LAYER.UI);
-  return sprite;
+  return textSprite(
+    text,
+    {
+      font: TAG_FONT,
+      color: cssHex(color),
+      backing: { kind: "pill", color: "rgba(10,11,16,0.6)" },
+      padding: 17,
+      supersample: 2,
+    },
+    TAG_HEIGHT,
+    11,
+  );
 }
 
-type LabelStyle = { background: string; color: string; size: number };
-const DEFAULT_STYLE: LabelStyle = { background: "rgba(10,11,16,0.72)", color: "#ffffff", size: 60 };
+const LABEL_HEIGHT = 0.56;
+const LABEL_FONT = "700 30px system-ui, sans-serif";
 
-export function makeLabel(
-  text: string,
-  key = text,
-  style: LabelStyle = DEFAULT_STYLE,
-): THREE.Sprite {
-  let sprite = labelCache.get(key);
-  if (!sprite) {
-    const element = document.createElement("canvas");
-    element.width = 512;
-    element.height = 144;
-    const ctx = element.getContext("2d")!;
-    ctx.fillStyle = style.background;
-    roundRect(ctx, 8, 24, 496, 96, 48);
-    ctx.fill();
-    ctx.font = `700 ${style.size}px system-ui, sans-serif`;
-    ctx.fillStyle = style.color;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, 256, 73);
-    const texture = new THREE.CanvasTexture(element);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    // No mipmaps: at this on-screen size the minified levels average white text
-    // into the dark pill and the label turns into an unreadable smudge.
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.LinearFilter;
-    texture.anisotropy = 8;
-    // `fog: false` matters: sprites are UI, and scene fog would otherwise fade
-    // labels on the far side of the kitchen into the background.
-    sprite = new THREE.SpriteMaterial({
-      map: texture,
-      depthTest: false,
-      depthWrite: false,
-      transparent: true,
-      fog: false,
-      toneMapped: false,
-    });
-    labelCache.set(key, sprite);
-  }
-  const object = new THREE.Sprite(sprite);
-  object.scale.set(2.0, 0.56, 1);
-  object.renderOrder = 10;
-  setLayer(object, LAYER.UI);
-  return object;
+/** The contextual name that appears when a chef looks at an appliance. */
+export function makeLabel(text: string): THREE.Sprite {
+  return textSprite(
+    text,
+    {
+      font: LABEL_FONT,
+      color: "#ffffff",
+      backing: { kind: "pill", color: "rgba(10,11,16,0.72)" },
+      padding: 24,
+      supersample: 2,
+    },
+    LABEL_HEIGHT,
+    10,
+  );
 }
 
 function roundRect(
@@ -697,12 +657,12 @@ function roundRect(
 /** Warm tiled kitchen floor with grout lines and a touch of per-tile variation. */
 export function floorTexture(width: number, height: number): THREE.Texture {
   const [element, ctx] = canvas2d(128);
-  ctx.fillStyle = hex(PALETTE.floorGrout);
+  ctx.fillStyle = cssHex(PALETTE.floorGrout);
   ctx.fillRect(0, 0, 128, 128);
   const shades = [PALETTE.floorLight, PALETTE.floorDark];
   for (let y = 0; y < 2; y++) {
     for (let x = 0; x < 2; x++) {
-      ctx.fillStyle = hex(shades[(x + y) % 2]!);
+      ctx.fillStyle = cssHex(shades[(x + y) % 2]!);
       ctx.fillRect(x * 64 + 3, y * 64 + 3, 58, 58);
     }
   }
@@ -718,8 +678,4 @@ export function floorTexture(width: number, height: number): THREE.Texture {
   texture.anisotropy = 8;
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
-}
-
-function hex(color: number): string {
-  return `#${color.toString(16).padStart(6, "0")}`;
 }

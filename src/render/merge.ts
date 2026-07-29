@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { isSingleMesh } from "./nodes";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /**
@@ -32,13 +33,13 @@ export function mergeStatic(root: THREE.Object3D): THREE.Mesh[] {
   const batches = new Map<string, Batch>();
 
   root.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+    if (!isSingleMesh(child)) return;
+    const mesh = child;
 
     // Shadow flags are per-mesh in three.js but per-*draw* on the GPU, so they
     // have to split batches: grass casts no shadow and must not be merged into
     // something that does.
-    const material = mesh.material as THREE.Material;
+    const material = mesh.material;
     const key = `${material.uuid}|${mesh.castShadow ? 1 : 0}|${mesh.receiveShadow ? 1 : 0}`;
 
     let batch = batches.get(key);

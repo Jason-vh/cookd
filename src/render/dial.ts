@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { LAYER, setLayer } from "./layers";
+import { PALETTE } from "./palette";
 
 /**
  * The work gauge that floats over a busy appliance.
@@ -96,8 +97,11 @@ export class Dial {
     this.camera = camera;
     this.uniforms = {
       uProgress: { value: 0 },
-      uColor: { value: linear(0x8fd694) },
-      uTrack: { value: linear(0x1b1d24) },
+      // Defaults, immediately overwritten by the first `apply`. Named from the
+      // palette rather than repeated as literals, which is how the old
+      // `0x8fd694` here quietly became a second definition of `progressGood`.
+      uColor: { value: linear(PALETTE.progressGood) },
+      uTrack: { value: linear(PALETTE.dialTrack) },
       uAlpha: { value: 0 },
       uFlash: { value: 0 },
     };
@@ -115,6 +119,21 @@ export class Dial {
     );
     this.object.renderOrder = 12;
     setLayer(this.object, LAYER.UI);
+  }
+
+  /**
+   * Give back the geometry and shader. Every appliance owns one of these, and
+   * a reset rebuilds every appliance — so without this, resetting the kitchen
+   * leaked a plane and a ShaderMaterial per counter, every time.
+   */
+  dispose(): void {
+    this.object.geometry.dispose();
+    if (Array.isArray(this.object.material)) {
+      for (const entry of this.object.material) entry.dispose();
+    } else {
+      this.object.material.dispose();
+    }
+    this.object.removeFromParent();
   }
 
   apply(state: DialState): void {

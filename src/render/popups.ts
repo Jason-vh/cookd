@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { LAYER, setLayer } from "./layers";
+import { cssHex, spriteMaterial, textTexture, type TextStyle } from "./text";
 
 /**
  * Floating "+$12" text that rises off a chef's head when they serve.
@@ -26,62 +27,22 @@ type Popup = {
   aspect: number;
 };
 
-type Label = { texture: THREE.Texture; aspect: number };
-
-const textureCache = new Map<string, Label>();
-
-const FONT = "800 34px system-ui, -apple-system, Segoe UI, sans-serif";
-
 /**
- * Text on a canvas, **fitted to the text**.
+ * The look of a popup: an outlined value, not a pill.
  *
- * It used to be a fixed 128x64 box with the string centred in it, which worked
- * for as long as every popup was "+$12". The first one that said "walked out"
- * ran off both ends of its own texture and rendered as a smear. Measuring first
- * is the same fix `makeNameTag` already carries, for the same reason — nothing
- * about a popup should care how many characters it has.
+ * An outline rather than a background because these float over the room rather
+ * than labelling a thing in it, and supersampled because they are read at a
+ * glance while both they and the chef under them are moving.
  */
-function textTexture(text: string, color: string): Label {
-  const key = `${text}|${color}`;
-  const cached = textureCache.get(key);
-  if (cached) return cached;
-
-  const scale = 3; // supersample: these are read at a glance, mid-motion
-  const measure = document.createElement("canvas").getContext("2d")!;
-  measure.font = FONT;
-  // Padding leaves room for the outline, which is drawn centred on the glyph
-  // edge and so spills half its width outside the text box.
-  const padding = 14;
-  const width = Math.ceil(measure.measureText(text).width) + padding * 2;
-  const height = 64;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width * scale;
-  canvas.height = height * scale;
-  const ctx = canvas.getContext("2d")!;
-  // Every context setting below has to come *after* the resize: changing a
-  // canvas's dimensions resets its 2D context to defaults.
-  ctx.scale(scale, scale);
-  ctx.font = FONT;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.lineJoin = "round";
-  // Outline first so the value stays legible over any biome or appliance.
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = "rgba(14,15,20,0.85)";
-  ctx.strokeText(text, width / 2, height / 2);
-  ctx.fillStyle = color;
-  ctx.fillText(text, width / 2, height / 2);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.generateMipmaps = false; // mipmaps turn small text to mush
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const label = { texture, aspect: width / height };
-  textureCache.set(key, label);
-  return label;
-}
+const STYLE: TextStyle = {
+  font: "800 34px system-ui, -apple-system, Segoe UI, sans-serif",
+  color: "#ffffff",
+  // Drawn centred on the glyph edge, so it spills half its width outside the
+  // text box; the padding below is what stops that being clipped.
+  backing: { kind: "outline", color: "rgba(14,15,20,0.85)", width: 7 },
+  padding: 14,
+  supersample: 3,
+};
 
 export class Popups {
   private readonly live: Popup[] = [];
@@ -89,10 +50,10 @@ export class Popups {
 
   constructor(private readonly scene: THREE.Scene) {}
 
-  spawn(text: string, color: string, x: number, y: number, z: number): void {
+  spawn(text: string, color: number, x: number, y: number, z: number): void {
     const sprite = this.pool.pop() ?? this.make();
-    const label = textTexture(text, color);
-    const mat = sprite.material as THREE.SpriteMaterial;
+    const label = textTexture(text, { ...STYLE, color: cssHex(color) });
+    const mat = material(sprite);
     mat.map = label.texture;
     mat.opacity = 1;
     // Sized per popup, so every string renders at the same letter height
@@ -119,7 +80,7 @@ export class Popups {
       // Rise fast then coast, and only fade over the last third — a number that
       // starts fading immediately reads as a glitch rather than a reward.
       popup.sprite.position.y = popup.origin.y + RISE * (1 - (1 - t) * (1 - t));
-      const mat = popup.sprite.material as THREE.SpriteMaterial;
+      const mat = material(popup.sprite);
       mat.opacity = t < 0.66 ? 1 : 1 - (t - 0.66) / 0.34;
       const pop = t < 0.16 ? 0.7 + 0.3 * (t / 0.16) : 1;
       popup.sprite.scale.set(HEIGHT * popup.aspect * pop, HEIGHT * pop, 1);
@@ -127,16 +88,41 @@ export class Popups {
   }
 
   private make(): THREE.Sprite {
-    const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-        fog: false,
-      }),
-    );
+    // Its own material per pooled sprite: the map and opacity are both animated
+    // per popup, so a shared one would make every live popup fade together.
+    const sprite = new THREE.Sprite(spriteMaterial(EMPTY));
     sprite.renderOrder = 20;
     setLayer(sprite, LAYER.UI);
     return sprite;
   }
+
+  /** Release every sprite this pool is holding, live or spare. */
+  dispose(): void {
+    for (const popup of this.live) this.scene.remove(popup.sprite);
+    for (const sprite of [...this.live.map((p) => p.sprite), ...this.pool]) {
+      material(sprite).dispose();
+    }
+    this.live.length = 0;
+    this.pool.length = 0;
+  }
+}
+
+/**
+ * Placeholder map for a freshly pooled sprite, replaced on its first `spawn`.
+ * Shared and never drawn, so one is enough.
+ */
+const EMPTY = new THREE.Texture();
+
+/**
+ * A sprite's material as the single sprite material it is.
+ *
+ * `Sprite.material` is typed loosely enough that reading `.opacity` needs
+ * narrowing; this states the invariant once rather than casting at four call
+ * sites.
+ */
+function material(sprite: THREE.Sprite): THREE.SpriteMaterial {
+  if (!(sprite.material instanceof THREE.SpriteMaterial)) {
+    throw new Error("popup sprite lost its material");
+  }
+  return sprite.material;
 }

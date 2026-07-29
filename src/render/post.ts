@@ -27,6 +27,8 @@ export type Post = {
   composer: EffectComposer;
   resize(width: number, height: number): void;
   render(): void;
+  /** Release the render targets. The chain holds several framebuffers. */
+  dispose(): void;
 };
 
 /**
@@ -134,7 +136,12 @@ export function createPost(
     composer.render();
   };
 
-  return { composer, resize, render };
+  const dispose = (): void => {
+    for (const pass of composer.passes) pass.dispose?.();
+    composer.dispose();
+  };
+
+  return { composer, resize, render, dispose };
 }
 
 export function postEnabled(): boolean {

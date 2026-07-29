@@ -13,14 +13,26 @@ function pad(index: number, pressed = false): FakePad {
   return { index, buttons: [{ pressed }], axes: [0, 0] };
 }
 
+/**
+ * Stub the two browser globals `InputManager` reaches for.
+ *
+ * `defineProperty` rather than assignment, and rather than the
+ * `globalThis as unknown as { navigator: unknown }` this used to be. That cast
+ * compiled whatever shape the test claimed, so a stub could drift from what the
+ * source actually calls and still typecheck — the exact failure mode a test
+ * stub exists to catch. `navigator` is also not guaranteed writable, so plain
+ * assignment was relying on Bun being lenient about it.
+ */
+function defineGlobal(name: string, value: object): void {
+  Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+}
+
 function setPads(pads: FakePad[]): void {
-  (globalThis as unknown as { navigator: unknown }).navigator = {
-    getGamepads: () => pads,
-  };
+  defineGlobal("navigator", { getGamepads: (): FakePad[] => pads });
 }
 
 function stubWindow(): void {
-  (globalThis as unknown as { window: unknown }).window = { addEventListener: () => {} };
+  defineGlobal("window", { addEventListener: (): void => {} });
 }
 
 describe("gamepad seating", () => {

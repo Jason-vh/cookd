@@ -14,11 +14,31 @@ import { SURFACE, type SurfaceName } from "./palette";
 const geometries = new Map<string, THREE.BufferGeometry>();
 const materials = new Map<string, THREE.MeshStandardMaterial>();
 
+/**
+ * Everything this module has handed out, for `disposeSubtree` to *not* free.
+ *
+ * Shared resources are the reason the kitchen is a handful of GPU buffers
+ * rather than hundreds, and they are also the reason naive teardown is
+ * dangerous: disposing the box geometry when one counter is removed would blank
+ * every other counter in the room. Ownership has to be answerable, so it is.
+ *
+ * A Set of the objects themselves rather than a flag on each: `dispose()` is
+ * three.js's API and we are not going to be the ones deciding what a stray
+ * `userData.cached` means.
+ */
+const owned = new Set<THREE.BufferGeometry | THREE.Material | THREE.Texture>();
+
+/** Did this come from the shared cache? If so, nobody else may dispose it. */
+export function isCached(resource: THREE.BufferGeometry | THREE.Material | THREE.Texture): boolean {
+  return owned.has(resource);
+}
+
 function cached(key: string, create: () => THREE.BufferGeometry): THREE.BufferGeometry {
   let geometry = geometries.get(key);
   if (!geometry) {
     geometry = create();
     geometries.set(key, geometry);
+    owned.add(geometry);
   }
   return geometry;
 }
@@ -113,6 +133,7 @@ export function material(color: number, surface: SurfaceName = "wood"): THREE.Me
   if (!found) {
     found = new THREE.MeshStandardMaterial({ color, ...SURFACE[surface] });
     materials.set(key, found);
+    owned.add(found);
   }
   return found;
 }
@@ -127,6 +148,7 @@ export function shellMaterial(
   if (!found) {
     found = new THREE.MeshStandardMaterial({ color, ...SURFACE[surface], side: THREE.DoubleSide });
     materials.set(key, found);
+    owned.add(found);
   }
   return found;
 }

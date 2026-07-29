@@ -24,7 +24,22 @@ export const CUSTOMER_SPEED = 2.4;
 /** A beat of calm between sitting down and asking for something. */
 const DECIDE_TIME = 3;
 /** How long a table stays occupied after the food lands. Throughput lives here. */
-export const EAT_TIME = 12;
+const EAT_TIME = 12;
+
+/**
+ * How much of the meal is left, 1..0.
+ *
+ * Exported as a function rather than exporting `EAT_TIME`, because the render
+ * layer wants the *fraction* and was computing it itself as
+ * `customer.timer / EAT_TIME`. That is this module's arithmetic living in
+ * another module's file: `timer` is reused by four states with four different
+ * meanings, and the day the eating state stopped counting down from EAT_TIME
+ * the plates would have quietly stopped emptying, with nothing to point at.
+ */
+export function mealLeft(customer: Customer): number {
+  if (customer.state !== "eating") return 1;
+  return Math.max(0, Math.min(1, customer.timer / EAT_TIME));
+}
 /** How long someone will stand at a full door before giving up. */
 const DOOR_WAIT = 14;
 /** Arrivals stop this long before closing time, so the day can finish cleanly. */

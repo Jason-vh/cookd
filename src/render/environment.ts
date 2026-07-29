@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { isMesh } from "./nodes";
 import type { Biome, PropKind, ScatterEntry } from "../data/biomes";
 import { box, cylinder, mesh, roundedBox, sphere } from "./primitives";
 import { mergeStatic } from "./merge";
@@ -328,7 +329,7 @@ function addScatter(
       const scale = entry.scale[0] + random() * (entry.scale[1] - entry.scale[0]);
       prop.scale.multiplyScalar(scale);
       prop.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
+        if (isMesh(child)) {
           child.castShadow = entry.kind !== "tuft";
           child.receiveShadow = true;
         }

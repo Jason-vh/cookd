@@ -1,7 +1,9 @@
 import * as THREE from "three";
 import { RECIPE_BY_ID } from "../data/recipes";
 import type { Customer, Item } from "../sim/types";
+import { ease } from "./anim";
 import { Dial } from "./dial";
+import { disposeSubtree } from "./dispose";
 import { LAYER, setLayer } from "./layers";
 import { buildItemModel } from "./models";
 import { PALETTE } from "./palette";
@@ -46,12 +48,12 @@ export class Bubble {
    * Show what this customer is waiting for, or fade out when there is nobody
    * to wait for. `dt` drives the ease, so the bubble never pops into being.
    */
-  update(customer: Customer | null, dt: number): void {
+  update(customer: Customer | null, dt: number, time: number): void {
     const wanted = customer?.state === "ordering" ? customer : null;
     // In fast, out slow: a new order should register instantly, a satisfied one
     // should not snatch itself away the moment the plate lands.
     const rate = wanted ? 10 : 4;
-    this.alpha += ((wanted ? 1 : 0) - this.alpha) * Math.min(1, rate * dt);
+    this.alpha += ((wanted ? 1 : 0) - this.alpha) * ease(rate, dt);
     this.object.visible = this.alpha > 0.004;
     if (!this.object.visible) return;
 
@@ -61,8 +63,12 @@ export class Bubble {
     const ratio = wanted ? Math.max(0, wanted.remaining / wanted.patience) : 0;
     // Urgency is carried by movement as well as colour: in peripheral vision,
     // across a room full of tables, a pulse is what gets looked at.
+    // `time` is the render clock, which is dt-clamped, rather than
+    // `performance.now()`. Everything else in the render layer eases on that
+    // clock; a bubble that pulsed on wall time was the one thing that kept
+    // moving at full speed through a frame the rest of the scene had clamped.
     const urgent = ratio < 0.25;
-    const pulse = urgent ? 1 + Math.sin(performance.now() * 0.012) * 0.07 : 1;
+    const pulse = urgent ? 1 + Math.sin(time * 12) * 0.07 : 1;
     this.dial.apply({
       progress: ratio,
       color:
@@ -108,7 +114,18 @@ export class Bubble {
     setLayer(this.dish, LAYER.UI);
   }
 
-  dispose(parent: THREE.Object3D): void {
-    parent.remove(this.object);
+  /**
+   * Actually give the bubble's parts back.
+   *
+   * This used to be `parent.remove(this.object)` and nothing else, so the dish
+   * model and the ring's shader survived every table that was ever removed.
+   * Worse, it took the parent as an argument — and its one caller looked that
+   * parent up from a map the appliance sync had already cleared, so on the path
+   * that mattered it was never even called.
+   */
+  dispose(): void {
+    this.dial.dispose();
+    disposeSubtree(this.dish);
+    this.object.removeFromParent();
   }
 }

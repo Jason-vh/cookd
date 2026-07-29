@@ -107,8 +107,23 @@ export const PALETTE = {
   crumbs: 0xa8895f,
 
   // --- feedback ---
+  /** Dark, but never pure black — it would flatten in the shadow pass. */
+  eye: 0x2a2b33,
   progressGood: 0x8fc47f,
   progressBurn: 0xcb6a4c,
+  /** Unfilled part of a dial: dark enough to read as a groove, not a ring. */
+  dialTrack: 0x1b1d24,
+
+  // --- popups ---
+  // These were CSS strings inline in `view.ts` while the rest of the palette
+  // was numbers, so the two colour systems could not meet and nobody could see
+  // that `#ffd479` was being used for two different rewards.
+  /** Money paid for a delivery. */
+  rewardServe: 0xffd479,
+  /** Money picked up with a dirty plate — a different decision, so a different colour. */
+  rewardTip: 0xb8e08a,
+  /** Somebody gave up and left. */
+  lossWalkout: 0xe08a6f,
 } as const;
 
 /**
