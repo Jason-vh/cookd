@@ -11,6 +11,13 @@ The simulation is advanced only by `step(world, inputs, dt)` — a function of t
 world and one `PlayerInput` per player. Everything else (rendering, HUD,
 gamepads) is an observer or a producer of those inputs.
 
+What follows is a **map, not an inventory**: it is here so you can find the
+thing you are looking for, and a module only earns a line if the line says
+something the filename does not. A new helper does not need an entry. A path
+that has stopped existing does — [a test checks that much](docs.test.ts),
+because a tree that points somewhere empty is worse than one that is merely
+incomplete.
+
 ```
 src/
   sim/                    pure simulation — no DOM, no three.js

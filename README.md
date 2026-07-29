@@ -104,9 +104,9 @@ says who did it.
 
 This file is the front door: what the game is, how to run it, how to play it.
 Everything else lives in [`docs/`](docs/), because a single 1500-line document
-is a place where "what does `applianceAt` mean" is not findable and where a file
-tree can be wrong for months without anyone noticing. (That tree is now
-[checked by a test](docs/docs.test.ts).)
+is a place where "what does `applianceAt` mean" is not findable, and where a
+file tree can point at modules that moved away months ago without anyone
+noticing. [A test](docs/docs.test.ts) now catches that much.
 
 | | |
 | --- | --- |

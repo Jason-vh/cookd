@@ -3,43 +3,31 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
- * Do the docs still describe this codebase?
+ * Does the architecture doc still point at real files?
  *
- * The README used to carry a file tree with a one-line description of every
- * module. It was genuinely useful and it was wrong: it listed `view.ts` as
- * owning "scene, camera, animation, reconciliation" long after four of those
- * had moved out, and it had no entry for ten files that existed. Nobody
+ * The README used to carry a file tree describing every module. It was genuinely
+ * useful and it was wrong: it listed `view.ts` as owning "scene, camera,
+ * animation, reconciliation" long after four of those had moved out. Nobody
  * noticed, because nothing could.
  *
- * That is the real problem with a large hand-written document, and splitting it
- * into ten smaller hand-written documents does not fix it. This does: adding a
- * module without describing it fails `bun run check`, and so does describing one
- * that no longer exists.
+ * So this checks that every path the tree names exists. It deliberately does
+ * **not** check the reverse — that every file is described — because the two
+ * failures are not the same size. A path that has moved or gone is a *lie*: it
+ * sends a reader somewhere that is not there, and the more confident the
+ * document looks the more expensive that is. A file nobody has described yet is
+ * an omission, and the map is a little less useful.
  *
- * Deliberately *not* generated. The point of the tree is the one-line
- * description beside each path — the part a generator cannot write — so the
- * tree stays hand-authored and the test only checks that it is complete.
+ * Requiring completeness would also tax every new file, and what that actually
+ * buys is filler: a one-line description written to get past a test is worse
+ * than no line at all. It would not even have caught the original drift — the
+ * ten files missing from that tree were all inside `render/`, which was
+ * described.
+ *
+ * Deliberately not generated, either. The value of the tree is the sentence
+ * beside each path, which is the part a generator cannot write.
  */
 
 const ROOT = new URL("..", import.meta.url).pathname;
-
-/** Every source file a reader would expect to find described. */
-async function sourceFiles(): Promise<string[]> {
-  const found: string[] = [];
-  const walk = async (dir: string): Promise<void> => {
-    for (const entry of await readdir(join(ROOT, dir), { withFileTypes: true })) {
-      const path = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) {
-        await walk(path);
-      } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
-        found.push(path);
-      }
-    }
-  };
-  await walk("src");
-  await walk("server");
-  return found.sort();
-}
 
 /** The paths named in the architecture doc's tree, resolved from its indentation. */
 async function documentedFiles(): Promise<string[]> {
@@ -72,15 +60,17 @@ async function documentedFiles(): Promise<string[]> {
 }
 
 describe("docs/architecture.md", () => {
-  test("describes every module, and only modules that exist", async () => {
-    const actual = await sourceFiles();
+  test("only points at modules that exist", async () => {
     const documented = await documentedFiles();
+    // A tree that names nothing would pass every assertion below, so check the
+    // parser found something first.
+    expect(documented.length).toBeGreaterThan(20);
 
-    const undocumented = actual.filter((path) => !documented.includes(path));
-    const stale = documented.filter((path) => !actual.includes(path));
-
-    // Reported as two separate lists so the failure says which mistake it is.
-    expect({ undocumented, stale }).toEqual({ undocumented: [], stale: [] });
+    const stale: string[] = [];
+    for (const path of documented) {
+      if (!(await Bun.file(join(ROOT, path)).exists())) stale.push(path);
+    }
+    expect(stale).toEqual([]);
   });
 });
 
