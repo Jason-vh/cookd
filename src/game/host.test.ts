@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Host } from "./host";
+import { Host, TARGET_QUEUE } from "./host";
 import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutVersion } from "./protocol";
 import { PLAYER_SPEED, addPlayer, createWorld, emptyInput, isIdleInput } from "../sim/world";
 import { predict, step } from "../sim/step";
@@ -79,16 +79,15 @@ describe("host", () => {
     const id = host.join("Ann");
     const start = host.world.players[0]!.pos.x;
 
-    // Three ticks of input arrive in one burst, as they would after a hiccup.
-    host.enqueue(id, 1, move(1));
-    host.enqueue(id, 2, move(1));
-    host.enqueue(id, 3, move(1));
-
-    host.advance(1 / 60);
-    expect(host.acks.get(id)).toBe(1);
-    host.advance(1 / 60);
-    host.advance(1 / 60);
-    expect(host.acks.get(id)).toBe(3);
+    // Arriving as they were sent — one a tick — they are applied one a tick, and
+    // the ack names exactly the one that was. That is what the client predicts
+    // against and prunes its history on. (A *backlog* is caught up on faster;
+    // see "a queue deeper than it should be".)
+    for (let seq = 1; seq <= 3; seq++) {
+      host.enqueue(id, seq, move(1));
+      host.advance(1 / 60);
+      expect(host.acks.get(id)).toBe(seq);
+    }
     expect(host.world.players[0]!.pos.x).toBeGreaterThan(start);
   });
 
@@ -304,6 +303,44 @@ describe("overload", () => {
     expect(host.acks.get(id)).toBe(40);
     expect(moved).toBeLessThan(predicted);
     expect(predicted - moved).toBeGreaterThan(0.1);
+  });
+
+  test("a queue deeper than it should be is caught up on, a tick at a time", () => {
+    // The depth is otherwise a ratchet: production and consumption are both
+    // 60Hz, so nothing shortens it except running dry, and every dropped client
+    // frame leaves a tick in there for good. Each one is 16ms between a player
+    // pressing something and this server acting on it.
+    const host = new Host();
+    const id = host.join("Ann");
+    for (let seq = 1; seq <= 12; seq++) host.enqueue(id, seq, move(1));
+    expect(host.queueDepth(id)).toBe(12);
+
+    // Two per tick while it is over the target, so a backlog is absorbed as a
+    // series of 0.07-tile corrections rather than one lurch across the kitchen.
+    host.advance(1 / 60);
+    expect(host.queueDepth(id)).toBe(10);
+
+    for (let i = 0; i < 11; i++) host.advance(1 / 60);
+    expect(host.queueDepth(id)).toBeLessThanOrEqual(TARGET_QUEUE);
+  });
+
+  test("catching up costs a tick of walking, never a press", () => {
+    // The tick being skipped may be the one somebody pressed grab on, and a
+    // press that evaporates is a player pressing it again and getting two. So
+    // the buttons are folded into the tick behind rather than going with it.
+    const host = new Host();
+    const id = host.join("Ann");
+    const grab: PlayerInput = { ...emptyInput(), grab: true };
+    host.enqueue(id, 1, grab);
+    for (let seq = 2; seq <= 6; seq++) host.enqueue(id, seq, emptyInput());
+
+    host.advance(1 / 60);
+
+    // Seq 1 was skipped for its movement and kept for its button: the applied
+    // input carried the grab, and the ack covers both so the client prunes
+    // exactly what was dealt with.
+    expect(host.world.players[0]!.prev.grab).toBe(true);
+    expect(host.acks.get(id)).toBe(2);
   });
 });
 

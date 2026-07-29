@@ -149,7 +149,14 @@ export class Reconciler {
     }
 
     applyFrame(this.world, frame);
+    // Only our own. A remote chef's position belongs to the playout clock, which
+    // deliberately runs behind: planting them at the newest frame here as well
+    // meant every frame yanked them forwards and the next tick walked them back,
+    // which is a stutter waiting for the day a frame lands between a tick and a
+    // repaint. They still need *somewhere* to be for collision, and where the
+    // caller last drew them is a better answer than where they will be.
     for (const snapshot of frame.players) {
+      if (!localIds.includes(snapshot.id)) continue;
       const player = this.find(snapshot.id);
       if (!player) continue;
       player.pos = { x: snapshot.x, y: snapshot.y };

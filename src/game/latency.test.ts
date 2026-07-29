@@ -4,7 +4,7 @@ import { DT } from "../sim/step";
 import type { Appliance, Effect, Inputs, Player, PlayerInput, World } from "../sim/types";
 import { mintPlate } from "../sim/plates";
 import { emptyInput, playerById } from "../sim/world";
-import { Host } from "./host";
+import { Host, TARGET_QUEUE } from "./host";
 import { LocalGame } from "./local";
 import { NetGame } from "./net";
 import { OPEN, type Socket } from "./connection";
@@ -46,6 +46,9 @@ const TICK_MS = DT * 1000;
  * — which would give the input queue a perfect alignment it never has in life.
  */
 const PHASE = TICK_MS / 2;
+
+/** Mirrors the server's own floor on bringing a frame forward. */
+const EARLY_AFTER = 2;
 
 /** Give up on a measurement after this long. A failure, not a result. */
 const PATIENCE = 3000;
@@ -116,52 +119,73 @@ class FakeSocket implements Socket {
  *
  * Rooms, saves, seat reclaim and rate limiting are all absent on purpose —
  * `server.test.ts` covers those against a real process. What is kept is exactly
- * what sits in the latency path: the handshake, one `Host`, and a broadcast
- * every `SEND_EVERY` ticks.
+ * what sits in the latency path: the handshake, one `Host`, and the broadcast
+ * schedule, early frames and all.
  */
 class Server {
   readonly host = new Host(null, LEVEL);
-  players: number[] = [];
-  private frames = 0;
+  private readonly seats = new Map<Wire, number[]>();
+  private sinceFrame = 0;
   private layout = layoutVersion(this.host.world);
 
-  constructor(private readonly out: (message: ServerMessage) => void) {}
-
-  receive(raw: string): void {
+  receive(from: Wire, raw: string): void {
     const message = decode(raw, parseClientMessage);
     if (!message) return;
     switch (message.t) {
-      case "hello":
-        this.players = [this.host.join("Ann")];
-        this.out({
+      case "hello": {
+        const you = [this.host.join(message.name)];
+        this.seats.set(from, you);
+        from.deliver({
           t: "welcome",
           room: "TEST",
           level: this.host.level.id,
-          you: this.players,
+          you,
           layout: encodeLayout(this.host.world),
           frame: this.frame(),
         });
         break;
-      case "input":
+      }
+      case "input": {
+        // A connection may only move its own chefs, exactly as the real one
+        // insists — which matters here because there is now more than one.
+        const mine = this.seats.get(from) ?? [];
         for (const [id, input] of Object.entries(message.inputs)) {
-          if (this.players.includes(Number(id))) this.host.enqueue(Number(id), message.seq, input);
+          if (mine.includes(Number(id))) this.host.enqueue(Number(id), message.seq, input);
         }
         break;
+      }
       case "ping":
-        this.out({ t: "pong", sent: message.sent });
+        from.deliver({ t: "pong", sent: message.sent });
         break;
     }
   }
 
+  seatsOf(wire: Wire): number[] {
+    return this.seats.get(wire) ?? [];
+  }
+
   tick(elapsed: number): void {
-    this.host.advance(elapsed, { maxTicks: 8 });
-    this.frames++;
+    const ticks = this.host.advance(elapsed, { maxTicks: 8 });
+    this.sinceFrame += Math.max(1, ticks);
     const version = layoutVersion(this.host.world);
     if (version !== this.layout) {
       this.layout = version;
-      this.out({ t: "layout", layout: encodeLayout(this.host.world) });
+      this.broadcast({ t: "layout", layout: encodeLayout(this.host.world) });
     }
-    if (this.frames % SEND_EVERY === 0) this.out({ t: "frame", frame: this.frame() });
+    // A press brings the next frame forward; see `EARLY_AFTER` in the server.
+    const early = this.host.acted && this.sinceFrame >= EARLY_AFTER;
+    if (this.sinceFrame >= SEND_EVERY || early) {
+      this.sinceFrame = 0;
+      this.frames++;
+      this.broadcast({ t: "frame", frame: this.frame() });
+    }
+  }
+
+  /** How many frames this server has sent, for the bandwidth question. */
+  frames = 0;
+
+  private broadcast(message: ServerMessage): void {
+    for (const wire of this.seats.keys()) wire.deliver(message);
   }
 
   private frame(): Frame {
@@ -169,58 +193,63 @@ class Server {
   }
 }
 
+/** One connection, from the server's side of it. */
+type Wire = { deliver(message: ServerMessage): void };
+
 // --- the harness -------------------------------------------------------------
 
-/** A client, a server, and a link of a given round trip between them. */
-class Link {
-  now = 0;
-  readonly server: Server;
+/**
+ * One player's browser: a socket, a pipe each way, and the real client.
+ *
+ * Its frame loop is driven by the `Link` rather than owning a clock, so two of
+ * these can be run against one server with a different round trip each — which
+ * is how "Ann grabs a plate, when does Bea see it" becomes a number.
+ */
+class Peer implements Wire {
   readonly game: NetGame;
-  private readonly socket: FakeSocket;
-  private readonly up: Pipe;
+  readonly socket: FakeSocket;
   private readonly down: Pipe;
-  private nextClient = 0;
-  private nextServer = PHASE;
+  private next: number;
   private held = emptyInput();
 
-  constructor(readonly rtt: number) {
-    this.up = new Pipe(rtt / 2);
+  constructor(
+    private readonly link: Link,
+    readonly name: string,
+    readonly rtt: number,
+    phase: number,
+  ) {
+    const up = new Pipe(rtt / 2);
     this.down = new Pipe(rtt / 2);
-    this.server = new Server((message) => this.down.send(this.now, JSON.stringify(message)));
-    this.socket = new FakeSocket((data) => this.up.send(this.now, data));
-    this.game = new NetGame("ws://test/ws", "TEST", "Ann", 1, "token", () => {}, LEVEL, {
+    this.next = phase;
+    this.socket = new FakeSocket((data) => up.send(link.now, data));
+    this.game = new NetGame("ws://test/ws", "TEST", name, 1, `token-${name}`, () => {}, LEVEL, {
       open: () => this.socket,
-      now: () => this.now,
+      now: () => link.now,
     });
+    link.uplink(this, up);
     this.socket.emit("open", {});
   }
 
-  /** Run the virtual clock forward, a millisecond at a time. */
-  advance(ms: number): void {
-    const end = this.now + ms;
-    while (this.now < end) {
-      this.now++;
-      for (const data of this.up.due(this.now)) this.server.receive(data);
-      for (const data of this.down.due(this.now)) this.socket.emit("message", { data });
-      if (this.now >= this.nextServer) {
-        this.nextServer += TICK_MS;
-        this.server.tick(DT);
-      }
-      if (this.now >= this.nextClient) {
-        this.nextClient += TICK_MS;
-        this.game.update(DT, () => this.inputs());
-      }
-    }
+  deliver(message: ServerMessage): void {
+    this.down.send(this.link.now, JSON.stringify(message));
+  }
+
+  /** Called once per millisecond of virtual time by the `Link`. */
+  step(now: number): void {
+    for (const data of this.down.due(now)) this.socket.emit("message", { data });
+    if (now < this.next) return;
+    this.next += TICK_MS;
+    this.game.update(DT, () => this.inputs());
   }
 
   /**
-   * A dropped frame: the client misses one turn of its loop and runs the two
+   * A dropped frame: the browser misses one turn of its loop and runs the two
    * ticks it owes on the next. Ordinary on any machine, and the cheapest way to
    * put a second input into the server's queue in one go.
    */
   hiccup(): void {
-    this.nextClient += TICK_MS;
-    this.advance(TICK_MS);
+    this.next += TICK_MS;
+    this.link.advance(TICK_MS);
     this.game.update(DT * 2, () => this.inputs());
   }
 
@@ -233,6 +262,90 @@ class Link {
     this.held = emptyInput();
   }
 
+  /** Our own chef, as this browser's renderer would find them. */
+  me(): Player | undefined {
+    return this.sees(this.game.localIds[0] ?? -1);
+  }
+
+  /** Anybody's chef, as this browser sees them. */
+  sees(id: number): Player | undefined {
+    return this.game.world.players.find((player) => player.id === id);
+  }
+
+  get id(): number {
+    return this.game.localIds[0] ?? -1;
+  }
+
+  private inputs(): Inputs {
+    const id = this.game.localIds[0];
+    if (id === undefined) return {};
+    return { [id]: { ...this.held, move: { ...this.held.move } } };
+  }
+}
+
+/** A server, and the browsers connected to it. */
+class Link {
+  now = 0;
+  readonly server = new Server();
+  readonly peers: Peer[] = [];
+  private readonly ups: { peer: Peer; pipe: Pipe }[] = [];
+  private nextServer = PHASE;
+
+  constructor(readonly rtt: number) {
+    this.join("Ann", rtt);
+  }
+
+  /** Another browser in the same kitchen, on a link of its own. */
+  join(name: string, rtt = this.rtt): Peer {
+    // Started a third of a tick apart, because two browsers are not in step
+    // with each other any more than either is with the server.
+    const peer = new Peer(this, name, rtt, (this.peers.length * TICK_MS) / 3);
+    this.peers.push(peer);
+    return peer;
+  }
+
+  /** Registered by a `Peer` as it is built; the link pumps it. */
+  uplink(peer: Peer, pipe: Pipe): void {
+    this.ups.push({ peer, pipe });
+  }
+
+  /** Run the virtual clock forward, a millisecond at a time. */
+  advance(ms: number): void {
+    const end = this.now + ms;
+    while (this.now < end) {
+      this.now++;
+      for (const { peer, pipe } of this.ups) {
+        for (const data of pipe.due(this.now)) this.server.receive(peer, data);
+      }
+      if (this.now >= this.nextServer) {
+        this.nextServer += TICK_MS;
+        this.server.tick(DT);
+      }
+      for (const peer of this.peers) peer.step(this.now);
+    }
+  }
+
+  /** The first browser, which most of these tests only need one of. */
+  get first(): Peer {
+    return this.peers[0]!;
+  }
+
+  get game(): NetGame {
+    return this.first.game;
+  }
+
+  press(control: Partial<PlayerInput>): void {
+    this.first.press(control);
+  }
+
+  release(): void {
+    this.first.release();
+  }
+
+  hiccup(): void {
+    this.first.hiccup();
+  }
+
   /** Run until the drawn world says so, and report how long that took. */
   waitFor(done: () => boolean, limit = PATIENCE): number {
     const start = this.now;
@@ -243,29 +356,22 @@ class Link {
     return Infinity;
   }
 
-  /** Our chef, as the renderer would find them. */
+  /** Our chef, as the first browser's renderer would find them. */
   me(): Player | undefined {
-    return this.game.world.players.find((player) => player.id === this.game.localIds[0]);
+    return this.first.me();
   }
 
-  /** The same chef on the server, which is the one that is actually true. */
-  theirs(): Player | undefined {
-    const id = this.server.players[0];
-    return id === undefined ? undefined : playerById(this.server.host.world, id);
+  /** A chef on the server, which is the one that is actually true. */
+  theirs(peer: Peer = this.first): Player | undefined {
+    return peer.id < 0 ? undefined : playerById(this.server.host.world, peer.id);
   }
 
-  queueDepth(): number {
-    return this.server.host.queueDepth(this.server.players[0] ?? -1);
+  queueDepth(peer: Peer = this.first): number {
+    return this.server.host.queueDepth(peer.id);
   }
 
   dispose(): void {
-    this.game.dispose();
-  }
-
-  private inputs(): Inputs {
-    const id = this.game.localIds[0];
-    if (id === undefined) return {};
-    return { [id]: { ...this.held, move: { ...this.held.move } } };
+    for (const peer of this.peers) peer.game.dispose();
   }
 }
 
@@ -282,7 +388,7 @@ function ready(rtt: number, facing: (appliance: Appliance) => boolean = isCrate)
   expect(link.game.status).toBe("online");
 
   link.server.host.menu("startDay");
-  standFacing(link.server.host.world, link.theirs()!, facing);
+  standFacing(link.server.host.world, link.theirs()!, facing, new Set());
 
   // Let the move and the phase reach the client, so the measurement that
   // follows is timing one action rather than the setup in front of it.
@@ -294,14 +400,21 @@ function ready(rtt: number, facing: (appliance: Appliance) => boolean = isCrate)
 
 const isCrate = (appliance: Appliance): boolean => appliance.source !== null;
 
-/** Put a chef on a free tile beside an appliance of this sort, looking at it. */
+/**
+ * Put a chef on a free tile beside an appliance of this sort, looking at it.
+ *
+ * `taken` keeps two chefs from being posted to the same crate, which they
+ * otherwise would be: the search is deterministic and would hand both the first
+ * one it found, and two chefs on one tile is a shove, not a setup.
+ */
 function standFacing(
   world: World,
   player: Player,
   wanted: (appliance: Appliance) => boolean,
+  taken: Set<number>,
 ): Appliance {
   for (const appliance of world.appliances.values()) {
-    if (!wanted(appliance)) continue;
+    if (!wanted(appliance) || taken.has(appliance.id)) continue;
     for (const [dx, dy] of [
       [0, 1],
       [0, -1],
@@ -315,6 +428,7 @@ function standFacing(
       player.pos = { x: x + 0.5, y: y + 0.5 };
       player.prevPos = { ...player.pos };
       player.facing = { x: appliance.tile.x - x, y: appliance.tile.y - y };
+      taken.add(appliance.id);
       return appliance;
     }
   }
@@ -391,7 +505,7 @@ describe("responding to a button", () => {
     const game = new LocalGame(null, 1);
     const id = game.localIds[0]!;
     game.menu("startDay");
-    standFacing(game.world, playerById(game.world, id)!, isCrate);
+    standFacing(game.world, playerById(game.world, id)!, isCrate, new Set());
 
     const grabbing: Inputs = { [id]: { ...emptyInput(), grab: true } };
     game.update(DT, () => grabbing);
@@ -419,6 +533,145 @@ describe("responding to a button", () => {
       // predicted one, so a grab is as immediate as a step.
       expect(spread.max).toBeLessThanOrEqual(2 * TICK_MS + 1);
     }
+  });
+});
+
+/**
+ * Two chefs in one kitchen, both settled, standing at crates of their own.
+ *
+ * The day is opened and the chefs are placed on the server rather than walked
+ * there, for the same reason `ready` does it: neither is what is being
+ * measured, and both would add a round trip of setup to every case.
+ */
+function pair(rttA: number, rttB: number): { link: Link; ann: Peer; bea: Peer } {
+  const link = new Link(rttA);
+  const bea = link.join("Bea", rttB);
+  const slowest = Math.max(rttA, rttB);
+  link.advance(slowest + 300);
+
+  link.server.host.menu("startDay");
+  const taken = new Set<number>();
+  for (const peer of link.peers) {
+    standFacing(link.server.host.world, link.theirs(peer)!, isCrate, taken);
+  }
+  link.advance(slowest + 300);
+
+  const ann = link.first;
+  expect(ann.game.status).toBe("online");
+  expect(bea.game.status).toBe("online");
+  // Each has to be able to see the other, or the measurement below is timing a
+  // chef who is not there.
+  expect(bea.sees(ann.id)).toBeDefined();
+  expect(ann.sees(bea.id)).toBeDefined();
+  return { link, ann, bea };
+}
+
+describe("watching somebody else cook", () => {
+  test("their grab reaches you a round trip and a broadcast later", () => {
+    // The other half of a co-op game. Your own hands are instant now; this is
+    // the number that decides whether you can work a pass with somebody.
+    const rows: [number, Spread][] = [];
+    for (const rtt of LADDER) {
+      const results: number[] = [];
+      for (let offset = 0; offset < SEND_EVERY * TICK_MS; offset += 5) {
+        const { link, ann, bea } = pair(rtt, rtt);
+        link.advance(offset);
+        ann.press({ grab: true });
+        results.push(link.waitFor(() => bea.sees(ann.id)?.carried != null));
+        link.dispose();
+      }
+      const total = results.reduce((sum, ms) => sum + ms, 0);
+      rows.push([
+        rtt,
+        {
+          min: Math.min(...results),
+          mean: Math.round(total / results.length),
+          max: Math.max(...results),
+        },
+      ]);
+    }
+    console.log(table("Ann grabs -> Bea sees it", rows));
+
+    for (const [rtt, spread] of rows) {
+      // Half a round trip up, the server's tick, the wait for the next of
+      // twenty frames a second, and half a round trip back down.
+      expect(spread.min).toBeGreaterThanOrEqual(rtt * 0.5);
+    }
+  });
+
+  test("their first step reaches you later still, by the playout delay", () => {
+    // Possession is read off the newest frame; *positions* are played back
+    // deliberately late, so there is always a next frame to slide towards. That
+    // cushion is the jitter budget, and it is charged to every remote step.
+    const rows: [number, Spread][] = [];
+    for (const rtt of LADDER) {
+      const results: number[] = [];
+      for (let offset = 0; offset < SEND_EVERY * TICK_MS; offset += 5) {
+        const { link, ann, bea } = pair(rtt, rtt);
+        link.advance(offset);
+        const before = bea.sees(ann.id)!.pos.x;
+        ann.press({ move: { x: 1, y: 0 } });
+        results.push(link.waitFor(() => Math.abs(bea.sees(ann.id)!.pos.x - before) > 0.001));
+        link.dispose();
+      }
+      const total = results.reduce((sum, ms) => sum + ms, 0);
+      rows.push([
+        rtt,
+        {
+          min: Math.min(...results),
+          mean: Math.round(total / results.length),
+          max: Math.max(...results),
+        },
+      ]);
+    }
+    console.log(table("Ann steps -> Bea sees her move", rows));
+    for (const [, spread] of rows) expect(spread.min).toBeGreaterThan(0);
+  });
+});
+
+describe("bringing a frame forward", () => {
+  test("a press is broadcast sooner, and costs no frames at all", () => {
+    // Not an extra frame — the next one, moved. A press restarts the schedule
+    // from where it lands, so the long-run rate is the rate it always was.
+    const { link, ann } = pair(0, 0);
+    link.advance(1000);
+
+    const quietFrom = link.server.frames;
+    link.advance(1000);
+    const quiet = link.server.frames - quietFrom;
+
+    const busyFrom = link.server.frames;
+    for (let i = 0; i < 10; i++) {
+      ann.press({ grab: true });
+      link.advance(50);
+      ann.release();
+      link.advance(50);
+    }
+    const busy = link.server.frames - busyFrom;
+
+    expect(quiet).toBeGreaterThan(15);
+    expect(busy).toBeLessThanOrEqual(quiet + 1);
+    link.dispose();
+  });
+
+  test("and cannot be used to make the server shout", () => {
+    // A button going down every other tick is as fast as an edge can be
+    // produced. Without a floor under how early "early" may be, that is a
+    // broadcast every tick — to everybody in the room, from one person mashing.
+    const { link, ann } = pair(0, 0);
+    link.advance(500);
+
+    const from = link.server.frames;
+    for (let i = 0; i < 60; i++) {
+      ann.press({ grab: i % 2 === 0 });
+      link.advance(TICK_MS);
+    }
+    const sent = link.server.frames - from;
+
+    // Twenty a second normally, and never more than one per `EARLY_AFTER`
+    // ticks — half again the ordinary rate, and that is the ceiling.
+    expect(sent).toBeLessThanOrEqual(1 / (EARLY_AFTER * DT) + 1);
+    link.dispose();
   });
 });
 
@@ -459,7 +712,7 @@ describe("what is not guessed at", () => {
     const link = new Link(180);
     link.advance(380);
     expect(link.game.world.phase).toBe("build");
-    standFacing(link.server.host.world, link.theirs()!, (a) => a.kind === "counter");
+    standFacing(link.server.host.world, link.theirs()!, (a) => a.kind === "counter", new Set());
     link.advance(400);
 
     const appliances = link.game.world.appliances.size;
@@ -499,7 +752,12 @@ describe("guessing, and being wrong", () => {
     // it *announces* would therefore be announced twenty times a second until
     // the server caught up — so a prediction may move things and may not talk.
     const link = ready(180, (appliance) => appliance.kind === "table");
-    const dirty = standFacing(link.server.host.world, link.theirs()!, (a) => a.kind === "table");
+    const dirty = standFacing(
+      link.server.host.world,
+      link.theirs()!,
+      (a) => a.kind === "table",
+      new Set(),
+    );
     dirty.item = mintPlate(link.server.host.world);
     dirty.tip = 7;
     link.advance(400);
@@ -525,32 +783,38 @@ function cues(link: Link, kind: Effect["kind"]): number {
 }
 
 describe("the server's input queue", () => {
-  test("every dropped client frame adds a tick of latency, and keeps it", () => {
+  test("dropped client frames no longer pile up in it", () => {
+    // Read at exactly the rate it is written, a queue can only shrink by
+    // running dry, and one being kept full never does — so each dropped frame
+    // used to leave a tick of latency in front of everything that player did
+    // afterwards, for as long as they kept moving. Ten of them, ten ticks, and
+    // only standing still took them back out.
     const link = ready(30);
     link.press({ move: { x: 1, y: 0 } });
     link.advance(500);
     const settled = link.queueDepth();
 
-    for (let i = 0; i < 3; i++) link.hiccup();
-    link.advance(2000);
+    let peak = settled;
+    for (let i = 0; i < 10; i++) {
+      link.hiccup();
+      peak = Math.max(peak, link.queueDepth());
+      link.advance(20);
+      peak = Math.max(peak, link.queueDepth());
+    }
+    link.advance(1000);
     const after = link.queueDepth();
 
-    // A queue read at exactly the rate it is written can only ever shrink by
-    // running dry, and one being kept full never does. So each dropped frame's
-    // extra input is still sitting in front of everything the player presses
-    // next — 16ms apiece, for as long as they keep moving.
-    expect(settled).toBe(0);
-    expect(after).toBe(3);
-
-    // Standing still is what clears it, because that is the one thing that
-    // stops the client refilling it. Which means the cost is invisible in any
-    // test that lets go of the controls, and worst during the busiest minute of
-    // a service, when nobody does.
-    link.release();
-    link.advance(500);
-    expect(link.queueDepth()).toBe(0);
+    expect(settled).toBeLessThanOrEqual(TARGET_QUEUE);
+    // A dropped frame delivers its two ticks between two of the server's, so
+    // the depth spikes by two and is walked back down — rather than settling
+    // one higher than it started, ten times over.
+    expect(peak).toBeLessThanOrEqual(TARGET_QUEUE + 2);
+    expect(after).toBeLessThanOrEqual(TARGET_QUEUE);
     link.dispose();
 
-    console.log(`\nserver input queue: ${settled} settled, ${after} after 3 dropped frames\n`);
+    console.log(
+      `\nserver input queue across 10 dropped frames: ${settled} settled,` +
+        ` ${peak} at worst, ${after} after\n`,
+    );
   });
 });

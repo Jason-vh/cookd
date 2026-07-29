@@ -1,4 +1,5 @@
-import type { Frame } from "./protocol";
+import { DT } from "../sim/step";
+import { SEND_EVERY, type Frame } from "./protocol";
 
 /**
  * The received timeline, and the clock that reads it.
@@ -8,41 +9,47 @@ import type { Frame } from "./protocol";
  * a **playout clock** deliberately held behind the newest frame, giving it a
  * pair of frames to interpolate between at any moment.
  *
+ * The timeline is the **server's own clock**, not the order things turned up
+ * in. Every frame says which tick it is, and ticks are exactly 1/60s apart, so
+ * "where was this chef 80ms ago" has an exact answer that does not care when the
+ * packet carrying it arrived. Interpolating on arrival times instead assumes
+ * frames are evenly spaced, which is false twice over: a bad link bunches them,
+ * and the server deliberately sends early when somebody does something.
+ *
+ * Arrival times still matter, but for the one thing they can actually tell us:
+ * how late this link is running, and how much that varies. That is the size the
+ * buffer needs to be, and it is now measured rather than guessed.
+ *
  * Pulled out of `net.ts` because it is the one part of the three-clock problem
  * that is pure given `(frames, arrival times)` — everything here can be driven
- * with synthetic timings, which is what the slew behaviour below needs and
- * never had.
+ * with synthetic timings.
  */
 
 /**
- * How far behind the newest frame we render, in ms.
+ * The least we will ever run behind, in ms.
  *
- * This is the jitter budget: if a frame is late by less than this, nobody sees
- * anything. Too small and remote chefs stutter; too large and everyone is
- * watching the past. Two frame intervals is the usual starting point, and a
- * long-haul link wants the headroom.
+ * One send interval is the floor that matters: below it there is routinely no
+ * next frame to interpolate towards, and a remote chef stops dead until one
+ * arrives. The extra tick is slack for the client's own frame timing.
  */
-export const PLAYOUT_DELAY = 110;
-
-/** Jump the clock rather than slewing if it falls further behind than this. */
-const MAX_DRIFT = 400;
+export const MIN_DELAY = (SEND_EVERY + 1) * DT * 1000;
 
 /**
- * How much faster or slower than real time the playout clock may run while it
- * corrects its lead.
- *
- * The clock used to advance at exactly 1x and be *clamped* at both ends, which
- * meant the jitter budget was spent once and never rebuilt. Any inter-arrival
- * gap longer than the steady-state sawtooth pinned it to the newest frame, and
- * from then on the lead was whatever the last gap happened to be. Pinned there,
- * `sample(playout)` and `sample(playout - one tick)` both resolve to the same
- * frame, so `prevPos === pos` — and remote chefs' walk cycles stop while they
- * are still visibly sliding, which is the exact thing the two-point sampling
- * exists to prevent.
- *
- * 5% is slow enough that nobody can see the correction happening.
+ * The most we will run behind. Past this the link is not jittery, it is broken,
+ * and watching a quarter of a second of history is already unpleasant enough
+ * that adding more does not help anybody.
  */
-const SLEW = 0.05;
+export const MAX_DELAY = 250;
+
+/**
+ * How fast the buffer is allowed to shrink, in ms per frame received.
+ *
+ * Growing is immediate — a frame that does not arrive in time is a chef who
+ * stutters, and that is the thing the buffer exists to prevent. Shrinking is
+ * slow, at ~20ms per second, because a link that has been calm for a moment is
+ * not the same as a link that is calm.
+ */
+const FALL = 1;
 
 /** Frames older than this many are dropped; ~2 seconds at 20Hz. */
 const CAPACITY = 40;
@@ -51,14 +58,27 @@ type Timed = { frame: Frame; at: number };
 type Point = { x: number; y: number };
 type Kind = "players" | "customers";
 
+/** The moment the server made this frame, on the server's own clock. */
+function serverMs(frame: Frame): number {
+  return frame.tick * DT * 1000;
+}
+
 export class SnapshotBuffer {
   private frames: Timed[] = [];
-  private clock = 0;
   private running = false;
 
-  /** Where the playout clock currently is, on the arrival-time scale. */
-  get playout(): number {
-    return this.clock;
+  /**
+   * The smallest gap seen between a frame's own moment and its arrival: the
+   * clock offset between the two machines, plus however long the fastest packet
+   * in the window took. Constant enough to subtract, which is all we need.
+   */
+  private base = 0;
+
+  /** How far behind the freshest possible content we are playing, in ms. */
+  private lead = MIN_DELAY;
+
+  get delay(): number {
+    return this.lead;
   }
 
   get newest(): Frame | null {
@@ -73,11 +93,8 @@ export class SnapshotBuffer {
     return this.frames.length;
   }
 
-  /**
-   * Take a frame that arrived at `at`. Returns true if this was the first one,
-   * which is the caller's cue to seed its worlds from it.
-   */
-  push(frame: Frame, at: number): boolean {
+  /** Take a frame that arrived at `at`. */
+  push(frame: Frame, at: number): void {
     // A tick that goes backwards means the world restarted — somebody hit
     // reset, and `createWorld` starts the counter over. Everything buffered
     // describes a kitchen that no longer exists, and because appliance ids
@@ -90,47 +107,27 @@ export class SnapshotBuffer {
 
     this.frames.push({ frame, at });
     while (this.frames.length > CAPACITY) this.frames.shift();
-
-    if (this.running) return false;
     this.running = true;
-    this.clock = at - PLAYOUT_DELAY;
-    return true;
+    this.resize();
   }
 
   /**
-   * Walk the clock forward one tick, slewing gently toward the intended lead.
+   * Where the playout clock is, on the server's timeline.
    *
-   * `dt` is in milliseconds, matching the arrival-time scale.
+   * Derived from the wall clock rather than integrated tick by tick. A buffer
+   * that counted its own ticks had to be slewed back into place whenever the
+   * two drifted, and could be pinned by a single long gap — which collapsed
+   * `sample(now)` and `sample(now - one tick)` onto the same frame and stopped
+   * every remote walk cycle while its chef was still visibly sliding.
    */
-  advance(dt: number): void {
-    const newest = this.frames.at(-1);
-    if (!newest) {
-      this.clock += dt;
-      return;
-    }
-
-    const target = newest.at - PLAYOUT_DELAY;
-    // A long stall is not something to slew out of; take the jump and rebuild
-    // the lead from there.
-    if (this.clock < target - MAX_DRIFT) {
-      this.clock = target;
-      return;
-    }
-
-    // Behind the target: run a little fast to catch up. Ahead of it: run a
-    // little slow to fall back. Either way the correction is invisible.
-    const rate = this.clock < target ? 1 + SLEW : this.clock > target ? 1 - SLEW : 1;
-    this.clock += dt * rate;
-
-    // Never read past the newest frame: there is nothing there to interpolate
-    // towards, and extrapolating is how a chef slides through a wall.
-    if (this.clock > newest.at) this.clock = newest.at;
+  playoutAt(now: number): number {
+    return now - this.base - this.lead;
   }
 
   /**
-   * Where an entity was on the received timeline at a given moment.
+   * Where an entity was at a given moment of server time.
    *
-   * Linear between the two frames that bracket `at`. An entity present in only
+   * Linear between the two frames that bracket it. An entity present in only
    * one of them (it just arrived, or just left) uses whichever has it.
    */
   sample(kind: Kind, id: number, at: number): Point | null {
@@ -141,7 +138,7 @@ export class SnapshotBuffer {
     for (let i = 0; i < this.frames.length - 1; i++) {
       const lower = this.frames[i]!;
       const upper = this.frames[i + 1]!;
-      if (lower.at <= at && upper.at >= at) {
+      if (serverMs(lower.frame) <= at && serverMs(upper.frame) >= at) {
         before = lower;
         after = upper;
         break;
@@ -153,8 +150,8 @@ export class SnapshotBuffer {
     const only = a ?? b;
     if (!a || !b) return only ? { x: only.x, y: only.y } : null;
 
-    const span = after.at - before.at;
-    const t = span > 0 ? clamp01((at - before.at) / span) : 1;
+    const span = serverMs(after.frame) - serverMs(before.frame);
+    const t = span > 0 ? clamp01((at - serverMs(before.frame)) / span) : 1;
     return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
   }
 
@@ -178,6 +175,28 @@ export class SnapshotBuffer {
   clear(): void {
     this.frames.length = 0;
     this.running = false;
+    this.lead = MIN_DELAY;
+  }
+
+  /**
+   * Fit the buffer to the link, from what the last couple of seconds did.
+   *
+   * The spread between the earliest and latest arrival — measured against the
+   * server's own clock, so sending early does not read as jitter — is exactly
+   * how far behind we have to sit for a late frame to still be in hand.
+   */
+  private resize(): void {
+    let earliest = Infinity;
+    let latest = -Infinity;
+    for (const entry of this.frames) {
+      const late = entry.at - serverMs(entry.frame);
+      if (late < earliest) earliest = late;
+      if (late > latest) latest = late;
+    }
+    this.base = earliest;
+
+    const wanted = Math.min(MAX_DELAY, Math.max(MIN_DELAY, latest - earliest + MIN_DELAY));
+    this.lead = wanted > this.lead ? wanted : Math.max(wanted, this.lead - FALL);
   }
 }
 

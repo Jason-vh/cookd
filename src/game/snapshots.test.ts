@@ -1,14 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import type { Frame } from "./protocol";
-import { PLAYOUT_DELAY, SnapshotBuffer } from "./snapshots";
+import { DT } from "../sim/step";
+import { SEND_EVERY, type Frame } from "./protocol";
+import { MAX_DELAY, MIN_DELAY, SnapshotBuffer } from "./snapshots";
 
 /**
  * The received timeline, driven with synthetic arrival times.
  *
  * None of this could be tested while it was six private fields inside a
  * 562-line `NetGame` that opens a WebSocket in its constructor — which is why
- * the playout clock spent years unable to rebuild its own jitter budget.
+ * the playout clock spent years unable to rebuild its own jitter budget, and
+ * years sized against a guess.
  */
+
+/** How far apart, in server time, two frames sent on schedule are. */
+const STEADY = SEND_EVERY * DT * 1000;
 
 function frame(tick: number, players: { id: number; x: number; y: number }[] = []): Frame {
   return {
@@ -42,116 +47,141 @@ function frame(tick: number, players: { id: number; x: number; y: number }[] = [
   };
 }
 
-/** One chef walking right, one frame every `gap` ms. */
-function feed(buffer: SnapshotBuffer, count: number, gap: number, from = 1000): number {
+/**
+ * A link with nothing wrong with it: one chef walking right, a frame every send
+ * interval, every one taking exactly as long to arrive as the last. Returns
+ * when the final frame turned up.
+ */
+function steady(buffer: SnapshotBuffer, count: number, from = 1000): number {
   let at = from;
   for (let i = 0; i < count; i++) {
-    buffer.push(frame(i, [{ id: 0, x: i, y: 0 }]), at);
-    at += gap;
+    buffer.push(frame(i * SEND_EVERY, [{ id: 0, x: i, y: 0 }]), at);
+    at += STEADY;
   }
-  return at - gap;
+  return at - STEADY;
 }
 
-describe("the playout clock", () => {
-  test("starts one delay behind the first frame", () => {
+/** The moment a tick happened, on the server's clock. */
+function serverMs(tick: number): number {
+  return tick * DT * 1000;
+}
+
+describe("how far behind to play", () => {
+  test("a link with nothing wrong with it gets the smallest buffer there is", () => {
+    // One send interval, plus a tick of slack. Below that there is routinely no
+    // next frame to slide towards and a remote chef stops dead until one lands.
     const buffer = new SnapshotBuffer();
-    expect(buffer.push(frame(0), 1000)).toBe(true);
-    expect(buffer.playout).toBe(1000 - PLAYOUT_DELAY);
+    const last = steady(buffer, 20);
+
+    expect(buffer.delay).toBe(MIN_DELAY);
+    expect(buffer.playoutAt(last)).toBeCloseTo(serverMs(19 * SEND_EVERY) - MIN_DELAY, 6);
   });
 
-  test("only the first frame reports as the first", () => {
+  test("a jittery one gets a bigger buffer, immediately", () => {
+    // A frame that does not arrive in time is a chef who stutters, which is the
+    // whole thing the buffer exists to prevent, so growing cannot wait.
     const buffer = new SnapshotBuffer();
-    expect(buffer.push(frame(0), 1000)).toBe(true);
-    expect(buffer.push(frame(1), 1050)).toBe(false);
+    let at = steady(buffer, 10);
+
+    at += STEADY + 60;
+    buffer.push(frame(10 * SEND_EVERY, [{ id: 0, x: 10, y: 0 }]), at);
+    expect(buffer.delay).toBeCloseTo(MIN_DELAY + 60, 6);
   });
 
-  test("rebuilds its lead after a stall", () => {
-    // The bug this class was extracted to fix. The clock used to advance at
-    // exactly 1x and be *clamped* at the newest frame, so a stall long enough
-    // to reach that clamp spent the jitter budget permanently — frames resume
-    // at 1x, the clock advances at 1x, and the lead stays at zero for ever.
-    // Reading exactly at the newest frame leaves no headroom for the next bit
-    // of jitter, which is what the delay exists to absorb.
+  test("and gives it back slowly, because calm for a moment is not calm", () => {
     const buffer = new SnapshotBuffer();
-    let at = feed(buffer, 5, 50);
+    let at = steady(buffer, 10);
+    at += STEADY + 60;
+    buffer.push(frame(10 * SEND_EVERY, [{ id: 0, x: 10, y: 0 }]), at);
+    const swollen = buffer.delay;
 
-    // Stall: no frames, the clock runs on until it hits the newest one.
-    for (let i = 0; i < 24; i++) buffer.advance(1000 / 60);
-    expect(at - buffer.playout).toBe(0);
-
-    // Frames resume at their normal cadence. The lead comes back on its own.
-    for (let i = 0; i < 900; i++) {
-      buffer.advance(1000 / 60);
-      if (i % 3 === 0) {
-        at += 50;
-        buffer.push(frame(6 + i, [{ id: 0, x: 6 + i, y: 0 }]), at);
-      }
+    // The late one ages out of the window, and the buffer walks back down.
+    for (let i = 11; i < 60; i++) {
+      at += STEADY;
+      buffer.push(frame(i * SEND_EVERY, [{ id: 0, x: i, y: 0 }]), at);
     }
-    // Not exactly PLAYOUT_DELAY: the lead sawtooths by one tick between
-    // arrivals, because the clock advances every tick and frames land every
-    // third one. Recovering to within a tick of the target is the property.
-    const lead = at - buffer.playout;
-    expect(lead).toBeGreaterThan(PLAYOUT_DELAY - 1000 / 60 - 1);
-    expect(lead).toBeLessThanOrEqual(PLAYOUT_DELAY);
+    expect(buffer.delay).toBeLessThan(swollen);
+    expect(buffer.delay).toBeGreaterThanOrEqual(MIN_DELAY);
   });
 
-  test("never reads past the newest frame", () => {
-    // There is nothing there to interpolate towards, and extrapolating is how a
-    // chef slides through a wall.
+  test("a link that is not jittery but broken is capped", () => {
     const buffer = new SnapshotBuffer();
-    const at = feed(buffer, 3, 50);
-    for (let i = 0; i < 600; i++) buffer.advance(1000 / 60);
-    expect(buffer.playout).toBeLessThanOrEqual(at);
+    let at = steady(buffer, 4);
+    at += 5000;
+    buffer.push(frame(4 * SEND_EVERY, [{ id: 0, x: 4, y: 0 }]), at);
+    expect(buffer.delay).toBe(MAX_DELAY);
   });
 
-  test("jumps rather than slews out of a very long stall", () => {
+  test("sending early does not read as jitter", () => {
+    // The server sends the moment somebody does something, so frames arrive one
+    // tick apart rather than three. Measured against arrival times that is
+    // indistinguishable from a bad link, and would inflate the buffer for
+    // everybody every time anyone picked anything up. Measured against the
+    // server's own clock it is simply a frame, on time.
     const buffer = new SnapshotBuffer();
-    feed(buffer, 2, 50);
-    // Ten seconds later, a frame arrives. Slewing 5% would take minutes.
-    buffer.push(frame(99, [{ id: 0, x: 99, y: 0 }]), 11_000);
-    buffer.advance(1000 / 60);
-    expect(buffer.playout).toBeGreaterThan(11_000 - PLAYOUT_DELAY - 100);
+    let at = 1000;
+    let tick = 0;
+    for (let i = 0; i < 30; i++) {
+      const early = i % 4 === 3;
+      tick += early ? 1 : SEND_EVERY;
+      at += early ? DT * 1000 : STEADY;
+      buffer.push(frame(tick, [{ id: 0, x: i, y: 0 }]), at);
+    }
+    expect(buffer.delay).toBeCloseTo(MIN_DELAY, 6);
   });
 });
 
 describe("sampling", () => {
-  test("interpolates between the two frames that bracket the moment", () => {
+  test("interpolates on the server's clock, not on when packets turned up", () => {
+    // Two frames three ticks apart, the second of them held up by 200ms. The
+    // chef was halfway between them halfway through those three *ticks* —
+    // arrival times have nothing to say about it.
     const buffer = new SnapshotBuffer();
     buffer.push(frame(0, [{ id: 0, x: 0, y: 0 }]), 1000);
-    buffer.push(frame(1, [{ id: 0, x: 10, y: 20 }]), 1100);
-    expect(buffer.sample("players", 0, 1050)).toEqual({ x: 5, y: 10 });
-    expect(buffer.sample("players", 0, 1000)).toEqual({ x: 0, y: 0 });
-    expect(buffer.sample("players", 0, 1100)).toEqual({ x: 10, y: 20 });
+    buffer.push(frame(SEND_EVERY, [{ id: 0, x: 10, y: 20 }]), 1250);
+
+    expect(buffer.sample("players", 0, serverMs(0))).toEqual({ x: 0, y: 0 });
+    expect(buffer.sample("players", 0, serverMs(SEND_EVERY))).toEqual({ x: 10, y: 20 });
+    const half = buffer.sample("players", 0, serverMs(SEND_EVERY) / 2);
+    expect(half?.x).toBeCloseTo(5, 6);
+    expect(half?.y).toBeCloseTo(10, 6);
   });
 
   test("two points a tick apart differ while an entity is moving", () => {
     // This is what the walk cycle is derived from: if `prevPos === pos`, a
     // sliding chef animates as if standing still.
     const buffer = new SnapshotBuffer();
-    feed(buffer, 20, 50);
-    // Far enough in that the clock is inside the timeline rather than still
-    // behind its first frame, which is where it deliberately starts.
-    for (let i = 0; i < 30; i++) buffer.advance(1000 / 60);
+    const last = steady(buffer, 20);
+    const playout = buffer.playoutAt(last);
 
-    const now = buffer.sample("players", 0, buffer.playout);
-    const before = buffer.sample("players", 0, buffer.playout - 1000 / 60);
+    const now = buffer.sample("players", 0, playout);
+    const before = buffer.sample("players", 0, playout - DT * 1000);
     expect(now).not.toBeNull();
     expect(before).not.toBeNull();
     expect(now?.x).not.toBeCloseTo(before?.x ?? 0, 6);
   });
 
+  test("never reads past the newest frame", () => {
+    // Nothing there to interpolate towards, and extrapolating is how a chef
+    // slides through a wall. A silent link holds them at the last thing seen.
+    const buffer = new SnapshotBuffer();
+    const last = steady(buffer, 5);
+    const stalled = buffer.sample("players", 0, buffer.playoutAt(last + 10_000));
+    expect(stalled).toEqual({ x: 4, y: 0 });
+  });
+
   test("an entity in only one of the two frames uses the frame that has it", () => {
     const buffer = new SnapshotBuffer();
     buffer.push(frame(0, []), 1000);
-    buffer.push(frame(1, [{ id: 7, x: 3, y: 4 }]), 1100);
-    expect(buffer.sample("players", 7, 1050)).toEqual({ x: 3, y: 4 });
+    buffer.push(frame(SEND_EVERY, [{ id: 7, x: 3, y: 4 }]), 1050);
+    expect(buffer.sample("players", 7, serverMs(1))).toEqual({ x: 3, y: 4 });
   });
 
   test("an entity in neither frame is absent, not an origin", () => {
     // Returning {0,0} would park a departed chef in the corner of the kitchen.
     const buffer = new SnapshotBuffer();
     buffer.push(frame(0, [{ id: 0, x: 5, y: 5 }]), 1000);
-    expect(buffer.sample("players", 99, 1000)).toBeNull();
+    expect(buffer.sample("players", 99, 0)).toBeNull();
   });
 
   test("an empty buffer samples nothing", () => {
@@ -175,34 +205,40 @@ describe("a world that restarts", () => {
     // mismatching, so stale frames look valid and get interpolated. For the
     // length of the playout delay, chefs slide towards pre-reset positions.
     const buffer = new SnapshotBuffer();
-    feed(buffer, 10, 50);
+    steady(buffer, 10);
     expect(buffer.size).toBe(10);
 
     buffer.push(frame(0, [{ id: 0, x: 99, y: 99 }]), 2000);
     expect(buffer.size).toBe(1);
-    expect(buffer.sample("players", 0, 2000)).toEqual({ x: 99, y: 99 });
+    expect(buffer.sample("players", 0, 0)).toEqual({ x: 99, y: 99 });
   });
 
   test("an ordinary frame does not drop the timeline", () => {
     const buffer = new SnapshotBuffer();
-    feed(buffer, 10, 50);
-    buffer.push(frame(10, [{ id: 0, x: 10, y: 0 }]), 2000);
+    steady(buffer, 10);
+    buffer.push(frame(10 * SEND_EVERY, [{ id: 0, x: 10, y: 0 }]), 2000);
     expect(buffer.size).toBe(11);
   });
 
-  test("clear returns it to un-started", () => {
+  test("clear returns it to un-started, buffer and all", () => {
     const buffer = new SnapshotBuffer();
-    feed(buffer, 4, 50);
+    let at = steady(buffer, 4);
+    at += STEADY + 90;
+    buffer.push(frame(4 * SEND_EVERY, [{ id: 0, x: 4, y: 0 }]), at);
     expect(buffer.started).toBe(true);
+    expect(buffer.delay).toBeGreaterThan(MIN_DELAY);
+
     buffer.clear();
     expect(buffer.started).toBe(false);
     expect(buffer.newest).toBeNull();
-    expect(buffer.push(frame(0), 5000)).toBe(true);
+    // A new session is not the old one's link. Carrying the swollen buffer over
+    // would make a reconnect start by watching a quarter-second of history.
+    expect(buffer.delay).toBe(MIN_DELAY);
   });
 
   test("holds a bounded number of frames", () => {
     const buffer = new SnapshotBuffer();
-    feed(buffer, 500, 50);
+    steady(buffer, 500);
     expect(buffer.size).toBeLessThanOrEqual(40);
   });
 });

@@ -87,7 +87,14 @@ layouts are rejected wholesale by a v2 client (see `parseLayout`). Without the
 bump that is a tab sitting at "connecting" with nothing logged; with it, it is
 one sentence telling the player to refresh.
 
-The simulation runs at 60Hz and broadcasts at 20Hz.
+The simulation runs at 60Hz and broadcasts at 20Hz — except that a **press
+brings the next frame forward**. A frame is otherwise due every third tick, so
+putting a plate down just after one went out means everybody else finds out up
+to 50ms later for no reason but the timetable. Bringing it forward rather than
+adding one keeps the rate exactly where it was; a floor of two ticks between
+frames keeps somebody mashing a button from turning into a broadcast every tick,
+for everyone in the room. Measured, a grab reaches the other chef 28ms after the
+press on a perfect link instead of 35ms, and the room sends not one extra byte.
 
 ## Three clocks
 
@@ -95,13 +102,41 @@ Most of the difficulty in `game/net.ts` is keeping these apart:
 
 - the **server's** clock — authoritative, arriving ~20 times a second, late and
   jittery;
-- the **playout** clock — deliberately held ~110ms behind the newest frame so
-  there is always a pair of frames to interpolate between. This is the jitter
-  budget: a frame late by less than this is invisible;
+- the **playout** clock — deliberately held behind the newest frame so there is
+  always a pair of frames to interpolate between. This is the jitter budget: a
+  frame late by less than this is invisible;
 - the **prediction** clock — our own chefs, running *now*.
 
 Everything is sampled onto tick boundaries before it reaches the renderer, so
 `View` still gets a plain `World` and one `alpha`.
+
+### The timeline is the server's clock, not the postmark
+
+Every frame says which **tick** it is, and ticks are exactly 1/60s apart, so
+"where was this chef 80ms ago" has an exact answer that does not care when the
+packet carrying it turned up. The buffer used to interpolate on arrival times
+instead, which quietly assumes frames are evenly spaced — false twice over: a
+bad link bunches them, and the server now deliberately sends early when somebody
+does something. Interpolating a real 1-tick gap across a 50ms arrival gap plays
+the motion back at a fifth speed.
+
+Arrival times still matter, for the one thing they can honestly report: **how
+late this link is running, and how much that varies**. The spread between the
+earliest and latest arrival over the last couple of seconds — measured against
+the server's clock, so sending early does not read as jitter — is exactly how far
+behind we have to sit for a late frame to still be in hand.
+
+So the delay is measured rather than guessed. It was a fixed **110ms**, sized
+for a bad transatlantic link and charged to everybody; it is now one send
+interval plus a tick (**67ms**) on a link with nothing wrong with it, growing
+immediately when frames start arriving unevenly and shrinking at 20ms a second
+when they stop, because calm for a moment is not the same as calm. Measured, a
+remote chef's first step arrives 66ms after it was taken on a perfect link
+instead of 116ms.
+
+Growing is immediate and shrinking is slow on purpose: a frame that does not
+arrive in time is a chef who stutters, which is the whole thing the buffer
+exists to prevent, and 20ms of extra history is a price nobody can see.
 
 Remote chefs are sampled at the current tick *and the one before it*, rather
 than simply interpolated. The renderer derives the walk cycle from how far a
@@ -132,6 +167,30 @@ predicted against, so inputs are queued and consumed **one per tick** rather
 than "latest wins" — otherwise the two would drift under jitter and never
 reconcile cleanly. A starved queue repeats the last input instead of stopping
 dead: a dropped packet should look like a moment of lag, not a stumble.
+
+### The queue is a ratchet, so it is caught up on
+
+One in and one out, at the same rate, means the queue **never gets shorter**
+except by running dry — which only happens at zero. Every dropped client frame
+sends the two ticks it owes at once, and that extra tick then sits in front of
+everything that player does for the rest of the session. Measured, ten dropped
+frames were ten ticks of it, and only standing still took them back out: it
+degraded slowly, worst during the busiest minute of a service, and was invisible
+to any test that let go of the controls. At twenty the server starts discarding
+input outright, and the chef visibly stutters.
+
+Since the client predicts locally, this is not felt on your own chef at all — it
+is 16ms a tick of staleness in what *everybody else* sees you doing, and a
+widening window in which your predicted grab is judged against a world that has
+moved on.
+
+So a queue deeper than one tick is caught up on, one extra tick at a time, so a
+backlog is absorbed as a series of 0.07-tile corrections rather than one lurch
+across the kitchen. **What is skipped is the movement, never the press**: the
+discarded tick may be the one somebody pressed grab on, and a press that
+evaporates is a player pressing it again and getting two — so its buttons are
+folded into the tick behind it. `/health` reports the deepest queue in the
+process; it should sit at one.
 
 That last property is also what makes an idle kitchen quiet. Since silence
 already means "carry on", the client stops sending altogether while a chef

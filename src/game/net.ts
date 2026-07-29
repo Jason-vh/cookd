@@ -252,8 +252,9 @@ export class NetGame implements Game {
       this.connection.send({ t: "input", seq: sending.seq, inputs: definedInputs(sending.inputs) });
     }
 
-    // 2. The playout clock walks forward one tick and samples the timeline.
-    this.snapshots.advance(DT * 1000);
+    // 2. Where on the server's timeline we are drawing, which is a little
+    //    behind the newest thing we have been told.
+    const playout = this.snapshots.playoutAt(this.now());
 
     // 3. Remote chefs are sampled at this tick and the one before it, so the
     //    renderer's own interpolation and its walk-cycle speed both still work.
@@ -261,12 +262,8 @@ export class NetGame implements Game {
     //    them apart; this is what puts them back where they were seen.
     for (const player of this.world.players) {
       if (this.localIds.includes(player.id)) continue;
-      const now = this.snapshots.sample("players", player.id, this.snapshots.playout);
-      const before = this.snapshots.sample(
-        "players",
-        player.id,
-        this.snapshots.playout - DT * 1000,
-      );
+      const now = this.snapshots.sample("players", player.id, playout);
+      const before = this.snapshots.sample("players", player.id, playout - DT * 1000);
       if (now && before) {
         player.prevPos = before;
         player.pos = now;
@@ -280,12 +277,8 @@ export class NetGame implements Game {
     // saw them; walking them back onto the playout clock is what keeps them in
     // step with the remote chefs moving around them.
     for (const customer of this.world.customers) {
-      const now = this.snapshots.sample("customers", customer.id, this.snapshots.playout);
-      const before = this.snapshots.sample(
-        "customers",
-        customer.id,
-        this.snapshots.playout - DT * 1000,
-      );
+      const now = this.snapshots.sample("customers", customer.id, playout);
+      const before = this.snapshots.sample("customers", customer.id, playout - DT * 1000);
       if (now && before) {
         customer.prevPos = before;
         customer.pos = now;

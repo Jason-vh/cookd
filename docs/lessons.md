@@ -45,6 +45,20 @@ that call site does.
 
   The general shape: **anything replayed has to carry the state its result
   depended on**, not just its input. An edge is a fact about two ticks.
+- **A queue read at the rate it is written never gets shorter.** Inputs arrive
+  60 times a second and are consumed 60 times a second, so the only thing that
+  ever shortened the server's queue was running dry — which happens at zero and
+  nowhere else. Every dropped client frame delivered two ticks at once and left
+  one of them in there permanently. It is the shape to watch for: a buffer with
+  no restoring force does not settle, it *ratchets*, and the symptom is a
+  session that gets worse the longer it goes on with nothing in the logs.
+- **A timeline should be paced by what a message says, not by when it arrived.**
+  Frames carry the tick they describe, and ticks are exactly 1/60s apart, but
+  the playout buffer interpolated on arrival times — which silently assumes the
+  sender is evenly spaced. It stopped being true the moment the server was
+  allowed to send early, and it was never true on a link that bunches packets.
+  Arrival times are still the right thing to measure *lateness* with; they are
+  the wrong thing to measure *time* with.
 - **A prediction may move things and may not talk.** The same replay makes
   anything a predicted tick *announces* happen again on every frame that lands —
   twenty times a second, until the server catches up. A predicted grab moves the
@@ -153,6 +167,8 @@ Several of these are no longer only advice:
 | A replayed tick sees the same buttons | `latency.test.ts`, "what we picked up stays picked up" |
 | A prediction may move things and may not talk | `latency.test.ts`, "a predicted tick says nothing out loud" |
 | A correction is drawn, not simulated | `reconciler.test.ts`, "a correction is carried as an offset" |
+| The input queue does not ratchet | `host.test.ts`, "a queue deeper than it should be"; `latency.test.ts` |
+| Playout is paced by the server's clock | `snapshots.test.ts`, "sending early does not read as jitter" |
 | A round trip needs a latch | `input.test.ts`, "a pending online join is asked for once" |
 | A connected gamepad is not a player | `input.test.ts`, "a connected but untouched pad does not create a player" |
 | Never `world.players[id]` | `playerById` is the only lookup; ids are never array positions |

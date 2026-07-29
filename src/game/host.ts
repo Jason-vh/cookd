@@ -34,6 +34,22 @@ import { restore, type RestoreResult, type Save } from "../save";
  */
 const MAX_QUEUE = 20;
 
+/**
+ * How deep a queue is allowed to sit before we start catching up on it.
+ *
+ * Left alone, the depth is a ratchet. A client produces one input per tick and
+ * we consume one per tick, so nothing shortens the queue except *starving* it,
+ * which only happens at zero — and every dropped client frame, network burst or
+ * hair of clock drift leaves an extra tick in there for good. Measured, three
+ * dropped frames put three ticks of latency in front of everything that player
+ * did afterwards, and only standing still took them back out. So it degraded
+ * over a session, worst during the busiest minute of a service, invisibly.
+ *
+ * One above zero, rather than zero, so ordinary jitter still has a tick of
+ * cushion and the catching-up below stays rare.
+ */
+export const TARGET_QUEUE = 1;
+
 export type MenuAction = "startDay" | "endDay" | "restartDay";
 
 /**
@@ -49,6 +65,38 @@ export type AdvanceOptions = {
 
 type Queued = { seq: number; input: PlayerInput };
 
+/**
+ * Fold an input we have no tick left for into the one behind it.
+ *
+ * The movement is simply lost, and that is the point: the client sent more
+ * ticks than there are ticks, and the extra one has to go. It costs 0.07 tiles
+ * of walking, which the client's own smoothing absorbs in a few frames.
+ *
+ * The **buttons are not lost**, because the tick being discarded might be the
+ * one where somebody pressed grab, and a press that evaporates is a player
+ * pressing it again and getting two. Or-ing them into the tick behind keeps the
+ * edge exactly one tick later than it was meant to be.
+ */
+/**
+ * Is this the tick a button went down on?
+ *
+ * `menu` is missing on purpose: it opens a menu on one person's screen and the
+ * kitchen carries on without them, so it is not news for anybody else.
+ */
+function edge(now: PlayerInput, prev: PlayerInput): boolean {
+  return (now.grab && !prev.grab) || (now.use && !prev.use) || (now.start && !prev.start);
+}
+
+function fold(skipped: PlayerInput, onto: PlayerInput): PlayerInput {
+  return {
+    move: onto.move,
+    grab: onto.grab || skipped.grab,
+    use: onto.use || skipped.use,
+    start: onto.start || skipped.start,
+    menu: onto.menu || skipped.menu,
+  };
+}
+
 export class Host {
   world: World;
   /** Last input sequence number actually applied, per player. */
@@ -59,6 +107,7 @@ export class Host {
   private queues = new Map<number, Queued[]>();
   private last = new Map<number, PlayerInput>();
   private accumulator = 0;
+  private pressed = false;
 
   readonly level: LevelDef;
 
@@ -152,9 +201,9 @@ export class Host {
    * How many ticks of input are waiting to be applied for this player.
    *
    * Every entry is a tick of latency between pressing something and the server
-   * acting on it, and the depth is not self-correcting: production and
-   * consumption are both 60Hz, so the queue only ever drains by *starving*, and
-   * anything that puts an extra input in it leaves it there.
+   * acting on it — and, since the client is predicting locally, a tick of
+   * staleness in what everybody *else* sees them doing. Reported by `/health`,
+   * because a number that climbs is the first sign of a room on a bad link.
    */
   queueDepth(id: number): number {
     return this.queues.get(id)?.length ?? 0;
@@ -177,6 +226,7 @@ export class Host {
    */
   advance(elapsed: number, options: AdvanceOptions = {}): number {
     const { poll, maxTicks = 5 } = options;
+    this.pressed = false;
     this.accumulator += Math.min(0.25, elapsed);
     let ticks = 0;
     while (this.accumulator >= DT && ticks < maxTicks) {
@@ -201,6 +251,20 @@ export class Host {
     return this.accumulator / DT;
   }
 
+  /**
+   * Did the last `advance` apply a press — a grab, a use, a day being opened?
+   *
+   * Read by the server to decide whether this is a moment worth telling people
+   * about now rather than on the next of twenty frames a second. It is
+   * deliberately about the *input* and not about what came of it: asking "did
+   * anything change" means rebuilding and comparing a description of the world
+   * every tick for every room, which is exactly what `layoutVersion` exists to
+   * avoid. A press that turned out to do nothing costs one frame nobody needed.
+   */
+  get acted(): boolean {
+    return this.pressed;
+  }
+
   private nextInputs(): Inputs {
     const inputs: Inputs = {};
     for (const player of this.world.players) {
@@ -209,6 +273,15 @@ export class Host {
         continue;
       }
       const queue = this.queues.get(player.id);
+      // Catch up on a queue that has ratcheted, one tick at a time. Doing it in
+      // one go would hand the client a correction the size of the whole backlog
+      // to absorb; a tick at a time is 0.07 tiles apiece, and gone in a few
+      // frames.
+      if (queue && queue.length > TARGET_QUEUE) {
+        const skipped = queue.shift()!;
+        const head = queue[0]!;
+        head.input = fold(skipped.input, head.input);
+      }
       const next = queue?.shift();
       if (next) {
         this.last.set(player.id, next.input);
@@ -216,7 +289,11 @@ export class Host {
       }
       // Starved queue: hold the last input rather than stopping dead. A dropped
       // packet should look like a moment of lag, not like a stumble.
-      inputs[player.id] = this.last.get(player.id) ?? emptyInput();
+      const applied = this.last.get(player.id) ?? emptyInput();
+      inputs[player.id] = applied;
+      // `player.prev` is still last tick's, because `step` has not run yet, so
+      // this is exactly the edge the simulation is about to see.
+      if (edge(applied, player.prev)) this.pressed = true;
     }
     return inputs;
   }

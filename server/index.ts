@@ -35,6 +35,25 @@ import { loadSave, saveKitchen } from "./store";
 
 const PORT = Number(process.env.PORT ?? 5273);
 const TICK_MS = DT * 1000;
+
+/**
+ * How soon after the last frame an *early* one may go out.
+ *
+ * A frame is normally due every `SEND_EVERY` ticks, but a player pressing
+ * something is worth telling the room about now rather than up to 50ms from
+ * now — so a press brings the next frame forward instead of adding one, and
+ * the clock restarts from there. This is the floor that stops somebody mashing
+ * a button from turning into 60 broadcasts a second: at two ticks, the worst
+ * case is half again the ordinary rate, and a press still waits at most one
+ * tick to be seen.
+ *
+ * Frames therefore arrive unevenly, which is only safe because the client
+ * plays them back on the *server's* clock — every frame says which tick it is.
+ * Sizing its buffer from arrival times, as it once did, would have read every
+ * press in the kitchen as a jittery link and grown the buffer for everyone.
+ */
+const EARLY_AFTER = 2;
+
 const EMPTY_ROOM_TTL = 10 * 60 * 1000;
 const MAX_PLAYERS_PER_ROOM = 8;
 const MAX_PER_CONNECTION = 4;
@@ -95,7 +114,8 @@ type Room = {
   code: string;
   host: Host;
   clients: Set<Client>;
-  frames: number;
+  /** Ticks since the last frame went out. */
+  sinceFrame: number;
   layout: number;
   /** Last phase seen, so a day boundary can trigger a checkpoint. */
   phase: World["phase"];
@@ -157,7 +177,7 @@ function roomFor(code: string, loaded: Awaited<ReturnType<typeof loadSave>>): Ro
     code,
     host,
     clients: new Set(),
-    frames: 0,
+    sinceFrame: 0,
     layout: layoutVersion(host.world),
     phase: host.world.phase,
     emptySince: monotonic(),
@@ -353,7 +373,7 @@ function tickRoom(room: Room, elapsed: number, now: number): void {
   // the difference is time the players simply lost. Counted rather than logged:
   // one slow tick is noise, a rising number is the signal to look.
   if (ticks >= 8) room.behind++;
-  room.frames++;
+  room.sinceFrame += Math.max(1, ticks);
 
   // The layout is ~70% of the world's bytes and changes a handful of times a
   // day, so it rides its own message.
@@ -372,7 +392,9 @@ function tickRoom(room: Room, elapsed: number, now: number): void {
     persist(room);
   }
 
-  if (room.frames % SEND_EVERY === 0) {
+  const early = room.host.acted && room.sinceFrame >= EARLY_AFTER;
+  if (room.sinceFrame >= SEND_EVERY || early) {
+    room.sinceFrame = 0;
     broadcast(room, { t: "frame", frame: encodeFrame(room.host.world, room.host.acks) }, true);
   }
 }
@@ -430,10 +452,16 @@ const listener = Bun.serve<SocketData, "/ws">({
       let clients = 0;
       let behind = 0;
       let dropped = 0;
+      let queued = 0;
       for (const room of rooms.values()) {
         clients += room.clients.size;
         behind += room.behind;
-        for (const client of room.clients) dropped += client.dropped;
+        for (const client of room.clients) {
+          dropped += client.dropped;
+          for (const id of client.players) {
+            queued = Math.max(queued, room.host.queueDepth(id));
+          }
+        }
       }
       return Response.json({
         ok: true,
@@ -444,6 +472,15 @@ const listener = Bun.serve<SocketData, "/ws">({
         behind,
         /** Frames skipped for backed-up sockets. Rising means bad links. */
         dropped,
+        /**
+         * Deepest input queue in the process, in ticks.
+         *
+         * Each one is 16ms between a player pressing something and this server
+         * acting on it, which is 16ms of staleness in what everyone else in
+         * that kitchen sees them do. It is kept near `TARGET_QUEUE`; a number
+         * sitting well above it means a client whose frames keep slipping.
+         */
+        queued,
       });
     }
     return serveStatic(url.pathname);
