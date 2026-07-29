@@ -357,14 +357,22 @@ export type World = {
   applianceAt: number[];
   appliances: Map<number, Appliance>;
   /**
-   * Bumped by every change to where appliances are. The server watches this to
-   * decide whether to resend the layout, which it would otherwise have to work
-   * out by rebuilding and comparing a signature string 60 times a second.
+   * Bumped by every change to what the layout message carries. The server
+   * watches this to decide whether to resend the layout, which it would
+   * otherwise have to work out by rebuilding and comparing a signature string
+   * 60 times a second.
    *
    * Anything that moves, adds or removes an appliance must call `touchLayout`.
    * That is a rule a reader has to keep, which is why the two places it applies
    * (`buildGrab`, `returnAppliance`) are the only two places allowed to write
    * to `applianceAt` outside world construction.
+   *
+   * **It is not only about position.** A slot's `offer` and a stand's `card`
+   * ride the same message, so the morning roll is a layout change too — it is
+   * missed easily, because nothing has moved. `restockStall`, `restockCards`
+   * and `clearCards` do it themselves rather than trusting their callers: the
+   * day one of them did not, a client spent a whole day reading yesterday's
+   * price off a slot the host had already restocked.
    */
   layoutVersion: number;
 

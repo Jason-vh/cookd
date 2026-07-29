@@ -296,7 +296,12 @@ describe("choosing a card", () => {
     const world = morning(2);
     expect(cardsOn(world).filter((card) => card !== null).length).toBe(CARD_SLOTS);
 
+    // Cards ride the layout message, so them leaving is a layout change like
+    // an oven moving. A client that is not told keeps drawing an offer the
+    // room has already lost.
+    const before = world.layoutVersion;
     beginDay(world);
+    expect(world.layoutVersion).toBeGreaterThan(before);
     expect(cardsOn(world)).toEqual([null, null]);
 
     // Day 3 and 4: nothing. Day 5: the next offer, on schedule, whether or not

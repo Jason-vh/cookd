@@ -159,6 +159,10 @@ export function restockCards(world: World): void {
   const stands = cardStands(world);
   if (stands.length === 0) return;
   for (const stand of stands) clearCard(stand);
+  // A card rides the layout message, exactly as a stall offer does, so the
+  // morning's roll is a layout change. One bump covers everything this call
+  // goes on to write: the server reads the version once, after the tick.
+  touchLayout(world);
   if (!isCardMorning(world.day) || world.unlockedDay === world.day) return;
 
   // A stream of its own, from numbers that cannot drift, mixed differently from
@@ -191,6 +195,7 @@ function drawByTier(pool: Recipe[], random: () => number): Recipe | null {
 /** Take every card off the stands, armed or not. */
 export function clearCards(world: World): void {
   for (const stand of cardStands(world)) clearCard(stand);
+  touchLayout(world);
 }
 
 function clearCard(stand: Appliance): void {

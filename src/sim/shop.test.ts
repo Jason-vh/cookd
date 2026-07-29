@@ -5,7 +5,7 @@ import { LEVEL } from "../data/level";
 import { Host } from "../game/host";
 import { platesInWorld } from "./plates";
 import { canPlace } from "./queries";
-import { offerPrice, stallSlots } from "./shop";
+import { offerPrice, restockStall, stallSlots } from "./shop";
 import { endDay, step } from "./step";
 import type { Appliance, ApplianceKind, PlayerInput, World } from "./types";
 import { applianceAtTile, createWorld, emptyInput, removePlayer } from "./world";
@@ -115,6 +115,21 @@ describe("the stall", () => {
   test("every slot is stocked in the morning", () => {
     const world = morning();
     for (const slot of stallSlots(world)) expect(slot.offer).not.toBeNull();
+  });
+
+  test("a new morning's stock is a layout change", () => {
+    // Offers ride the layout message, and the server only sends one when the
+    // version moves. Without this a client spent the whole of day two looking
+    // at day one's slots — reading "Plate" off one and being handed the bin the
+    // host had actually rolled into it.
+    // Restocked directly rather than through a day, because `endDay` also rolls
+    // the cards and that alone would move the version — the stall has to be the
+    // thing under test, or it can quietly stop doing its half.
+    const world = morning();
+    const before = world.layoutVersion;
+    world.day++;
+    restockStall(world);
+    expect(world.layoutVersion).toBeGreaterThan(before);
   });
 
   test("buying deducts the money and hands over a held ghost", () => {

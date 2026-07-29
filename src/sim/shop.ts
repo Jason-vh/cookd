@@ -4,6 +4,7 @@ import { unlockedIngredients, unlockedKinds } from "./cards";
 import { ingredient } from "../data/ingredients";
 import { mulberry32 } from "./random";
 import type { Appliance, Offer, World } from "./types";
+import { touchLayout } from "./world";
 
 /**
  * The market stall: what it is holding, what that costs, and what a sale pays.
@@ -123,6 +124,11 @@ export function restockStall(world: World): void {
     slot.offer = guaranteed ? rollFrom(scarce, random, sources) : rollOffer(sold, random, sources);
     slot.taken = null;
   }
+
+  // An offer rides the layout message, so a new morning's stock is a layout
+  // change like an oven moving. Without this the server never re-sends it: a
+  // client keeps drawing yesterday's slot and buys today's thing out of it.
+  touchLayout(world);
 }
 
 /**

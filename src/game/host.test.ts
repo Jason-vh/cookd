@@ -171,6 +171,34 @@ describe("protocol", () => {
     expect(layoutVersion(host.world)).not.toBe(lifted);
   });
 
+  test("...and whenever the morning changes what a slot or a stand is holding", () => {
+    // The server resends the layout only when the version moves, so a change
+    // the version misses is a change no client is ever told about. Morning two
+    // is the first chance to get this wrong: `endDay` re-rolls the stall and
+    // rolls the cards without touching a single tile, and a client that was not
+    // told read yesterday's "Plate" off a slot the host had already restocked
+    // with a bin — and was handed the bin.
+    //
+    // One-directional on purpose: a version that moves while the layout stands
+    // still costs one redundant message a morning, and a version that stands
+    // still while the layout moves costs a client the truth until somebody
+    // happens to pick something up.
+    const host = new Host();
+    host.join("Ann");
+    let changes = 0;
+    for (let flip = 0; flip < 10; flip++) {
+      const layout = JSON.stringify(encodeLayout(host.world));
+      const version = layoutVersion(host.world);
+      host.menu(host.world.phase === "build" ? "startDay" : "endDay");
+      if (JSON.stringify(encodeLayout(host.world)) === layout) continue;
+      changes++;
+      expect(layoutVersion(host.world)).not.toBe(version);
+    }
+    // Five days of opening and closing move the layout at least once, or the
+    // loop above proved nothing at all.
+    expect(changes).toBeGreaterThan(0);
+  });
+
   test("layout carries what a crate dispenses", () => {
     const host = new Host();
     const layout = encodeLayout(host.world);
