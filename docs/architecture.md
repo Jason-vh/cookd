@@ -52,10 +52,10 @@ src/
     local.ts              offline play: a Host in this tab
     net.ts                online play: wires the three below together
     connection.ts         the socket, and the business of keeping one
-    reconciler.ts         our own chefs, run ahead and corrected when wrong
+    reconciler.ts         the world being drawn: our chefs run ahead, corrected when wrong
     protocol.ts           wire format, and the only encode/decode
     wire.ts               the edge of trust: unknown bytes -> validated messages
-    snapshots.ts          the received timeline, and the clock that reads it
+    snapshots.ts          the received timeline, on the server's clock, and how far behind to read it
   input/
     index.ts            keyboard + Gamepad API -> Inputs (keyed by player id)
     latch.ts            a control that must be released before it counts again

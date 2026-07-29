@@ -7,9 +7,9 @@ The client is four pieces, and the split is the same one the problem has:
 | | |
 | --- | --- |
 | `game/connection.ts` | The socket, and the business of keeping one. Backoff, and knowing when to stop. |
-| `game/snapshots.ts` | The received timeline, and the playout clock that reads it. |
-| `game/reconciler.ts` | Our own chefs, run ahead of the server and corrected when it disagrees. |
-| `game/net.ts` | Wires those three to a `World` the renderer cannot tell from a local one. |
+| `game/snapshots.ts` | The received timeline, kept on the server's clock, and how far behind to read it. |
+| `game/reconciler.ts` | The world being drawn: our own chefs run ahead of the server, corrected when it disagrees. |
+| `game/net.ts` | Wires those three into a `World` the renderer cannot tell from a local one. |
 
 Each of the first three is pure enough to test without a socket, which is the
 point: all three had bugs that only appear on a bad link or during a deploy.
@@ -176,8 +176,11 @@ sends the two ticks it owes at once, and that extra tick then sits in front of
 everything that player does for the rest of the session. Measured, ten dropped
 frames were ten ticks of it, and only standing still took them back out: it
 degraded slowly, worst during the busiest minute of a service, and was invisible
-to any test that let go of the controls. At twenty the server starts discarding
-input outright, and the chef visibly stutters.
+to any test that let go of the controls. At twenty it reaches the cap and the
+server starts discarding input outright — see [when the server refuses your
+input](#when-the-server-refuses-your-input) — which is a 0.10-tile lurch against
+a 0.07-tile step, and permanent, because nothing was ever going to take those
+ticks back out.
 
 Since the client predicts locally, this is not felt on your own chef at all — it
 is 16ms a tick of staleness in what *everybody else* sees you doing, and a
@@ -192,9 +195,9 @@ evaporates is a player pressing it again and getting two — so its buttons are
 folded into the tick behind it. `/health` reports the deepest queue in the
 process; it should sit at one.
 
-That last property is also what makes an idle kitchen quiet. Since silence
-already means "carry on", the client stops sending altogether while a chef
-stands still: runs of idle input collapse, and only the first idle tick — the
+A queue that starves by holding the last input is also what makes an idle
+kitchen quiet. Since silence already means "carry on", the client stops sending
+altogether while a chef stands still: runs of idle input collapse, and only the first idle tick — the
 instruction to stop — goes out. A stationary chef cannot drift apart from the
 server either, because both integrate the same zero velocity, so there is
 nothing for the reconciler to correct. Idle upload falls from ~4 KB/s to 16 B/s,

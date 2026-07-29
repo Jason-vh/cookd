@@ -86,12 +86,15 @@ online: customers walk the path, take a seat, raise a bubble with the dish and a
 patience ring, eat a delivered plate, and leave a dirty plate and a stack of
 coins behind.
 
-**Multiplayer against a 180ms latency proxy.** Two browsers in one room see each
-other move and collide; picking up, placing and chopping all confirm across the
-link; a build-phase move propagates and lands on disk; a reset reaches every
-client and names who did it; a room survives a server restart; and an
-unreachable server falls back to offline play after six seconds with the game
-still playable.
+**Multiplayer against a 180ms latency proxy.** Two browsers in one room collide
+with each other and with the customers walking between them; a build-phase move
+propagates and lands on disk; a reset reaches every client and names who did it;
+a room survives a server restart; and an unreachable server falls back to
+offline play after six seconds with the game still playable.
+
+What is left here is the *look* of it — whether a chef sliding into place reads
+as smooth. How long anything takes is no longer a matter of opinion; see
+`latency.test.ts`.
 
 **Gamepad input has not been tested against physical hardware** — the mapping
 assumes the standard layout (`A`/south = grab, `X`/west = use, `Start` = next
@@ -117,6 +120,11 @@ which is the direction things should travel:
   session's frames and input history discarded — `host.test.ts`, `server.test.ts`.
 - A room nobody touched leaves nothing on disk — `host.test.ts`.
 - The wire frame stays under 1.5 KB with four chefs — `host.test.ts`.
+- Two browsers in one kitchen see each other's chefs move and pick things up,
+  at any latency — `latency.test.ts`.
+- Picking something up is instant for the chef who did it, stays put while the
+  server catches up, and is taken back when the server disagrees —
+  `latency.test.ts`.
 
 ---
 
