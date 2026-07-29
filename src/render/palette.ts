@@ -155,7 +155,7 @@ export const PALETTE = {
   rewardTip: 0xb8e08a,
   /** Somebody gave up and left. */
   lossWalkout: 0xe08a6f,
-  /** Money going out: a purchase, or the rent. */
+  /** Money going out: a purchase. */
   spend: 0xe0b8a0,
 } as const;
 

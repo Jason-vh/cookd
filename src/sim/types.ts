@@ -291,7 +291,7 @@ export type Offer =
  * One day's takings, kept apart from the lifetime totals beside them.
  *
  * The end-of-day card is where the shop's numbers get their meaning — "we made
- * forty and rent was forty" is the sentence the whole economy exists to
+ * forty, and the oven is sixty" is the sentence the whole economy exists to
  * produce — and none of it can be recovered from `money`, `served` and `lost`,
  * which are cumulative. So the day counts itself as it goes.
  *
@@ -305,8 +305,6 @@ export type Ledger = {
   earned: number;
   /** Money picked up off tables. */
   tips: number;
-  /** Deducted at close; zero until then. */
-  rent: number;
   served: number;
   /** Walkouts by recipe id — what the kitchen kept failing to make. */
   lost: Record<string, number>;
@@ -321,7 +319,7 @@ export type EffectCue =
   | { kind: "paid"; tile: Vec2; amount: number }
   | { kind: "binned"; tile: Vec2 }
   | { kind: "walkout"; tile: Vec2 }
-  /** Money leaving: a purchase, or the rent. */
+  /** Money leaving: a purchase. */
   | { kind: "spent"; tile: Vec2; amount: number }
   /**
    * The stall said no. Never a silent refusal: the log says why and the slot's

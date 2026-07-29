@@ -328,7 +328,7 @@ export class View {
         // Money going *out*, in its own colour. The same popup machinery as a
         // reward, deliberately: a purchase and a delivery are both "the number
         // in the corner just moved", and reading them the same way is what
-        // makes rent land as a thing that happened rather than as a surprise
+        // makes a purchase land where it happened rather than as a change
         // discovered later in the HUD.
         this.popups.spawn(
           `-$${cue.amount}`,

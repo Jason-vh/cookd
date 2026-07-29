@@ -808,16 +808,16 @@ describe("day loop", () => {
     expect(world.day).toBe(2); // ...closing does
   });
 
-  test("rent is deducted at close, and money is allowed to go negative", () => {
+  test("closing takes nothing out of the till", () => {
+    // A day's takings are the day's takings. There is no rent and no standing
+    // cost of any kind: the pressure is what a kitchen cannot afford to buy,
+    // never a number that arrives while nobody is looking.
     const world = makeWorld();
     world.money = 10;
     world.dayTime = 0.05;
     hold(world, 0.2, null);
 
-    // Day one's rent is $30, against $10 in the till. Nothing else happens:
-    // there is no fail state here, only a kitchen that cannot afford an oven.
-    expect(world.money).toBe(-20);
-    expect(world.today.rent).toBe(30);
+    expect(world.money).toBe(10);
     expect(world.phase).toBe("build");
   });
 });

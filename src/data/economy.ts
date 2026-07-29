@@ -1,7 +1,7 @@
 import type { ApplianceKind } from "./appliances";
 
 /**
- * The ledger: what the stall stocks, what it pays back, and what the day costs.
+ * The ledger: what the stall stocks, and what it pays back.
  *
  * Prices themselves are **not** here — they are the `price` column in
  * `appliances.ts`, so adding an appliance stays one row. What lives here is
@@ -34,22 +34,6 @@ export const SELLBACK = 0.5;
  * is a thing worth naming.
  */
 export const PLATE_PRICE = 10;
-
-/**
- * Rent, deducted when service closes.
- *
- * At **close**, never at open: waking into a deduction is a bad morning, and
- * the whole point of the build phase becoming the morning is that it is the
- * space where decisions get made. Money arrives, rent is taken, and the room
- * then decides what to do with what is left.
- *
- * Missing it just means negative money, which blocks buying and nothing else.
- * There is deliberately no fail state: the pressure is meant to be "we cannot
- * afford the oven", not "we lost".
- */
-export function rentFor(day: number): number {
-  return 25 + 5 * day;
-}
 
 /**
  * How often each kind turns up in a slot.

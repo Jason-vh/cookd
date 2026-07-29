@@ -1,9 +1,8 @@
-import { rentFor } from "../data/economy";
 import { clearCards, restockCards } from "./cards";
 import { platesInWorld, stockPlates } from "./plates";
 import { restockStall } from "./shop";
 import type { Inputs, World } from "./types";
-import { effect, emptyLedger, log } from "./world";
+import { emptyLedger, log } from "./world";
 import { applianceSystem } from "./systems/appliances";
 import { cardSystem } from "./systems/cards";
 import { customerSystem } from "./systems/customers";
@@ -136,7 +135,7 @@ function someoneIsHolding(world: World): boolean {
 }
 
 /**
- * Close the kitchen, take the rent, and wake into the next morning.
+ * Close the kitchen and wake into the next morning.
  *
  * The day number moves **here**, not at open, and that is what makes the build
  * phase read as a morning rather than as an aftermath: close day 3, and the
@@ -144,22 +143,15 @@ function someoneIsHolding(world: World): boolean {
  * HUD says "Day 4" throughout, first preparing and then serving, which is how
  * days work.
  *
- * Rent lands at close for the same reason. It is announced a whole morning in
- * advance and taken at the end of the day it was for; waking up into a
- * deduction, before anybody has had the chance to earn anything, is a bad
- * morning and a worse tutorial. Missing it means negative money, which blocks
- * buying — and nothing else. There is no fail state here on purpose.
+ * Nothing is taken at close. A day's takings are the day's takings, and what
+ * the room does with them is the morning's business — the pressure is meant to
+ * be "we cannot afford the oven", and there is no fail state here on purpose.
  */
 export function endDay(world: World): void {
   world.phase = "build";
   world.dayTime = 0;
   clearService(world);
-
-  const rent = rentFor(world.day);
-  world.money -= rent;
-  world.today.rent = rent;
-  effect(world, { kind: "spent", tile: world.door, amount: rent });
-  log(world, `Day ${world.day} closed — rent $${rent}`);
+  log(world, `Day ${world.day} closed`);
 
   world.day++;
   restockStall(world);

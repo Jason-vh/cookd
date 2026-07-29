@@ -21,7 +21,7 @@ function frame(tick: number, players: { id: number; x: number; y: number }[] = [
     money: 0,
     served: 0,
     lost: 0,
-    today: { day: 1, earned: 0, tips: 0, rent: 0, served: 0, lost: {} },
+    today: { day: 1, earned: 0, tips: 0, served: 0, lost: {} },
     customers: [],
     events: [],
     effects: [],

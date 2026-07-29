@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { applianceDef } from "../data/appliances";
-import { PLATE_PRICE, SELLBACK, STALL_SLOTS, rentFor } from "../data/economy";
+import { PLATE_PRICE, SELLBACK, STALL_SLOTS } from "../data/economy";
 import { LEVEL } from "../data/level";
 import { Host } from "../game/host";
 import { platesInWorld } from "./plates";
@@ -191,21 +191,18 @@ describe("the stall", () => {
     expect(world.effects.some((cue) => cue.kind === "refused")).toBe(true);
   });
 
-  test("negative money blocks buying, and is the only thing rent does", () => {
+  test("a day costs nothing to have had: the till is the same at open", () => {
+    // Nothing is deducted anywhere in the loop, so the only way money leaves a
+    // kitchen is somebody buying something. A day that served nobody is a day
+    // that changed no number.
     const world = morning();
     world.money = 5;
     press(world, "start");
     world.dayTime = 0.05;
     for (let i = 0; i < 20; i++) step(world, idle());
 
-    expect(world.money).toBe(5 - rentFor(1));
-    expect(world.money).toBeLessThan(0);
-    // No fail state; just a poor morning, and a stall you cannot shop at.
     expect(world.phase).toBe("build");
-
-    stock(world, 0, "counter");
-    useSlot(world, 0);
-    expect(world.players[0]!.carriedAppliance).toBeNull();
+    expect(world.money).toBe(5);
   });
 
   test("putting it straight back is an undo, not a sale", () => {

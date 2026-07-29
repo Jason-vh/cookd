@@ -1,5 +1,5 @@
 import { RECIPE_BY_ID } from "../data/recipes";
-import { isLastOrders, rentTonight } from "../sim/queries";
+import { isLastOrders } from "../sim/queries";
 import type { Ledger, World } from "../sim/types";
 
 /**
@@ -208,7 +208,7 @@ export class Hud {
 
     this.setBanner("title", `Day ${world.day} \u2014 morning`);
     this.setBanner("open", "Press Start to open");
-    this.setBanner("rent", `Rent tonight $${rentTonight(world)} \u00b7 Balance $${world.money}`);
+    this.setBanner("balance", `Balance $${world.money}`);
     if (hasReport) this.setReport(closed, world.money);
   }
 
@@ -217,12 +217,7 @@ export class Hud {
     this.setBanner("report-title", `Day ${closed.day}`);
     this.setBanner(
       "report",
-      [
-        `Earned $${closed.earned}`,
-        `Tips $${closed.tips}`,
-        `Rent \u2212$${closed.rent}`,
-        `Balance $${balance}`,
-      ].join(" \u00b7 "),
+      [`Earned $${closed.earned}`, `Tips $${closed.tips}`, `Balance $${balance}`].join(" \u00b7 "),
     );
     const lost = Object.entries(closed.lost)
       .map(([id, count]) => `${count} \u00d7 ${RECIPE_BY_ID.get(id)?.name ?? id}`)
@@ -249,8 +244,8 @@ export class Hud {
     const open = document.createElement("p");
     open.dataset.banner = "open";
     open.className = "banner-open";
-    const rent = document.createElement("p");
-    rent.dataset.banner = "rent";
+    const balance = document.createElement("p");
+    balance.dataset.banner = "balance";
 
     const keys = document.createElement("p");
     keys.className = "banner-keys";
@@ -260,7 +255,7 @@ export class Hud {
       keys.append(span, " ");
     }
     keys.append("or the pause menu");
-    this.bannerCard.replaceChildren(reportTitle, report, service, title, open, rent, keys);
+    this.bannerCard.replaceChildren(reportTitle, report, service, title, open, balance, keys);
   }
 
   private setBanner(key: string, value: string): void {

@@ -112,10 +112,10 @@ export const APPLIANCE_KINDS: ApplianceKind[] = Object.keys(APPLIANCES).filter(i
  *   game can do this. It is the only entry that is here on principle rather
  *   than on judgement.
  * - **`sink`** — a kitchen without one caps its day at however many plates it
- *   owns and then earns nothing more. Four covers is roughly $32 against rent
- *   that passes $50 by day five, so the room loses money faster than it can buy
- *   a sink back. Not a lock; a spiral, and the design has no fail state for a
- *   player to hit deliberately, only ones to hit by accident.
+ *   owns and then earns nothing more: four covers, roughly $32, and the same $32
+ *   again tomorrow. Not a lock — nothing is ever deducted, so the room can save
+ *   its way out — but a ceiling low enough to sit under for days without seeing
+ *   what is holding it there.
  *
  * A **bin** is the case that looks like it belongs and does not: losing it costs
  * one plate per ruined dish *until closing time*, because `clearService` wipes

@@ -1,17 +1,21 @@
-<!-- The morning, the market stall, and what a day costs. -->
+<!-- The morning, the market stall, and what a day is worth. -->
 
 # The shop
 
-A day now begins in the **build phase**, outside the door there is a **market
-stall**, and at closing time there is **rent**. Those three things are one
-feature: money had nowhere to go, so it meant nothing, and a build phase that
-arrived as the aftermath of a day was a place to tidy up rather than a place to
-decide.
+A day begins in the **build phase**, and outside the door there is a **market
+stall**. The two are one feature: money had nowhere to go, so it meant nothing,
+and a build phase that arrived as the aftermath of a day was a place to tidy up
+rather than a place to decide.
 
 The one-sentence version: **zero new verbs, one new place.** `Grab` does
-everything, the stall is the entire interface, rent makes the numbers matter,
-and demand following seats makes every purchase a piece of self-chosen
-escalation.
+everything, the stall is the entire interface, and demand following seats makes
+every purchase a piece of self-chosen escalation.
+
+**Nothing is ever deducted.** There was a nightly rent here once, and it was
+removed: a number that arrives while nobody is looking is a worse teacher than
+a price tag, and every day it took ended in the same place the takings did. The
+only way money leaves a kitchen is somebody carrying something away from a
+slot.
 
 ---
 
@@ -80,9 +84,9 @@ until the shop refuses to buy anything:
   sale takes the crockery with it and a replacement arrives empty. Nothing else
   in the game does this.
 - **The sink** is judgement. A kitchen without one caps its day at however many
-  plates it owns — four covers, about $32, against rent that passes $50 by day
-  five — so it loses money faster than it can buy one back. Not a lock; a
-  spiral, and the design has no fail state for a player to walk into on purpose.
+  plates it owns — four covers, about $32, whatever the room was hoping to save
+  for — and every day after it earns the same $32 again. Not a lock; a ceiling
+  low enough that a room could sit under it for a long time without seeing why.
 
 That list used to justify itself as *"appliances a kitchen cannot run without,
 and cannot get back on its own"*. The second clause was true when it was written
@@ -220,16 +224,11 @@ Prices are the `price` column in `data/appliances.ts`, in three tiers:
 | Capacity | table $40, board $40, sink $50, plates stack $60 | a good day's profit |
 | Throughput | fryer $120, oven $160 | 2–3 days of *profit* — a saving goal |
 
-**Rent** is `$25 + $5 × day`, deducted when service closes. At close, never at
-open: it is announced a whole morning in advance and taken at the end of the day
-it was for, because waking into a deduction before anybody has earned anything
-is a bad morning and a worse tutorial.
+There is deliberately **no fail state** and no standing cost. The pressure is
+meant to be "we can't afford the oven", not "we lost", and the till only ever
+goes up on its own.
 
-Missing it means negative money, which blocks buying — and nothing else. There
-is deliberately **no fail state**. The pressure is meant to be "we can't afford
-the oven", not "we lost".
-
-The **end-of-day card** shows earnings, tips, rent, balance, dishes served and
+The **end-of-day card** shows earnings, tips, balance, dishes served and
 orders lost *by recipe*. The last of those is the one that earns its place: "four
 walked out" is a number, "four pizzas walked out" is a diagnosis, and the
 difference between them is whether the morning knows what to buy. None of it is

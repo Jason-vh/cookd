@@ -109,7 +109,7 @@ function makePlayer(id: number, name: string, spawn: Vec2): Player {
 
 /** A day's takings, before any of it has happened. */
 export function emptyLedger(day: number): Ledger {
-  return { day, earned: 0, tips: 0, rent: 0, served: 0, lost: {} };
+  return { day, earned: 0, tips: 0, served: 0, lost: {} };
 }
 
 /**

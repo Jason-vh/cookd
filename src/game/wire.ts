@@ -457,10 +457,8 @@ function parseLedger(value: unknown): Ledger | null {
   const day = int(value.day);
   const earned = num(value.earned);
   const tips = num(value.tips);
-  const rent = num(value.rent);
   const served = int(value.served);
-  if (day === null || earned === null || tips === null) return null;
-  if (rent === null || served === null) return null;
+  if (day === null || earned === null || tips === null || served === null) return null;
   if (!isRecord(value.lost)) return null;
 
   const entries = Object.entries(value.lost);
@@ -471,7 +469,7 @@ function parseLedger(value: unknown): Ledger | null {
     if (key.length > MAX_NAME || count === null) return null;
     lost[key] = count;
   }
-  return { day, earned, tips, rent, served, lost };
+  return { day, earned, tips, served, lost };
 }
 
 function parseFrameCustomer(value: unknown): Frame["customers"][number] | null {

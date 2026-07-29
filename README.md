@@ -12,8 +12,8 @@ Status: **playable, and multiplayer.** Multiple chefs, a kitchen that starts wit
 one dish and buys the rest from recipe cards, burning, a dining room with
 customers who walk in, sit, order, eat and leave, tips left on tables, a sink and
 a kitchen with only four plates to its name, a day loop that begins in the
-morning, a market stall on the patio to spend the takings at, rent waiting at
-closing time — and a server so the chefs can be in different countries.
+morning, a market stall on the patio to spend the takings at — and a server so
+the chefs can be in different countries.
 
 ---
 
@@ -95,8 +95,8 @@ The white square in front of your chef is what you'll interact with.
    Ruined a dish? The **bin scrapes it** — the food goes and you keep the plate,
    dirty. There is no way to throw a plate away, and no way to get another one.
 9. When the day timer hits zero — or you pick **Close up early** from the pause
-   menu — **rent comes out of the till** and you wake into the next day's
-   **morning**. Face any appliance and `Grab` to pick it up. A **ghost** of it
+   menu — you wake into the next day's **morning**, with the day's takings
+   still in the till. Face any appliance and `Grab` to pick it up. A **ghost** of it
    appears on the tile you're facing, showing exactly where it will land;
    `Grab` again to put it there. Drop it onto another appliance and the two
    **swap**. Tables are appliances too, so where the dining room goes is your
@@ -156,7 +156,7 @@ noticing. [A test](docs/docs.test.ts) now catches that much.
 | [Multiplayer](docs/multiplayer.md) | Three clocks, prediction, and what happens when a connection drops. |
 | [The content model](docs/content.md) | Items, transforms, combines, recipes and levels — everything that is data. Read this to add a dish. |
 | [The dining room](docs/dining-room.md) | Customers: arriving, seating, patience, eating, tips. |
-| [The shop](docs/the-shop.md) | The morning, the market stall, rent, and the patio they stand on. |
+| [The shop](docs/the-shop.md) | The morning, the market stall, and the patio they stand on. |
 | [The menu](docs/the-menu.md) | Recipe cards: how a kitchen chooses what it cooks, and the equipment that comes with it. |
 | [Art direction](docs/art-direction.md) | The look, the biomes, and the rendering gotchas behind both. |
 | [Performance](docs/performance.md) | The frame budget and the wire budget, and where each one goes. |

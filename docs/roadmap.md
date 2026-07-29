@@ -57,8 +57,8 @@ Bigger:
 ## The build phase
 
 The build phase is the **morning of the upcoming day**, and it is where the shop
-lives. [the-shop.md](the-shop.md) covers the stall, rent, the end-of-day card and
-the patio ring they stand on; what follows is the part that predates all of it.
+lives. [the-shop.md](the-shop.md) covers the stall, the end-of-day card and the
+patio ring they stand on; what follows is the part that predates all of it.
 
 A held appliance is drawn as a **ghost standing on the tile it would go to**,
 not carried on the chef's head. Balancing an oven on someone's hat is funny

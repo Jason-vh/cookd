@@ -2,7 +2,7 @@
  * How a kitchen's menu grows: the cards, their cadence, and their weights.
  *
  * Deliberately not in `economy.ts`, whose subject is the *shop* — what a slot
- * holds, what a sale pays, what rent costs. The card stand looks like a shop
+ * holds and what a sale pays. The card stand looks like a shop
  * and is not one: nothing here has a price, and the only currency is the day
  * number. Two systems, two tables.
  *

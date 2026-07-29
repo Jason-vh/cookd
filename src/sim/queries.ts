@@ -1,5 +1,4 @@
 import { applianceDef, type ApplianceKind } from "../data/appliances";
-import { rentFor } from "../data/economy";
 import { ingredient } from "../data/ingredients";
 import { COMBINES, TRANSFORMS } from "../data/recipes";
 import { unlockedRecipes } from "./cards";
@@ -213,16 +212,6 @@ export function unreachableTables(world: World): Appliance[] {
 export function mealLeft(customer: Customer): number {
   if (customer.state !== "eating") return 1;
   return Math.max(0, Math.min(1, customer.timer / EAT_TIME));
-}
-
-/**
- * What the stall will charge tonight, so the morning can see it coming.
- *
- * Rent is meant to be predictable: a number you can read off the banner while
- * deciding whether the oven is affordable, not a surprise at closing time.
- */
-export function rentTonight(world: World): number {
-  return rentFor(world.day);
 }
 
 /**

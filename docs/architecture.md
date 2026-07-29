@@ -40,7 +40,7 @@ src/
   data/                   content — plain data, no logic
     ingredients.ts        what exists and what it is called
     appliances.ts         appliance definitions, prices, and the ApplianceKind union
-    economy.ts            the ledger: what the stall stocks, what it pays, what rent costs
+    economy.ts            the ledger: what the stall stocks, and what it pays
     progression.ts        the cards: what a kitchen starts with, and how its menu grows
     recipes.ts            transforms, combines, recipes + derived lookup maps
     level.ts              ASCII kitchen layouts, their legend, and the registry
