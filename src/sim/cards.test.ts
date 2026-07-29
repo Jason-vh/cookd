@@ -416,8 +416,12 @@ describe("the day after", () => {
 
     beginDay(world);
     const launch = share(world);
-    expect(launch).toBeGreaterThan(0.55);
-    expect(launch).toBeLessThan(0.85);
+    // About half, and about half is what `LAUNCH_SHARE` says. It used to be
+    // three quarters: the newest dish took its share *and* an even cut of the
+    // remainder, which on a two-dish menu left the salad an afterthought on the
+    // day the room learned bread.
+    expect(launch).toBeGreaterThan(0.4);
+    expect(launch).toBeLessThan(0.6);
 
     // Next day it is one dish of two, like anything else on the menu.
     endDay(world);

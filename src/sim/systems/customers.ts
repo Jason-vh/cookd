@@ -254,10 +254,16 @@ function arrive(world: World, reachable: Set<number>): void {
  * more, and no global menu: two kitchens on day ten are two different
  * restaurants because they picked different cards.
  *
- * On the day a recipe is unlocked it takes about `LAUNCH_SHARE` of the orders.
- * First contact under deliberate repetition: a dish learned by seeing it three
- * times in an hour is a dish nobody learns, and the weighting is over by the
- * next morning.
+ * On the day a recipe is unlocked it takes about `LAUNCH_SHARE` of the orders,
+ * and the rest of the day belongs to the menu it joined. First contact under
+ * deliberate repetition: a dish learned by seeing it three times in an hour is a
+ * dish nobody learns, and the weighting is over by the next morning.
+ *
+ * The launch share is the newest dish's **whole** share, not a head start on top
+ * of an even split. Spreading the remainder over the whole pool looks like the
+ * same thing and is not: on a two-dish menu it handed the new dish three orders
+ * in four, and a day is only about ten customers long — so unlocking bread on
+ * day two could mean never seeing a salad again that day.
  *
  * Exactly **one** draw from the stream either way, whatever the pool looks
  * like. Randomness spent conditionally is randomness that makes two rooms with
@@ -270,11 +276,13 @@ function orderFrom(world: World): Recipe | null {
   const roll = random(world);
   const newest = pool.at(-1)!;
   const launching = world.unlockedDay === world.day && pool.length > 1;
-  if (launching && roll < LAUNCH_SHARE) return newest;
-  // The rest of the roll, rescaled over the whole pool — including the new
-  // dish, which is on the menu like anything else once its day is over.
-  const spread = launching ? (roll - LAUNCH_SHARE) / (1 - LAUNCH_SHARE) : roll;
-  return pool[Math.min(pool.length - 1, Math.floor(spread * pool.length))] ?? newest;
+  if (!launching) return pool[Math.min(pool.length - 1, Math.floor(roll * pool.length))] ?? newest;
+  if (roll < LAUNCH_SHARE) return newest;
+  // The rest of the roll, rescaled over the dishes the room already had. The
+  // new one is on the menu like anything else once its day is over.
+  const rest = pool.slice(0, -1);
+  const spread = (roll - LAUNCH_SHARE) / (1 - LAUNCH_SHARE);
+  return rest[Math.min(rest.length - 1, Math.floor(spread * rest.length))] ?? newest;
 }
 
 /**
