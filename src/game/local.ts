@@ -2,6 +2,7 @@ import type { Inputs, World } from "../sim/types";
 import type { Game } from "./game";
 import { Host, type MenuAction } from "./host";
 import type { Save } from "../save";
+import { LEVEL, type LevelDef } from "../data/level";
 
 const MAX_LOCAL_PLAYERS = 4;
 
@@ -20,13 +21,17 @@ export class LocalGame implements Game {
 
   private host: Host;
 
-  constructor(save?: Save | null, players = 1) {
-    this.host = new Host(save);
+  constructor(save?: Save | null, players = 1, level: LevelDef = LEVEL) {
+    this.host = new Host(save, level);
     for (let i = 0; i < players; i++) this.localIds.push(this.host.join(""));
   }
 
   get world(): World {
     return this.host.world;
+  }
+
+  get level(): LevelDef {
+    return this.host.level;
   }
 
   get alpha(): number {

@@ -210,12 +210,21 @@ async function writeThrough(room: Room, signature: string): Promise<void> {
   if (ok) room.saved = signature;
 }
 
-function normaliseRoom(raw: string): string {
-  const code = raw
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 8);
-  return code || "MAIN";
+/**
+ * A room code, or null if it is not one.
+ *
+ * This used to strip and *truncate*, which quietly merged strangers: both
+ * `MY-KITCHEN-A` and `MYKITCHENB` became `MYKITCHE`, so two groups who thought
+ * they had picked different codes ended up cooking in the same kitchen.
+ * Refusing an over-long code is friendlier than silently reinterpreting it, and
+ * the join screen already limits what a player can type.
+ */
+const ROOM_CODE = /^[A-Z0-9]{1,8}$/;
+
+function normaliseRoom(raw: string): string | null {
+  const code = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!code) return "MAIN";
+  return ROOM_CODE.test(code) ? code : null;
 }
 
 function sanitiseName(raw: string): string {
@@ -456,6 +465,10 @@ Bun.serve<SocketData, "/ws">({
           return;
         }
         const code = normaliseRoom(message.room);
+        if (!code) {
+          refuse(socket, "Kitchen codes are up to 8 letters or numbers");
+          return;
+        }
         const room = roomFor(code, await loadSave(code));
         if (!room) {
           refuse(socket, "Server is full — try again shortly");
@@ -521,6 +534,7 @@ Bun.serve<SocketData, "/ws">({
         send(client, {
           t: "welcome",
           room: code,
+          level: room.host.level.id,
           you: client.players,
           layout: encodeLayout(room.host.world),
           frame: encodeFrame(room.host.world, room.host.acks),

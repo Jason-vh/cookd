@@ -35,16 +35,19 @@ export type ItemSpec = {
   processes: ProcessId[];
 };
 
-export type ApplianceKind =
-  | "wall"
-  | "counter"
-  | "board"
-  | "fryer"
-  | "oven"
-  | "crate"
-  | "plates"
-  | "bin"
-  | "table";
+/**
+ * Every kind of appliance there is.
+ *
+ * Defined by the content table in `data/appliances.ts` and re-exported here, so
+ * that the simulation still reads as the owner of its own vocabulary while
+ * adding an appliance stays a one-row change to data. It used to be a
+ * hand-written union in this file, which meant a new appliance was a change to
+ * the *simulation's types* — the one boundary this codebase is otherwise
+ * careful about.
+ */
+export type { ApplianceKind } from "../data/appliances";
+
+import type { ApplianceKind } from "../data/appliances";
 
 /**
  * What work an appliance can do. Transforms are keyed by station rather than by
@@ -120,6 +123,18 @@ export type Recipe = {
   /** Seconds a customer will wait. */
   patience: number;
   reward: number;
+  /**
+   * First day this can be ordered.
+   *
+   * Unlocking used to be `RECIPES.slice(0, 1 + world.day)` — the difficulty
+   * curve was the *array order*, so reordering the list for readability changed
+   * the game, and inserting a hard recipe in the middle silently changed day
+   * one. Saying it out loud makes content order irrelevant, which is the whole
+   * promise of "adding a recipe means adding a row".
+   */
+  unlockDay: number;
+  /** Human-readable steps, so a recipe cannot ship without saying how to make it. */
+  steps: string[];
 };
 
 /**

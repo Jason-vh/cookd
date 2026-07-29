@@ -456,13 +456,14 @@ export function parseServerMessage(value: unknown): ServerMessage | null {
   switch (value.t) {
     case "welcome": {
       const room = str(value.room, MAX_ROOM);
+      const level = str(value.level, MAX_NAME * 4);
       const rawYou = arr(value.you, MAX_SEATS);
-      if (room === null || !rawYou) return null;
+      if (room === null || level === null || !rawYou) return null;
       const you = all(rawYou, int);
       const layout = parseLayout(value.layout);
       const frame = parseFrame(value.frame);
       if (!you || !layout || !frame) return null;
-      return { t: "welcome", room, you, layout, frame };
+      return { t: "welcome", room, level, you, layout, frame };
     }
     case "layout": {
       const layout = parseLayout(value.layout);

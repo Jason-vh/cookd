@@ -6,6 +6,7 @@ import { Hud } from "./ui/hud";
 import { PauseMenu } from "./ui/menu";
 import { JoinScreen } from "./ui/join";
 import { loadIdentity, saveIdentity } from "./identity";
+import { assertContentValid } from "./data/validate";
 import type { Game } from "./game/game";
 import { LocalGame } from "./game/local";
 import { NetGame } from "./game/net";
@@ -36,7 +37,7 @@ const roomFromUrl = location.hash
 const forceLocal = params.has("local");
 
 let game: Game = new LocalGame(null, 1);
-const view = new View(canvas, game.world, LEVEL.biome);
+let view = new View(canvas, game.world, LEVEL.biome);
 
 function socketUrl(): string {
   // `?server=ws://host/ws` points the client at a different server. Used for
@@ -51,14 +52,24 @@ function socketUrl(): string {
 /**
  * Swap the running game — offline to online, or back.
  *
- * The renderer survives untouched. Every world is built from the same level, so
- * the walls and the camera framing are identical; the only things that change
- * are appliance and player ids, and `View` already drops meshes for ids that
- * stop existing (it has to, for resets and for people leaving).
+ * The renderer usually survives untouched: worlds built from the same level
+ * have identical walls and camera framing, and the only things that change are
+ * appliance and player ids, which `View` already drops meshes for (it has to,
+ * for resets and for people leaving).
+ *
+ * A *different* level is the exception, because `View` bakes the walls and the
+ * floor into one static batch when it is built. That used to be unrepresentable
+ * — there was one level, and nothing in the render layer could be freed — so
+ * this is the one place the disposal work actually pays for itself.
  */
 function useGame(next: Game): void {
+  const changed = next.level.id !== game.level.id;
   game.dispose();
   game = next;
+  if (changed) {
+    view.dispose();
+    view = new View(canvas, game.world, game.level.biome);
+  }
 }
 
 let onlineSince = 0;
@@ -358,6 +369,12 @@ declare global {
 }
 
 if (import.meta.env.DEV) {
+  // Content is compiled in, so if it is coherent at build time it is coherent
+  // for every player. Checking it here means a typo in a recipe is a loud
+  // failure the moment the dev server reloads, rather than an unreachable dish
+  // or a throw out of `ingredient()` ten minutes into a game.
+  assertContentValid();
+
   window.cookd = {
     get world() {
       return game.world;

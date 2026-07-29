@@ -1,4 +1,4 @@
-import { LEVEL } from "../data/level";
+import { LEVEL, type LevelDef } from "../data/level";
 import { DT, step } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
 import { createWorld, emptyInput, isIdleInput } from "../sim/world";
@@ -153,6 +153,8 @@ export class NetGame implements Game {
   /** Told what went wrong, so the shell can put it in front of the player. */
   readonly onError: (message: string, fatal: boolean) => void;
 
+  readonly level: LevelDef;
+
   constructor(
     url: string,
     room: string,
@@ -160,15 +162,17 @@ export class NetGame implements Game {
     players: number,
     token: string,
     onError: (message: string, fatal: boolean) => void = () => {},
+    level: LevelDef = LEVEL,
   ) {
     this.url = url;
     this.room = room;
     this.name = name;
     this.token = token;
     this.onError = onError;
+    this.level = level;
     this.wantedPlayers = Math.max(1, players);
-    this.world = createWorld(LEVEL, 0);
-    this.prediction = createWorld(LEVEL, 0);
+    this.world = createWorld(level, 0);
+    this.prediction = createWorld(level, 0);
     this.connect();
   }
 
@@ -263,6 +267,18 @@ export class NetGame implements Game {
         // Back to a clean slate: the next drop should retry promptly rather
         // than inheriting the backoff from whatever went wrong before.
         this.attempts = 0;
+        // The server names its kitchen, and we may be drawing a different one.
+        //
+        // Rebuilding the world here would not be enough: `View` bakes the walls
+        // and floor into one static batch at construction, so which level is
+        // running is the shell's decision, not ours. Saying so plainly beats
+        // playing on with somebody else's floor plan — which is what happened
+        // before, silently, because the client simply assumed the one level it
+        // was compiled with.
+        if (message.level !== this.level.id) {
+          this.die(`This kitchen is "${message.level}" — refresh to load it`);
+          return;
+        }
         // A reconnect is a *new session*: new ids, acks back at zero, and the
         // old frames describe players that no longer exist. Carrying any of it
         // over would replay the entire input history into the new world on the
@@ -296,12 +312,8 @@ export class NetGame implements Game {
         this.ping = Date.now() - message.sent;
         break;
       case "error":
-        if (message.fatal) {
-          this.fatal = message.message;
-          this.status = "offline";
-          this.closeSocket();
-        }
-        this.onError(message.message, message.fatal);
+        if (message.fatal) this.die(message.message);
+        else this.onError(message.message, false);
         break;
     }
   }
@@ -312,6 +324,14 @@ export class NetGame implements Game {
     applyLayout(this.world, layout);
     applyLayout(this.prediction, layout);
     this.layoutIds = new Set(layout.appliances.map((a) => a.id));
+  }
+
+  /** Stop trying, and say why. */
+  private die(message: string): void {
+    this.fatal = message;
+    this.status = "offline";
+    this.closeSocket();
+    this.onError(message, true);
   }
 
   private pushFrame(frame: Frame): void {

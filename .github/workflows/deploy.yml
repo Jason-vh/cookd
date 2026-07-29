@@ -21,6 +21,18 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # Types were already gated, by `bun run build` inside the image. Tests,
+      # lint and formatting were not — so a green deploy proved only that the
+      # thing compiled. `check` is the same command run locally.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck, lint, format, test
+        run: bun run check
+
       - name: Write production env file
         run: |
           cat > .env.production <<EOF

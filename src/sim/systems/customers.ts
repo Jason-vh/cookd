@@ -172,8 +172,9 @@ function arrive(world: World, reachable: Set<number>): void {
   // clear is just a stream of people walking in to walk out again.
   if (!table && world.customers.some((c) => c.state === "waiting")) return;
 
-  // Early days only serve the simpler recipes, exactly as orders used to.
-  const pool = RECIPES.slice(0, Math.min(RECIPES.length, 1 + world.day));
+  // Early days only serve the simpler recipes. Which ones is a property of the
+  // recipe, not of where it happens to sit in the array — see `unlockDay`.
+  const pool = RECIPES.filter((recipe) => recipe.unlockDay <= world.day);
   const recipe = pool[Math.floor(random(world) * pool.length)] ?? RECIPES[0]!;
 
   const start = { x: world.door.x - OFF_GRID + 0.5, y: world.door.y + 0.5 };

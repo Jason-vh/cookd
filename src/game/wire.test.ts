@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { LEVEL } from "../data/level";
 import { Host } from "./host";
 import { encodeFrame, encodeLayout, PROTOCOL_VERSION } from "./protocol";
 import { decode, parseClientMessage, parseInput, parseServerMessage } from "./wire";
@@ -132,6 +133,7 @@ describe("server messages", () => {
     const message = {
       t: "welcome" as const,
       room: "MAIN",
+      level: LEVEL.id,
       you: [0],
       layout: encodeLayout(host.world),
       frame: encodeFrame(host.world, host.acks),

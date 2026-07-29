@@ -1,3 +1,4 @@
+import type { LevelDef } from "../data/level";
 import type { Inputs, World } from "../sim/types";
 import type { MenuAction } from "./host";
 
@@ -12,6 +13,14 @@ import type { MenuAction } from "./host";
  */
 export interface Game {
   readonly world: World;
+  /**
+   * Which kitchen is being played.
+   *
+   * The shell needs this because `View` bakes the walls and floor into one
+   * static batch when it is built, so changing level means building a new
+   * `View` — which is now possible, because `View` can be disposed.
+   */
+  readonly level: LevelDef;
   readonly alpha: number;
   /** Player ids driven by this browser. */
   readonly localIds: number[];

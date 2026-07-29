@@ -11,13 +11,24 @@ import { parseSave, type Save } from "../src/save";
  * we would ever use.
  */
 
-const DIR = process.env.COOKD_SAVE_DIR ?? "./saves";
+/**
+ * Read per call rather than captured at import.
+ *
+ * A module-level `const DIR = process.env...` meant a test had to set the
+ * variable *before* importing, and reset it by re-importing under a cache-
+ * busting query — which returns `any` and drags the whole test file outside the
+ * type system. Reading it here costs nothing at a few writes a day and makes
+ * the module testable the ordinary way.
+ */
+function saveDir(): string {
+  return process.env.COOKD_SAVE_DIR ?? "./saves";
+}
 
 function pathFor(room: string): string {
   // Room codes are already normalised to [A-Z0-9]{1,8}, but this is the one
   // place a bad one would become a path traversal, so it is checked again here.
   const safe = room.replace(/[^A-Z0-9]/g, "").slice(0, 8) || "MAIN";
-  return `${DIR}/${safe}.json`;
+  return `${saveDir()}/${safe}.json`;
 }
 
 export type LoadResult = {

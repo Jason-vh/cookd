@@ -46,26 +46,25 @@ export const COMBINES: Combine[] = [
   { a: { base: "lettuce", processes: ["chopped"] }, b: { base: "tomato", processes: ["chopped"] }, output: { base: "salad", processes: [] } },
 ];
 
+/**
+ * `unlockDay` is the difficulty curve, said out loud.
+ *
+ * It used to be the *position in this array* — `RECIPES.slice(0, 1 + day)` —
+ * so sorting these rows by reward, or slipping a hard dish in beside a related
+ * one, silently changed what day one looks like. `steps` moved in here for the
+ * same reason: it was a separate map keyed by id, already unreferenced and
+ * already free to drift, and a recipe should not be able to ship without
+ * saying how it is made.
+ */
 // prettier-ignore
 export const RECIPES: Recipe[] = [
-  { id: "salad", name: "Garden Salad", dish: { base: "salad", processes: [] }, patience: 60, reward: 8 },
-  { id: "fries", name: "Fries", dish: { base: "fries", processes: ["fried"] }, patience: 55, reward: 6 },
-  { id: "pizza", name: "Pizza", dish: { base: "pizza", processes: ["sauced", "topped", "baked"] }, patience: 95, reward: 16 },
+  { id: "salad", name: "Garden Salad", dish: { base: "salad", processes: [] }, patience: 60, reward: 8, unlockDay: 1,
+    steps: ["Chop lettuce", "Chop tomato", "Combine", "Plate"] },
+  { id: "fries", name: "Fries", dish: { base: "fries", processes: ["fried"] }, patience: 55, reward: 6, unlockDay: 2,
+    steps: ["Chop potato", "Fry", "Plate"] },
+  { id: "pizza", name: "Pizza", dish: { base: "pizza", processes: ["sauced", "topped", "baked"] }, patience: 95, reward: 16, unlockDay: 3,
+    steps: ["Flour + water", "Knead dough", "Chop tomato twice -> sauce", "Chop cheese -> top", "Bake", "Plate"] },
 ];
-
-/** Human-readable steps, shown on the HUD so players can learn the recipes. */
-export const RECIPE_STEPS: Record<string, string[]> = {
-  salad: ["Chop lettuce", "Chop tomato", "Combine", "Plate"],
-  fries: ["Chop potato", "Fry", "Plate"],
-  pizza: [
-    "Flour + water",
-    "Knead dough",
-    "Chop tomato twice -> sauce",
-    "Chop cheese -> top",
-    "Bake",
-    "Plate",
-  ],
-};
 
 // --- derived lookup tables ---------------------------------------------------
 

@@ -63,7 +63,12 @@
     // loops avoid allocation on purpose. They also need an ES2023 lib we do not
     // otherwise want to commit to.
     "unicorn/no-array-sort": "off",
-    "unicorn/no-array-reverse": "off"
+    "unicorn/no-array-reverse": "off",
+    // Right about a loop that could be `Promise.all`, and wrong about the two
+    // places this codebase awaits in a loop: polling until a server answers,
+    // and writing saves one at a time on purpose. Both are sequential by
+    // definition, and running them in parallel is the bug, not the fix.
+    "no-await-in-loop": "off"
   },
 
   "ignorePatterns": ["dist/**", "node_modules/**", "saves/**"]

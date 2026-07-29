@@ -114,7 +114,14 @@ export type ClientMessage =
   | { t: "ping"; sent: number };
 
 export type ServerMessage =
-  | { t: "welcome"; room: string; you: number[]; layout: Layout; frame: Frame }
+  /**
+   * `level` is an *id*, never geometry. Both ends compile the same registry, so
+   * naming a kitchen is enough for a client to build the right walls, door and
+   * biome — and a server cannot get somebody's floor plan wrong. Before this,
+   * the client silently assumed the one level it happened to be built with,
+   * which made a second level a protocol change rather than a data addition.
+   */
+  | { t: "welcome"; room: string; level: string; you: number[]; layout: Layout; frame: Frame }
   | { t: "layout"; layout: Layout }
   | { t: "frame"; frame: Frame }
   | { t: "joined"; id: number }
