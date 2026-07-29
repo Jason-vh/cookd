@@ -27,6 +27,11 @@ const DEFS = {
   oven: { stations: ["bake"], speed: 1, label: "Oven", color: 0x6f7076, height: 0.9, acceptsItems: true, movable: true, price: 80 },
   crate: { stations: [], speed: 1, label: "Crate", color: 0x7a5c3c, height: 0.7, acceptsItems: false, movable: true, price: 10 },
   plates: { stations: [], speed: 1, label: "Plate stack", color: 0xbfc7cf, height: 0.7, acceptsItems: false, movable: true, price: 20 },
+  // The one station that never burns, never overflows and never punishes: the
+  // pressure around a sink is that plates are finite, not that scrubbing is
+  // dangerous. Somewhere to catch your breath is worth having in a game like
+  // this, and the sink is it.
+  sink: { stations: ["wash"], speed: 1, label: "Sink", color: 0xa9b4bc, height: 0.7, acceptsItems: true, movable: true, price: 35 },
   // A table is an appliance like any other: it accepts a plate, so delivery is
   // the place verb players already know. Its price is what the build phase
   // charges for order capacity.

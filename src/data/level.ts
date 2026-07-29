@@ -5,7 +5,7 @@ import type { ApplianceKind, ItemSpec, Vec2 } from "../sim/types";
  *
  *   #  wall            =  counter        B  chopping board
  *   F  fryer           O  oven           P  plate stack
- *   X  bin             .  floor          T  table
+ *   S  sink            X  bin            .  floor          T  table
  *   D  door            t/l/c/p  crates: tomato / lettuce / cheese / potato
  *   f/w                crates: flour / water
  *
@@ -38,6 +38,17 @@ export type LevelDef = {
   spawns: Vec2[];
   /** Length of the service phase in seconds. */
   dayLength: number;
+  /**
+   * How many plates this kitchen owns. They start clean, on the plate stack.
+   *
+   * This is the scarcity dial, and the only one: a kitchen that runs short of
+   * plates should be one that has been *built* big — more tables than the wash
+   * loop can keep up with — rather than one played badly on day one. Two spare
+   * over the seat count is generous on purpose; `validate.ts` insists on at
+   * least one per table so a level cannot ship unable to serve its own
+   * dining room.
+   */
+  plates: number;
 };
 
 export type TileSpec =
@@ -60,7 +71,10 @@ export const LEGEND: Record<string, TileSpec> = {
   B: { kind: "appliance", appliance: "board" },
   F: { kind: "appliance", appliance: "fryer" },
   O: { kind: "appliance", appliance: "oven" },
-  P: { kind: "appliance", appliance: "plates", source: { base: "plate", processes: [] } },
+  // No `source`: the plate stack does not conjure plates, it *holds* them —
+  // see `sim/plates.ts`. What it has is what the kitchen owns.
+  P: { kind: "appliance", appliance: "plates" },
+  S: { kind: "appliance", appliance: "sink" },
   X: { kind: "appliance", appliance: "bin" },
   T: { kind: "appliance", appliance: "table" },
   D: { kind: "door" },
@@ -77,11 +91,17 @@ export const PARK_KITCHEN: LevelDef = {
   name: "Park Kitchen",
   biome: "park",
   dayLength: 150,
+  plates: 6,
   // Dining room (x 0..6) | dividing wall, walk-through gap and pass (x 7) |
   // kitchen (x 8..19).
+  //
+  // The sink starts next to the plate stack, so washing up and putting away is
+  // one move by default. Whether that is where it belongs — against the run to
+  // the pass, and the walk back from the tables — is the build phase's problem,
+  // and the point of it.
   rows: [
     "####################",
-    "#......#tlcfwpP===X#",
+    "#......#tlcfwpPS==X#",
     "#.T..T.#...........#",
     "#........=B=.......#",
     "D......=...........O",

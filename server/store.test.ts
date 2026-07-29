@@ -26,7 +26,14 @@ afterEach(() => {
 });
 
 function save(day: number): Save {
-  return { schema: 2, level: LEVEL.id, appliances: [{ kind: "oven", x: 3, y: 3 }], money: 0, day };
+  return {
+    schema: 3,
+    level: LEVEL.id,
+    appliances: [{ kind: "oven", x: 3, y: 3 }],
+    money: 0,
+    day,
+    plates: 6,
+  };
 }
 
 describe("reading", () => {

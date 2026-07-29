@@ -78,9 +78,14 @@ table, and is collected automatically by whoever picks up the dirty plate.
 
 Without this, dirty plates are a toll: pure maintenance work standing between
 you and the next order. With it, clearing a table is a decision you *want* to
-make — "grab the tip and the plate on my way back from table 3" — and the sink
-loop that follows next patch inherits an economic pull instead of being pure
-maintenance.
+make — "grab the tip and the plate on my way back from table 3".
+
+That pull is what the sink inherits. Plates are finite now, so the walk to the
+table is also the walk that keeps the kitchen able to plate anything at all; the
+money is what makes it feel like a move rather than a chore. A pile of up to
+four comes up in one pair of hands, and every plate in it brings its table's tip
+with it — a sweep of three tables must not pay less than three separate trips.
+The rest of that loop is [in the content model](content.md#the-plate-economy).
 
 A table with anything on it cannot be sat at, so the tip and the seat are the
 same decision under pressure: leave it and lose capacity, clear it and lose the

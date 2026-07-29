@@ -73,7 +73,7 @@ export class Host {
   constructor(save?: Save | null, level: LevelDef = LEVEL) {
     this.level = level;
     this.world = createWorld(level, 0);
-    this.restored = save ? restore(this.world, save, level.id) : null;
+    this.restored = save ? restore(this.world, save, level) : null;
   }
 
   // --- players ---------------------------------------------------------------

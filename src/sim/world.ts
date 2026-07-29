@@ -1,6 +1,16 @@
 import { LEGEND, type LevelDef } from "../data/level";
+import { plateCount, stockPlates } from "./plates";
 import { nextRandom } from "./random";
-import type { Appliance, EffectCue, Player, PlayerInput, Vec2, World } from "./types";
+import type {
+  Appliance,
+  ApplianceKind,
+  EffectCue,
+  ItemSpec,
+  Player,
+  PlayerInput,
+  Vec2,
+  World,
+} from "./types";
 
 export const TILE = 1;
 /** Player collision radius, in tiles. */
@@ -136,28 +146,89 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
         world.tiles[idx] = { wall: false, door: true };
         world.door = { x, y };
       } else if (spec.kind === "appliance") {
-        const appliance: Appliance = {
-          id: world.nextId++,
-          kind: spec.appliance,
-          tile: { x, y },
-          item: null,
-          progress: 0,
-          overcook: 0,
-          justFinished: false,
-          motion: null,
-          source: spec.source ?? null,
-          heldBy: null,
-          tip: 0,
-        };
-        world.appliances.set(appliance.id, appliance);
-        world.applianceAt[idx] = appliance.id;
+        spawnAppliance(world, spec.appliance, { x, y }, spec.source ?? null);
       }
     }
   }
 
+  // The kitchen's plates, clean and on the stack. Everything after this moves
+  // them around; nothing creates or destroys one — see `sim/plates.ts`.
+  stockPlates(world, level.plates);
+
   for (let i = 0; i < playerCount; i++) addPlayer(world, level);
 
   return world;
+}
+
+/**
+ * Put a new appliance on the grid.
+ *
+ * The one place an appliance comes into existence, so building a kitchen from
+ * ASCII, restoring one from a save and topping one up after a content update
+ * cannot drift into three subtly different `Appliance` literals.
+ */
+export function spawnAppliance(
+  world: World,
+  kind: ApplianceKind,
+  tile: Vec2,
+  source: ItemSpec | null = null,
+): Appliance {
+  const appliance: Appliance = {
+    id: world.nextId++,
+    kind,
+    tile: { x: tile.x, y: tile.y },
+    item: null,
+    progress: 0,
+    overcook: 0,
+    justFinished: false,
+    motion: null,
+    source,
+    heldBy: null,
+    tip: 0,
+  };
+  world.appliances.set(appliance.id, appliance);
+  world.applianceAt[tileIndex(world, tile.x, tile.y)] = appliance.id;
+  return appliance;
+}
+
+/**
+ * Somewhere the game may put an appliance without asking anybody.
+ *
+ * The **door is not free**, even though it is walkable and empty: an appliance
+ * standing in it seals the dining room off from every customer in the park.
+ * That is a thing a *player* is allowed to do to their own kitchen — the build
+ * phase warns them and `canPlace` permits it — but it is not a thing the game
+ * gets to do on their behalf while nobody is watching.
+ */
+export function isFreeTile(world: World, x: number, y: number): boolean {
+  if (!inBounds(world, x, y)) return false;
+  const tile = world.tiles[tileIndex(world, x, y)];
+  if (tile?.wall || tile?.door) return false;
+  return (world.applianceAt[tileIndex(world, x, y)] ?? 0) === 0;
+}
+
+/**
+ * The free tile closest to `from`, or null if the kitchen is completely full.
+ *
+ * Shared by everything that has an appliance and a preference about where it
+ * goes but no right to insist: a disconnected player's oven going home, and a
+ * save being given back an appliance it predates.
+ */
+export function nearestFreeTile(world: World, from: Vec2): Vec2 | null {
+  if (isFreeTile(world, from.x, from.y)) return { x: from.x, y: from.y };
+  let best = Infinity;
+  let found: Vec2 | null = null;
+  for (let y = 0; y < world.height; y++) {
+    for (let x = 0; x < world.width; x++) {
+      if (!isFreeTile(world, x, y)) continue;
+      const distance = (x - from.x) ** 2 + (y - from.y) ** 2;
+      if (distance < best) {
+        best = distance;
+        found = { x, y };
+      }
+    }
+  }
+  return found;
 }
 
 /**
@@ -203,6 +274,11 @@ export function adoptPlayer(world: World, id: number, name: string, at: Vec2): P
  * an item on the floor, and a chef vanishing while leaving a pizza hovering in
  * mid-air is a worse bug than losing an ingredient.
  *
+ * A **plate** is not food. Ingredients are infinite and plates are not, so a
+ * dropped connection taking the last two plates out of the kitchen would be a
+ * room nobody can fix. They go back on the stack, washed — the same tidying-up
+ * the end of a day does.
+ *
  * An appliance is different — it has a home. It goes back to the tile it was
  * lifted from, or the nearest free tile if someone has since filled it. Losing
  * an oven because a player's wifi dropped would be unrecoverable.
@@ -216,6 +292,7 @@ export function removePlayer(world: World, id: number): void {
     const appliance = world.appliances.get(player.carriedAppliance);
     if (appliance) returnAppliance(world, appliance);
   }
+  stockPlates(world, plateCount(player.carried));
   for (const appliance of world.appliances.values()) {
     if (appliance.heldBy === id) appliance.heldBy = null;
   }
@@ -225,26 +302,8 @@ export function removePlayer(world: World, id: number): void {
 
 /** Put a held appliance back on the grid, at home or as close as possible. */
 function returnAppliance(world: World, appliance: Appliance): void {
-  const free = (x: number, y: number): boolean =>
-    inBounds(world, x, y) &&
-    !world.tiles[tileIndex(world, x, y)]?.wall &&
-    (world.applianceAt[tileIndex(world, x, y)] ?? 0) === 0;
-
-  let target = appliance.tile;
-  if (!free(target.x, target.y)) {
-    let best = Infinity;
-    for (let y = 0; y < world.height; y++) {
-      for (let x = 0; x < world.width; x++) {
-        if (!free(x, y)) continue;
-        const distance = (x - target.x) ** 2 + (y - target.y) ** 2;
-        if (distance < best) {
-          best = distance;
-          target = { x, y };
-        }
-      }
-    }
-    if (best === Infinity) return; // nowhere to put it; it simply ceases to be
-  }
+  const target = nearestFreeTile(world, appliance.tile);
+  if (!target) return; // nowhere to put it; it simply ceases to be
   appliance.tile = { x: target.x, y: target.y };
   appliance.heldBy = null;
   world.applianceAt[tileIndex(world, target.x, target.y)] = appliance.id;

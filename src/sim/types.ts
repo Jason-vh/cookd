@@ -54,10 +54,10 @@ import type { ApplianceKind } from "../data/appliances";
  * appliance kind, so several appliances can offer the same work at different
  * speeds (any counter can prep; a board just does it faster).
  */
-export type Station = "prep" | "fry" | "bake";
+export type Station = "prep" | "fry" | "bake" | "wash";
 
 /** Actions a chef performs by hand, each with its own working animation. */
-export type ChefMotion = "chop" | "knead" | "mix";
+export type ChefMotion = "chop" | "knead" | "mix" | "scrub";
 
 /**
  * The physical action a transform represents. Purely a presentation hint — the

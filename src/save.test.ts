@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "./data/level";
+import { platesInWorld } from "./sim/plates";
 import { createWorld } from "./sim/world";
 import { migrate, parseSave, restore, saveSignature, snapshot, type Save } from "./save";
 
@@ -17,6 +18,17 @@ function world() {
 /** Every appliance as "kind at x,y", sorted — identity without ids. */
 function places(target: ReturnType<typeof world>): string[] {
   return [...target.appliances.values()].map((a) => `${a.kind}@${a.tile.x},${a.tile.y}`).sort();
+}
+
+/**
+ * How many of one kind a world has.
+ *
+ * Counting by kind rather than by total, because a restored kitchen is also
+ * handed back any *essential* appliance its file has none of — see `topUp`. A
+ * test about where an oven ends up should not fail because a sink turned up.
+ */
+function kinds(target: ReturnType<typeof world>, kind: string): number {
+  return [...target.appliances.values()].filter((a) => a.kind === kind).length;
 }
 
 describe("round trip", () => {
@@ -61,7 +73,7 @@ describe("round trip", () => {
 });
 
 describe("a file we cannot trust", () => {
-  const good: Save = { schema: 2, level: LEVEL.id, appliances: [], money: 0, day: 1 };
+  const good: Save = { schema: 3, level: LEVEL.id, appliances: [], money: 0, day: 1, plates: 6 };
 
   test("an unknown appliance kind is rejected at the door", () => {
     // This is the eviction loop: `applianceDef(kind).speed` throws inside the
@@ -101,11 +113,13 @@ describe("a file we cannot trust", () => {
     };
     const target = world();
     expect(restore(target, save)).toEqual({ ok: true });
-    expect(target.appliances.size).toBe(1);
+    expect(kinds(target, "oven")).toBe(1);
+    expect(kinds(target, "fryer")).toBe(0);
 
+    // Everything restored is on the grid, essentials included: an appliance in
+    // the map but not in `applianceAt` is a solid-looking phantom.
     const onGrid = target.applianceAt.filter((id) => id !== 0);
-    expect(onGrid.length).toBe(1);
-    expect(target.appliances.has(onGrid[0]!)).toBe(true);
+    expect(onGrid.length).toBe(target.appliances.size);
   });
 
   test("an appliance out of bounds or inside a wall is dropped", () => {
@@ -120,7 +134,7 @@ describe("a file we cannot trust", () => {
     };
     const target = world();
     expect(restore(target, save)).toEqual({ ok: true });
-    expect(target.appliances.size).toBe(1);
+    expect(kinds(target, "oven")).toBe(1);
   });
 
   test("a save that restores to nothing is refused, and leaves the world intact", () => {
@@ -151,9 +165,10 @@ describe("migration", () => {
       appliances: [{ kind: "oven", x: 3, y: 3 }],
       money: 90,
       day: 6,
+      plates: 0,
     };
     const migrated = migrate(v1);
-    expect(migrated?.schema).toBe(2);
+    expect(migrated?.schema).toBe(3);
     expect(migrated?.level).toBe(LEVEL.id);
 
     const target = world();
@@ -163,13 +178,79 @@ describe("migration", () => {
   });
 
   test("a save from the future is refused rather than half-understood", () => {
-    const future: Save = { schema: 99, level: LEVEL.id, appliances: [], money: 0, day: 1 };
+    const future: Save = {
+      schema: 99,
+      level: LEVEL.id,
+      appliances: [],
+      money: 0,
+      day: 1,
+      plates: 6,
+    };
     expect(migrate(future)).toBeNull();
     expect(restore(world(), future)).toEqual({ ok: false, reason: "schema" });
   });
 
   test("a schema with no route forward is refused, not looped on", () => {
-    const orphan: Save = { schema: 0, level: LEVEL.id, appliances: [], money: 0, day: 1 };
+    const orphan: Save = {
+      schema: 0,
+      level: LEVEL.id,
+      appliances: [],
+      money: 0,
+      day: 1,
+      plates: 6,
+    };
     expect(migrate(orphan)).toBeNull();
+  });
+
+  test("a v2 save is given the plates it was written before", () => {
+    // Plates became finite in v3. A v2 file cannot say how many the kitchen
+    // owns, and defaulting to zero would restore a kitchen that cannot plate
+    // anything at all.
+    const v2: Save = {
+      schema: 2,
+      level: LEVEL.id,
+      appliances: [
+        { kind: "table", x: 2, y: 2 },
+        { kind: "table", x: 4, y: 2 },
+        { kind: "plates", x: 3, y: 3 },
+      ],
+      money: 0,
+      day: 1,
+      plates: 0,
+    };
+    expect(migrate(v2)?.plates).toBe(4);
+  });
+});
+
+describe("what a save is not allowed to lose", () => {
+  test("the plate count survives the round trip", () => {
+    const before = world();
+    expect(platesInWorld(before)).toBe(LEVEL.plates);
+
+    const after = createWorld(LEVEL, 0);
+    after.appliances.clear();
+    expect(restore(after, snapshot(before))).toEqual({ ok: true });
+    expect(platesInWorld(after)).toBe(LEVEL.plates);
+  });
+
+  test("a save written before the sink existed is given one", () => {
+    // There is no way to sell an appliance, so a kind the level provides and
+    // the file does not mention means the file *predates* it. Before this, such
+    // a save restored a kitchen where a dirty plate could never be used again —
+    // which, with plates finite, is a room that stops working after six
+    // customers and stays broken because it is written back to disk.
+    const save = snapshot(world());
+    const withoutSink = {
+      ...save,
+      appliances: save.appliances.filter((entry) => entry.kind !== "sink"),
+    };
+
+    const target = world();
+    expect(restore(target, withoutSink)).toEqual({ ok: true });
+    const sinks = [...target.appliances.values()].filter((a) => a.kind === "sink");
+    expect(sinks.length).toBe(1);
+    // ...and on the grid, not merely in the map: a phantom sink is a tile
+    // players walk through and cannot use.
+    expect(target.applianceAt.includes(sinks[0]!.id)).toBe(true);
   });
 });

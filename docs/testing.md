@@ -11,12 +11,12 @@ bun test         # just the tests
 
 | Suite | What it proves |
 | --- | --- |
-| `src/sim/sim.test.ts` | The game, driven the way a player drives it — `PlayerInput` into `step()`, which is only possible because the sim is pure. The full pizza pipeline, hold-to-chop semantics, burning, collision regressions, the day/build loop, and the dining room: seating, delivery, the wrong dish, tips, bussing, walkouts, a walled-off room, the closing beat. |
+| `src/sim/sim.test.ts` | The game, driven the way a player drives it — `PlayerInput` into `step()`, which is only possible because the sim is pure. The full pizza pipeline, hold-to-chop semantics, burning, collision regressions, the day/build loop, the dining room (seating, delivery, the wrong dish, tips, bussing, walkouts, a walled-off room, the closing beat), and the plate economy — including one test that **counts the kitchen's plates** through a serve, a binning, a disconnect, closing time and an appliance being lifted, because a plate that stops existing is a room that stops working. |
 | `src/game/host.test.ts` | The multiplayer machinery **without a socket in sight**: stable ids across a departure, what a leaver was holding, one-input-per-tick consumption and acks, reset, holding a seat, and a full encode/decode round trip proving a client that has only ever seen frames ends up with the same kitchen. `Host` is the same class the server runs, so anything proved here is proved for hosted play. |
 | `src/game/wire.test.ts` | That nothing malformed reaches the simulation. NaN, infinities, wrong types, oversized payloads, unbounded nesting — and that honest input still passes through unchanged. |
 | `server/server.test.ts` | The transport, against a **real server in a subprocess**: the handshake, a duplicate `hello`, seat reclaim after a drop, that one connection cannot drive another's chef, and that a NaN payload leaves every other player in the room untouched. |
 | `server/store.test.ts` | Saves on disk: atomic writes, coalescing, quarantine of a file we cannot read, and that a failed write is reported rather than swallowed. |
-| `src/save.test.ts` | The save format: round trips, migration from v1, and every way a file can be wrong. |
+| `src/save.test.ts` | The save format: round trips, migration from older schemas, that a save written before the sink existed is given one rather than restoring an unplayable kitchen, and every way a file can be wrong. |
 | `src/render/anim.test.ts` | The animation maths, which is why it lives in a file with no three.js in it. The chop cycle's three segments, and that easing is frame-rate independent. |
 | `src/render/camera.test.ts` | Framing: following the local chefs, staying inside the kitchen, any aspect ratio. |
 | `src/input/input.test.ts` | Gamepad seating, including that a pad which is merely plugged in takes no seat. |

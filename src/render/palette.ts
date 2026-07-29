@@ -54,6 +54,11 @@ export const PALETTE = {
   ceramic: 0xf1ece0,
   bin: 0x4a453e,
   brass: 0xc9a86b,
+  // Scuffed stainless, and the one pool of water in the kitchen. The suds are
+  // brighter than the ceramic so a full sink reads from across the room.
+  sinkBody: 0x9aa5ad,
+  sinkBasin: 0x77828b,
+  suds: 0xeef5f7,
 
   // --- food (mildly saturated: the warmest, brightest things on screen) ---
   tomato: 0xcf5642,

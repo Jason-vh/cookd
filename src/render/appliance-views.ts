@@ -141,6 +141,16 @@ export class ApplianceViews {
         visual.basket.rotation.z = 0.4 + (frying ? Math.sin(phase * 0.7) * 0.12 : 0);
     }
 
+    if (visual.water) {
+      // Water sloshes while somebody is at it and lies flat when they are not.
+      // A sink with a pile waiting already advertises itself — the pile is
+      // drawn, and it grows — so this only has to say "in use".
+      const scrubbing = appliance.motion === "scrub";
+      const slosh = Math.sin(phase) * 0.6 + Math.sin(phase * 1.9) * 0.4;
+      visual.water.position.y = height - 0.01 + (scrubbing ? slosh * 0.012 : 0);
+      visual.water.scale.y = scrubbing ? 1 + slosh * 0.5 : 1;
+    }
+
     if (visual.glass) {
       // Slow, uneven ember glow: an oven does not blink, it breathes. Kept low
       // on purpose: pushed hard the emissive washes the dark glass out to flat

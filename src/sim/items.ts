@@ -18,7 +18,13 @@ export function makeItem(world: World, spec: ItemSpec): Item {
   };
 }
 
-export function isPlate(item: Item | null): boolean {
+/**
+ * A type predicate, not just a boolean: "is this a plate" is nearly always
+ * asked in order to *do* something to it, and callers were left re-checking
+ * for null a second time to convince the compiler of what they had just
+ * established.
+ */
+export function isPlate(item: Item | null): item is Item {
   return item !== null && item.base === "plate";
 }
 

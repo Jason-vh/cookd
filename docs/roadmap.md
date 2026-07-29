@@ -4,11 +4,6 @@
 
 Near term:
 
-- **The sink.** Closes the plate economy the dining room opened. Dirty plates,
-  bussing and the tip already exist; today the plate stack washes up for free,
-  which is a hand-wave with an obvious shape to replace — a `sink` appliance
-  with a hold-to-scrub transform from `plate|dirty` to `plate`, and a plate
-  count that can actually run out.
 - **Door queue and rushes.** Customers who find the room full wait at the door
   and give up; the next step is showing that queue properly and weighting
   arrivals into visible **groups** so a rush is four people on the path rather
@@ -28,7 +23,11 @@ Near term:
   already split static/dynamic.
 
 - **Shop phase** — spend money on new appliances between days (appliance prices
-  already exist in `data/appliances.ts`).
+  already exist in `data/appliances.ts`). **Extra plates** should be the cheap
+  item on that list: plate count is now real capacity, alongside tables, and
+  buying one is the smallest possible interesting decision. It is also the first
+  thing that will change a kitchen's plate count after creation, which is why
+  the save carries the number rather than deriving it from the level.
 - **More content** — soups (pots + liquids), drinks, sides.
 - **Juice** — pickup/serve/burn sounds, steam and sizzle particles, screen shake
   on burn.
@@ -89,10 +88,17 @@ the oven is. What genuinely belongs to a person rather than to a kitchen — you
 name, how many of you share this screen, your appearance later — stays in the
 browser, in `src/identity.ts`.
 
-Only what a *player* changed is stored: appliance layout, money, day. Items
-mid-flight, orders and timers are deliberately discarded: a save that restores a
-half-chopped tomato and a ticking order is a save that can restore a broken
-game, and none of it is worth resuming.
+Only what a *player* changed is stored: appliance layout, money, day, and how
+many plates the kitchen owns. Items mid-flight, orders and timers are
+deliberately discarded: a save that restores a half-chopped tomato and a ticking
+order is a save that can restore a broken game, and none of it is worth
+resuming.
+
+Plates are the exception that proves it. They are finite, so they cannot simply
+be dropped with the rest of the crockery in flight — but *where* they were lying
+is exactly as worthless as a half-chopped tomato. So the save stores a **count**
+and the load puts them all back clean on the stack. Restoring the washing-up is
+nobody's idea of resuming a game.
 
 It lives outside `sim/` on purpose. The simulation must not know storage exists.
 
@@ -102,11 +108,25 @@ worth more than any query ability we would ever use.
 
 Two guards stop a stale save corrupting a session:
 
-- `schema` — bumped when the snapshot shape changes.
-- `level` — an FNV-1a hash of the level ASCII itself. Edit the layout and old
-  saves are dropped rather than restoring appliances into a kitchen that has
-  moved around them. Size alone is not enough: two different layouts can share
-  dimensions.
+- `schema` — bumped when the snapshot shape changes. Older saves are migrated
+  one version at a time, never dropped.
+- `level` — the level's id, so a layout change is a deliberate act with a name
+  rather than a side effect of touching the file.
+
+A third rule covers what those two cannot: **a restored kitchen is given back
+any essential appliance its file has none of.** There is no way to sell an
+appliance, so a kind the level provides and the save never mentions means the
+save *predates* it — which was harmless when new content meant a new crate, and
+stopped being harmless with the sink. Every save written before it existed
+describes a kitchen where a dirty plate can never be used again, and with plates
+finite that room stops working partway through a day and then writes that state
+back to disk.
+
+The alternative was to rename the level and throw every existing kitchen away:
+a real cost, paid by real people, to avoid twenty lines. "Essential" is
+deliberately a short list (`plates`, `sink`) rather than "everything the level
+ships" — a save with no oven is a player who moved their oven, and one day it
+will be a player who sold it.
 
 A room is written when what it would save **differs from what is on disk** —
 compared with `saveSignature`, which covers the layout, the money and the day.

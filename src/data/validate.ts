@@ -115,6 +115,19 @@ export function validateContent(): string[] {
     if (!level.rows.some((row) => row.includes("T"))) {
       problems.push(`level "${id}": no table, so no customer can ever sit`);
     }
+    // Plates are finite and conserved, so the two appliances the plate economy
+    // runs on are not optional scenery: without a stack there is nowhere for
+    // the kitchen's plates to start, and without a sink the first six dirty
+    // ones end the run.
+    const tiles = level.rows.join("");
+    if (!tiles.includes("P")) problems.push(`level "${id}": no plate stack, so no plates`);
+    if (!tiles.includes("S")) {
+      problems.push(`level "${id}": no sink, so a dirty plate can never be used again`);
+    }
+    const tables = tiles.split("T").length - 1;
+    if (level.plates < tables) {
+      problems.push(`level "${id}": ${level.plates} plates for ${tables} tables`);
+    }
   }
 
   return problems;

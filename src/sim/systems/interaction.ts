@@ -1,6 +1,15 @@
 import { applianceDef } from "../../data/appliances";
 import { COMBINE_INDEX, pairKey } from "../../data/recipes";
 import { isBurnt, isDirty, isPlate, makeItem, specKey } from "../items";
+import {
+  MAX_CARRIED_PLATES,
+  MAX_PLATES,
+  emptyAppliance,
+  scrape,
+  shelvePlate,
+  stackPlates,
+  unshelvePlate,
+} from "../plates";
 import type { Appliance, Inputs, Item, Player, World } from "../types";
 import {
   PLAYER_RADIUS,
@@ -41,12 +50,20 @@ function serviceGrab(world: World, player: Player): void {
   if (!appliance) return;
   const def = applianceDef(appliance.kind);
 
+  // The plate stack answers a grab entirely on its own terms, in both
+  // directions, so it is handled before anything else can get a word in. That
+  // ordering is also what makes a pre-sink save safe: those stored a `source`
+  // on the plate stack, back when it conjured plates out of nothing, and the
+  // source branches below would happily honour it.
+  if (appliance.kind === "plates") {
+    usePlateStack(world, player, appliance);
+    return;
+  }
+
   if (player.carried) {
     // --- putting something down ---
     if (appliance.kind === "bin") {
-      player.carried = null;
-      effect(world, { kind: "binned", tile: appliance.tile });
-      log(world, "Binned");
+      useBin(world, player, appliance);
       return;
     }
     // Note there is no "serve" case here any more. The pass is a counter, not a
@@ -66,18 +83,9 @@ function serviceGrab(world: World, player: Player): void {
       player.carried = null;
       return;
     }
-    // The plate stack also takes dirty plates back and hands them out clean.
-    // A hand-wave for one release: the sink is the next patch, and it slots in
-    // here without anything else about bussing having to change.
-    if (appliance.kind === "plates" && isDirty(player.carried)) {
-      log(world, "Washed up");
-      player.carried = null;
-      return;
-    }
     // ...or hands one straight into what you're carrying, when the two go
-    // together: walk chopped lettuce to the plate stack and you leave with a
-    // plated salad, no round trip to a counter. Same rule gets a tomato
-    // straight onto a held plate.
+    // together: carry a plate past the tomato crate and you leave with a plated
+    // tomato, no round trip to a counter.
     if (appliance.source) {
       const dispensed = makeItem(world, appliance.source);
       const merged = merge(dispensed, player.carried) ?? merge(player.carried, dispensed);
@@ -85,6 +93,15 @@ function serviceGrab(world: World, player: Player): void {
         player.carried = merged;
         return;
       }
+    }
+    // Plates come **up** into your hands, everywhere except the two places
+    // plates belong. Bussing is a sweep — table, table, table, sink — and a
+    // rule that put your pile down on the second table instead of adding to it
+    // would make carrying four plates impossible to actually do.
+    if (appliance.kind === "sink") {
+      if (useSink(world, player, appliance)) return;
+    } else if (takePlatesUp(world, player, appliance)) {
+      return;
     }
     if (!def.acceptsItems) return;
 
@@ -119,6 +136,144 @@ function serviceGrab(world: World, player: Player): void {
     appliance.overcook = 0;
     collectTip(world, player, appliance);
   }
+}
+
+/**
+ * The bin scrapes; it does not swallow.
+ *
+ * Plates are finite and conserved, so the bin — the one appliance whose whole
+ * job is destroying things — is the most dangerous place in the kitchen for
+ * one. It takes the food and hands the crockery back **dirty**, which is what a
+ * real kitchen does with a ruined plate of food, and which quietly feeds the
+ * sink from the same direction bussing does.
+ */
+function useBin(world: World, player: Player, appliance: Appliance): void {
+  const carried = player.carried;
+  if (!carried) return;
+  const hasFood = !isPlate(carried) || carried.contents.some((child) => !isPlate(child));
+  player.carried = scrape(carried);
+  if (!hasFood) {
+    log(world, "Plates don't go in the bin");
+    return;
+  }
+  effect(world, { kind: "binned", tile: appliance.tile });
+  log(world, player.carried ? "Scraped" : "Binned");
+}
+
+/**
+ * Add the plates resting here to the pile in your hands. Returns false when
+ * they are not plates, are not in the same state, or would not fit.
+ *
+ * The tip comes up with them, exactly as it does when a single dirty plate is
+ * picked up — the money is the reason to walk over, and a sweep of four tables
+ * must not pay less than four separate trips.
+ */
+function takePlatesUp(world: World, player: Player, appliance: Appliance): boolean {
+  const held = player.carried;
+  const resting = appliance.item;
+  if (!held || !resting) return false;
+  if (!stackPlates(resting, held, MAX_CARRIED_PLATES)) return false;
+  appliance.item = null;
+  appliance.progress = 0;
+  appliance.overcook = 0;
+  collectTip(world, player, appliance);
+  return true;
+}
+
+/**
+ * The sink takes plates down, and takes as many as you have.
+ *
+ * Capacity here is not the hands' four: a sink is where the washing-up goes,
+ * and "the sink is full" is a sentence about a kitchen that has already gone
+ * wrong in a more interesting way. What it will not do is pile dirty plates
+ * onto the clean ones somebody has just finished washing — the head of a pile
+ * is what the sink reads to decide there is work to do, so a clean-headed pile
+ * with dirty plates hidden in it is washing-up nobody can ever get at.
+ *
+ * Returns false for anything that is not crockery, which falls through to the
+ * ordinary put-it-down rules: the sink is still a surface.
+ */
+function useSink(world: World, player: Player, sink: Appliance): boolean {
+  const carried = player.carried;
+  if (!carried || !isPlate(carried)) return false;
+  if (carried.contents.some((child) => !isPlate(child))) return false;
+
+  if (!sink.item) {
+    sink.item = carried;
+    player.carried = null;
+    return true;
+  }
+  if (!stackPlates(carried, sink.item, MAX_PLATES)) {
+    // Plates onto plates that will not have them: say why. Anything else in
+    // the basin is not this rule's business, so it falls through to the
+    // ordinary put-it-down path.
+    if (!isPlate(sink.item)) return false;
+    log(world, "Take the clean ones out first");
+    return true;
+  }
+  player.carried = null;
+  sink.progress = 0;
+  return true;
+}
+
+/**
+ * The plate stack: the kitchen's supply, and a finite one.
+ *
+ * It used to be a `source` — an infinite spring that also washed up for free,
+ * which meant the dirty plate a customer left behind cost nothing but the walk.
+ * Now it holds a real pile of real plates:
+ *
+ *  - empty-handed, you take **one**;
+ *  - carrying clean plates, you put them all back, however many you washed;
+ *  - carrying food, a plate comes out to meet it — the move that lets you walk
+ *    chopped lettuce here and leave with a plated salad;
+ *  - carrying a dirty plate, nothing happens. That is the sink's job now, and
+ *    the whole point of the sink existing.
+ */
+function usePlateStack(world: World, player: Player, home: Appliance): void {
+  const carried = player.carried;
+
+  if (!carried) {
+    const plate = unshelvePlate(home);
+    if (!plate) {
+      log(world, "No clean plates — wash some up");
+      return;
+    }
+    player.carried = plate;
+    return;
+  }
+
+  if (isDirty(carried)) {
+    log(world, "Dirty — that goes in the sink");
+    return;
+  }
+
+  if (isPlate(carried)) {
+    // Clean plates go home. Anything loaded is refused: a plated dish is not
+    // put away, it is served.
+    if (carried.contents.some((child) => !isPlate(child))) {
+      log(world, "Take the food off first");
+      return;
+    }
+    shelvePlate(home, carried);
+    player.carried = null;
+    return;
+  }
+
+  if (isBurnt(carried)) return;
+  const plate = unshelvePlate(home);
+  if (!plate) {
+    log(world, "No clean plates — wash some up");
+    return;
+  }
+  const merged = merge(plate, carried) ?? merge(carried, plate);
+  if (merged) {
+    player.carried = merged;
+    return;
+  }
+  // Nothing came of it, so the plate goes straight back: a plate that leaves
+  // the stack and reaches nobody's hands is a plate the kitchen has lost.
+  shelvePlate(home, plate);
 }
 
 /**
@@ -160,6 +315,11 @@ function tryDeliver(world: World, player: Player, table: Appliance): void {
 function merge(held: Item, target: Item): Item | null {
   if (isBurnt(held) || isBurnt(target)) return null;
 
+  // Plates pile up rather than refusing each other, so one trip clears a
+  // dining room. Only same-state piles stack — see `sim/plates.ts`.
+  const stacked = stackPlates(held, target);
+  if (stacked) return stacked;
+
   const plated = tryPlate(held, target) ?? tryPlate(target, held);
   if (plated) return plated;
 
@@ -180,8 +340,16 @@ function merge(held: Item, target: Item): Item | null {
  */
 function tryPlate(plate: Item, food: Item): Item | null {
   if (!isPlate(plate) || isPlate(food)) return null;
-  // A dirty plate is not a workspace. It goes to the sink, or back on the stack.
+  // A dirty plate is not a workspace. It goes to the sink.
+  //
+  // This looks like it breaks the rule above, and it is the one refusal worth
+  // keeping: plating onto a dirty plate is a mistake you would not discover
+  // until the delivery bounced, by which time it is too late to be information.
+  // It is legible because the plate *looks* dirty from across the room.
   if (isDirty(plate)) return null;
+  // Neither is a pile. Take one off it first — which is exactly what the plate
+  // stack does for you when you carry food to it.
+  if (plate.contents.some((child) => isPlate(child))) return null;
   for (const existing of plate.contents) {
     if (tryCombine(food, existing)) return plate;
   }
@@ -230,9 +398,7 @@ function buildGrab(world: World, player: Player): void {
     const existing = applianceAtTile(world, tile.x, tile.y);
     if (existing) {
       existing.heldBy = player.id;
-      existing.item = null;
-      existing.progress = 0;
-      existing.overcook = 0;
+      emptyAppliance(world, existing);
       player.carriedAppliance = existing.id;
     } else {
       player.carriedAppliance = null;
@@ -248,10 +414,11 @@ function buildGrab(world: World, player: Player): void {
 
   const appliance = applianceAtTile(world, tile.x, tile.y);
   if (!appliance || !applianceDef(appliance.kind).movable) return;
+  // `heldBy` first: `emptyAppliance` sends any plates to a stack that is still
+  // standing on the grid, and this one no longer is. Lift the only plate stack
+  // in the kitchen and its plates travel with it rather than evaporating.
   appliance.heldBy = player.id;
-  appliance.item = null;
-  appliance.progress = 0;
-  appliance.overcook = 0;
+  emptyAppliance(world, appliance);
   world.applianceAt[idx] = 0;
   touchLayout(world);
   player.carriedAppliance = appliance.id;

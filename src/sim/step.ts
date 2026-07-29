@@ -1,3 +1,4 @@
+import { platesInWorld, stockPlates } from "./plates";
 import type { Inputs, World } from "./types";
 import { log } from "./world";
 import { applianceSystem } from "./systems/appliances";
@@ -124,6 +125,11 @@ function phaseSystem(world: World, inputs: Inputs, dt: number): void {
   if (startPressed) beginDay(world);
 }
 
+/** Is anybody carrying an appliance around? Only the build phase allows it. */
+function someoneIsHolding(world: World): boolean {
+  return world.players.some((player) => player.carriedAppliance !== null);
+}
+
 /** Close the kitchen immediately and move to the build phase. */
 export function endDay(world: World): void {
   world.phase = "build";
@@ -138,8 +144,16 @@ export function endDay(world: World): void {
  * Tips left on tables are swept up with everything else: an uncollected tip is
  * money the players chose not to walk over for, and carrying it into the next
  * day would quietly remove the reason to bus during service.
+ *
+ * **Plates are counted out and counted back in.** They are the one thing in the
+ * kitchen that cannot simply be thrown away at closing time: there are a fixed
+ * number of them, a day that ends mid-rush ends with most of them dirty on
+ * tables, and a wipe that took them with it would shrink the kitchen's supply
+ * every single day until the room could not serve anybody. Closing up washes
+ * up — which is what closing up is.
  */
 function clearService(world: World): void {
+  const plates = platesInWorld(world);
   world.customers.length = 0;
   for (const player of world.players) player.carried = null;
   for (const appliance of world.appliances.values()) {
@@ -148,10 +162,18 @@ function clearService(world: World): void {
     appliance.overcook = 0;
     appliance.tip = 0;
   }
+  stockPlates(world, plates);
 }
 
 /** Wipe the current day and run it again. Used by the pause menu. */
 export function restartDay(world: World): void {
+  // Same guard as opening a day, for the same reason: service has no way to put
+  // a held appliance down, so starting one while somebody is carrying an oven
+  // strands them holding it until the day ends.
+  if (someoneIsHolding(world)) {
+    log(world, "Put down what you're holding first");
+    return;
+  }
   world.phase = "service";
   world.dayTime = world.dayLength;
   world.nextArrivalIn = 2;
@@ -161,8 +183,7 @@ export function restartDay(world: World): void {
 
 /** Open the next day. Exported so the pause menu takes the same path. */
 export function beginDay(world: World): void {
-  const holding = world.players.some((p) => p.carriedAppliance !== null);
-  if (holding) {
+  if (someoneIsHolding(world)) {
     log(world, "Put down what you're holding first");
     return;
   }

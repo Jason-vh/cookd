@@ -471,7 +471,8 @@ const fries: Builder = (parent, item, y) => {
 
 // --- containers and failure states -------------------------------------------
 
-const plate: Builder = (parent, item, y) => {
+/** One piece of crockery: the dish, and the leftovers if it is a used one. */
+function addPlate(parent: THREE.Object3D, item: Item, y: number): void {
   const profile = lathe("plate", [
     [0, 0],
     [0.14, 0.004],
@@ -491,25 +492,43 @@ const plate: Builder = (parent, item, y) => {
   parent.add(dish);
 
   // Leftovers, so a used plate reads as used from the far side of the room
-  // rather than as a clean one someone forgot to pick up.
-  if (dirty) {
-    for (let i = 0; i < 5; i++) {
-      const smear = put(
-        parent,
-        mesh(sphere(0.026 + Math.abs(wobble(41, i)) * 0.018, 8), PALETTE.crumbs, "food"),
-        wobble(42, i) * 0.16,
-        y + 0.022,
-        wobble(43, i) * 0.16,
-      );
-      smear.scale.set(1.3, 0.42, 1.1);
-    }
+  // rather than as a clean one someone forgot to pick up. With plates finite
+  // this is load-bearing rather than decorative: a dirty plate refuses food,
+  // and a refusal is only fair if the plate says why.
+  if (!dirty) return;
+  for (let i = 0; i < 5; i++) {
+    const smear = put(
+      parent,
+      mesh(sphere(0.026 + Math.abs(wobble(41, i)) * 0.018, 8), PALETTE.crumbs, "food"),
+      wobble(42, i) * 0.16,
+      y + 0.022,
+      wobble(43, i) * 0.16,
+    );
+    smear.scale.set(1.3, 0.42, 1.1);
   }
+}
 
-  // Contents go in their own group so the meal can be emptied without the
-  // crockery going with it — see `setPlateFullness` in item-views.ts.
+/** Height of one plate in a pile. Thin enough to stack, thick enough to count. */
+const PLATE_PITCH = 0.05;
+
+const plate: Builder = (parent, item, y) => {
+  // A plate's contents are either a meal or *more plates* — see `sim/plates.ts`.
+  // The stacked ones are drawn underneath, so the plate on top is the one the
+  // item actually is: the one that says clean or dirty, and the one you would
+  // be handed if you took one off.
+  const stacked = item.contents.filter((child) => child.base === "plate");
+  stacked.forEach((child, index) => addPlate(parent, child, y + index * PLATE_PITCH));
+  const top = y + stacked.length * PLATE_PITCH;
+  addPlate(parent, item, top);
+
+  // The meal goes in its own group so it can be emptied without the crockery
+  // going with it — see `setPlateFullness` in item-views.ts. Stacked plates are
+  // deliberately *not* in it: a pile is not a meal, and must not shrink as one.
   const contents = new THREE.Group();
   contents.name = CONTENTS;
-  for (const child of item.contents) addModel(contents, child, y + 0.03);
+  for (const child of item.contents) {
+    if (child.base !== "plate") addModel(contents, child, top + 0.03);
+  }
   parent.add(contents);
 };
 

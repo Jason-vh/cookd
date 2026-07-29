@@ -46,11 +46,15 @@ export const WORK_RATE: Record<Motion, number> = {
   chop: 3.8,
   knead: 1.1,
   mix: 1.8,
+  // Quick and small: scrubbing is busy hands, not effort. Faster than kneading
+  // and shallower than chopping, so a chef at the sink reads as occupied
+  // without looking like they are fighting the crockery.
+  scrub: 3.2,
   fry: 1.7,
   bake: 0.45,
 };
 
-const CHEF_MOTIONS: ReadonlySet<Motion> = new Set<Motion>(["chop", "knead", "mix"]);
+const CHEF_MOTIONS: ReadonlySet<Motion> = new Set<Motion>(["chop", "knead", "mix", "scrub"]);
 
 /** Fryers and ovens cook by themselves; standing at one is not an action. */
 export function isChefMotion(motion: Motion | null | undefined): motion is ChefMotion {

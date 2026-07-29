@@ -1,6 +1,6 @@
 import { DISH_INDEX, RECIPES, RECIPE_BY_ID } from "../../data/recipes";
-import { DIRTY } from "../../data/ingredients";
 import { isDirty, isPlate, specKey } from "../items";
+import { scrape } from "../plates";
 import { pathTo, reachableFrom, seatsAround } from "../pathing";
 import type { Appliance, Customer, Vec2, World } from "../types";
 import { CUSTOMER_SPEED, effect, log, random, tileIndex } from "../world";
@@ -124,11 +124,18 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
       if (customer.timer > 0) return false;
       // Standing up leaves two things behind: the plate to bus, and the reason
       // to want to.
+      //
+      // **Scraped, not overwritten.** This used to rewrite whatever was on the
+      // table into a single dirty plate, which was fine when a plate was a
+      // plate. It is not fine now: nothing stops a chef clearing the table
+      // mid-meal and leaving something else there, and the rewrite would turn a
+      // pile of four into one plate (three destroyed) or a tomato into a plate
+      // (one conjured). Plates are conserved, so the one rule about what a used
+      // plate becomes lives in `sim/plates.ts` and is called from here.
       const table = tableOf(world, customer);
-      if (table && table.item) {
-        table.item.base = "plate";
-        table.item.processes = [DIRTY];
-        table.item.contents = [];
+      const used = table?.item ?? null;
+      if (table && isPlate(used)) {
+        scrape(used);
         table.tip = customer.tip;
       }
       leave(world, customer);

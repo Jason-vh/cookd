@@ -10,8 +10,9 @@ loop) and **PlateUp!** (kitchen as a thing you design and optimise across days).
 
 Status: **playable, and multiplayer.** Multiple chefs, three recipes, burning, a
 dining room with customers who walk in, sit, order, eat and leave, tips left on
-tables, a day loop, a build phase where appliances can be moved — and a server
-so the chefs can be in different countries.
+tables, a sink and a kitchen with only six plates to its name, a day loop, a
+build phase where appliances can be moved — and a server so the chefs can be in
+different countries.
 
 ---
 
@@ -79,10 +80,19 @@ The white square in front of your chef is what you'll interact with.
    table feeds them. The two counters in the dividing wall are the **pass** —
    one player can plate and slide, another can run.
 7. When they finish eating they leave behind a **dirty plate and a tip**. Pick
-   the plate up and the tip is yours; carry it to the plate stack to wash it.
-   A table with a plate still on it cannot be sat at, so clearing up *is* the
-   capacity.
-8. When the day timer hits zero — or you pick **Close up early** from the pause
+   the plate up and the tip is yours. A table with a plate still on it cannot be
+   sat at, so clearing up *is* the capacity.
+8. **Wash up.** Your kitchen owns six plates and no more, so the dirty ones have
+   to come back. Plates **stack in your hands** — up to four — so one sweep
+   clears a room: grab from each table in turn, drop the pile in the **sink**,
+   and hold `Use` to scrub. One plate per fill of the dial; the pile stays
+   dirty until the last one is done. Then carry them to the plate stack.
+   Nothing at the sink burns, boils over or catches fire; it is the one calm
+   place in the kitchen.
+
+   Ruined a dish? The **bin scrapes it** — the food goes and you keep the plate,
+   dirty. There is no way to throw a plate away, and no way to get another one.
+9. When the day timer hits zero — or you pick **Close up early** from the pause
    menu — you enter the **build phase**: face any appliance and `Grab` to pick
    it up. A **ghost** of it appears on the tile you're facing, showing exactly
    where it will land; `Grab` again to put it there. Drop it onto another

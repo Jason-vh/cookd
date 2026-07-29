@@ -1,4 +1,5 @@
 import type { ClientMessage, Frame, Layout, ServerMessage } from "./protocol";
+import { MAX_PLATES } from "../sim/plates";
 import type { ApplianceKind, CustomerState, Item, Motion, PlayerInput } from "../sim/types";
 
 /**
@@ -117,7 +118,17 @@ const MAX_APPLIANCES = 512;
 const MAX_EVENTS = 32;
 const MAX_ITEM_DEPTH = 4;
 const MAX_PROCESSES = 8;
-const MAX_CONTENTS = 4;
+/**
+ * A plate holds one dish — or, since the sink, a whole pile of plates: the
+ * kitchen's entire supply can be sitting on the stack as one item.
+ *
+ * Taken from the simulation's own ceiling rather than picked here. A pile
+ * taller than this limit makes every frame containing it fail to parse, so the
+ * client applies nothing at all and sits at "connecting" — the loudest possible
+ * symptom of the quietest possible mismatch, which is exactly the failure the
+ * note on `APPLIANCE_KINDS` below is about.
+ */
+const MAX_CONTENTS = MAX_PLATES;
 
 // --- items --------------------------------------------------------------------
 
@@ -282,6 +293,7 @@ const APPLIANCE_KINDS: Record<ApplianceKind, true> = {
   oven: true,
   crate: true,
   plates: true,
+  sink: true,
   bin: true,
   table: true,
 };
@@ -441,6 +453,7 @@ const MOTIONS: Record<Motion, true> = {
   chop: true,
   knead: true,
   mix: true,
+  scrub: true,
   fry: true,
   bake: true,
 };

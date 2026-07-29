@@ -32,6 +32,13 @@ export const TRANSFORMS: Transform[] = [
   { station: "prep", mode: "hold", motion: "chop", duration: 2.5, input: { base: "potato", processes: [] }, output: { base: "potato", processes: ["chopped"] } },
   { station: "prep", mode: "hold", motion: "knead", duration: 3.0, input: { base: "dough", processes: [] }, output: { base: "dough", processes: ["kneaded"] } },
 
+  // --- sink: the plate economy, closed. One hold, one plate, no burning ----
+  // A pile of dirty plates is a stack, and `applianceSystem` works a stack one
+  // plate per cycle, so this duration is per plate rather than per pile: the
+  // dial fills four times for a bussing sweep of four, and walking away costs
+  // you the plate in hand, not the sweep.
+  { station: "wash", mode: "hold", motion: "scrub", duration: 1.5, input: { base: "plate", processes: ["dirty"] }, output: { base: "plate", processes: [] } },
+
   // --- fryer / oven: run on their own, then burn ---------------------------
   { station: "fry", mode: "auto", motion: "fry", duration: 5.0, burnAfter: 6.0, input: { base: "potato", processes: ["chopped"] }, output: { base: "fries", processes: ["fried"] } },
   { station: "bake", mode: "auto", motion: "bake", duration: 8.0, burnAfter: 8.0, input: { base: "pizza", processes: ["sauced", "topped"] }, output: { base: "pizza", processes: ["sauced", "topped", "baked"] } },

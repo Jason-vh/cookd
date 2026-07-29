@@ -67,6 +67,8 @@ export type ApplianceParts = {
   oil?: THREE.Mesh;
   oilGlow?: THREE.MeshStandardMaterial;
   basket?: THREE.Object3D;
+  /** Sink: the water surface, which ripples while somebody is scrubbing. */
+  water?: THREE.Mesh;
   /** Oven: one per camera-facing door. */
   glass?: THREE.MeshStandardMaterial[];
   /** Bin: flips open when something goes in. */
@@ -207,7 +209,12 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   fryer: { body: [PALETTE.fryerBody, "enamel"], top: [PALETTE.ceramic, "enamel"], label: "Fryer" },
   oven: { body: [PALETTE.ovenBody, "enamel"], top: [PALETTE.ovenGlass, "enamel"], label: "Oven" },
   crate: { body: [PALETTE.crate, "wood"], top: [PALETTE.crateTop, "wood"] },
-  plates: { body: [PALETTE.steel, "enamel"] },
+  // No top slab and no decorative crockery: what the stack is holding is drawn
+  // by `item-views.ts`, because it is now a real, countable pile. An empty
+  // plate stack has to *look* empty — that is the moment the whole feature
+  // exists to create.
+  plates: { body: [PALETTE.steel, "enamel"], label: "Plates" },
+  sink: { body: [PALETTE.sinkBody, "enamel"], label: "Sink" },
   bin: { body: [PALETTE.bin, "enamel"], top: [PALETTE.steelDark, "enamel"], label: "Bin" },
   table: { body: [PALETTE.wood, "wood"], label: "Table" },
 };
@@ -287,11 +294,41 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
       break;
     }
     case "plates": {
-      for (let i = 0; i < 3; i++) {
-        const plate = mesh(cylinder(0.3, 0.27, 0.045), PALETTE.ceramic, "enamel");
-        plate.position.y = h + 0.04 + i * 0.05;
-        group.add(plate);
-      }
+      // A shallow lip, so plates put back on it look put *away* rather than
+      // balanced on a box.
+      const lip = mesh(torus(0.34, 0.028), PALETTE.steelDark, "metal");
+      lip.rotation.x = Math.PI / 2;
+      lip.position.y = h + 0.02;
+      group.add(lip);
+      break;
+    }
+    case "sink": {
+      // A basin sunk into the top, a rim around it, and a tap at the back. The
+      // recess is what stops the sink reading as another counter: the one place
+      // in the kitchen where the surface goes *down*.
+      const basin = mesh(roundedBox(0.66, 0.14, 0.66, 0.05), PALETTE.sinkBasin, "metal");
+      basin.position.y = h - 0.06;
+      group.add(basin);
+
+      const rim = mesh(roundedBox(0.82, 0.06, 0.82, 0.03), PALETTE.steel, "metal");
+      rim.position.y = h + 0.01;
+      group.add(rim);
+
+      const water = mesh(roundedBox(0.62, 0.03, 0.62, 0.02), PALETTE.suds, "ceramic");
+      water.position.y = h - 0.01;
+      group.add(water);
+      parts.water = water;
+
+      const spout = mesh(cylinder(0.03, 0.035, 0.34), PALETTE.brass, "metal");
+      spout.position.set(0, h + 0.17, -0.36);
+      group.add(spout);
+      const neck = mesh(cylinder(0.028, 0.028, 0.22), PALETTE.brass, "metal");
+      neck.rotation.x = Math.PI / 2;
+      neck.position.set(0, h + 0.32, -0.27);
+      group.add(neck);
+      const tap = mesh(sphere(0.05), PALETTE.brass, "metal");
+      tap.position.set(0, h + 0.34, -0.36);
+      group.add(tap);
       break;
     }
     default:

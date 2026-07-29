@@ -24,6 +24,7 @@ src/
     types.ts              World, Player, Customer, Item, Appliance, PlayerInput
     world.ts              world construction from a level, tile/collision helpers, PRNG
     items.ts              item identity + canonical keys
+    plates.ts             the crockery, and the promise that none of it is ever destroyed
     pathing.ts            BFS over walkable tiles: customer routes and reachability
     random.ts             the one PRNG — deterministic, shared with the scenery
     step.ts               fixed-timestep tick: runs the systems in order

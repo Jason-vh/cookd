@@ -1,6 +1,7 @@
 import { applianceDef } from "../data/appliances";
 import { ingredient } from "../data/ingredients";
-import { isDirty } from "./items";
+import { isDirty, isPlate } from "./items";
+import { plateCount } from "./plates";
 import { reachableFrom, seatsAround } from "./pathing";
 import { EAT_TIME, LAST_ORDERS } from "./systems/customers";
 import type { Appliance, Customer, Item, Player, World } from "./types";
@@ -109,8 +110,13 @@ export function isLastOrders(world: World): boolean {
 export function itemLabel(item: Item): string {
   const base = ingredient(item.base).name;
   if (item.base === "plate") {
-    if (isDirty(item)) return "Dirty plate";
-    return item.contents.length ? `Plate: ${itemLabel(item.contents[0]!)}` : "Plate";
+    // A pile says how big it is: "3 dirty plates" is the difference between a
+    // trip to the sink being worth making and being a chore.
+    const count = plateCount(item);
+    if (isDirty(item)) return count > 1 ? `${count} dirty plates` : "Dirty plate";
+    const food = item.contents.find((child) => !isPlate(child));
+    if (food) return `Plate: ${itemLabel(food)}`;
+    return count > 1 ? `${count} plates` : "Plate";
   }
   if (item.processes.length === 0) return base;
   if (item.processes.includes("burnt")) return `Burnt ${base}`;

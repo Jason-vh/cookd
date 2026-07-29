@@ -1,11 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "../data/level";
 import { RECIPE_BY_ID } from "../data/recipes";
-import { DT, step } from "./step";
+import { DT, endDay, restartDay, step } from "./step";
 import { unreachableTables } from "./queries";
-import { specKey } from "./items";
-import type { Customer, Player, PlayerInput, World } from "./types";
-import { applianceAtTile, createWorld, emptyInput, isSolid } from "./world";
+import { isDirty, specKey } from "./items";
+import { plateCount, platesInWorld } from "./plates";
+import type { Customer, Item, Player, PlayerInput, World } from "./types";
+import {
+  addPlayer,
+  applianceAtTile,
+  createWorld,
+  emptyInput,
+  isSolid,
+  removePlayer,
+} from "./world";
 
 /**
  * These tests drive the simulation exactly like a player would — through
@@ -66,6 +74,8 @@ const CRATE = {
   potato: [13, 1],
 } as const;
 const PLATES = [14, 1] as const;
+const SINK = [15, 1] as const;
+const BIN = [18, 1] as const;
 const BOARD = [10, 3] as const;
 const COUNTER = [9, 3] as const;
 const OVEN = [19, 4] as const;
@@ -112,10 +122,34 @@ function putOn(world: World, tile: readonly [number, number], dx = 0, dy = -1): 
 }
 
 /** One press-and-hold. Starts from released, because a press always does. */
-function chopOn(world: World, tile: readonly [number, number], seconds: number): void {
+function workOn(world: World, tile: readonly [number, number], seconds: number): void {
   face(world.players[0]!, tile[0], tile[1], 0, -1);
   hold(world, 2 * DT, null);
   hold(world, seconds);
+}
+
+/** A used plate, put somewhere directly — no customer required. */
+function dirtyPlate(world: World, tile: readonly [number, number]): Item {
+  const plate: Item = { id: world.nextId++, base: "plate", processes: ["dirty"], contents: [] };
+  applianceAtTile(world, tile[0], tile[1])!.item = plate;
+  return plate;
+}
+
+/** Build a garden salad from scratch, plate it, and hold it. */
+function makeSalad(world: World): void {
+  takeFrom(world, CRATE.lettuce);
+  putOn(world, BOARD);
+  workOn(world, BOARD, 2.1);
+  takeFrom(world, BOARD);
+  putOn(world, COUNTER);
+  takeFrom(world, CRATE.tomato);
+  putOn(world, BOARD);
+  workOn(world, BOARD, 2.1);
+  takeFrom(world, BOARD);
+  putOn(world, COUNTER); // combines into a salad
+  takeFrom(world, PLATES);
+  putOn(world, COUNTER); // plate the salad
+  takeFrom(world, COUNTER);
 }
 
 describe("kitchen basics", () => {
@@ -182,7 +216,7 @@ describe("kitchen basics", () => {
     // Changed: the crate refuses it, so you're still holding it.
     takeFrom(world, CRATE.tomato);
     putOn(world, BOARD);
-    chopOn(world, BOARD, 2.1);
+    workOn(world, BOARD, 2.1);
     takeFrom(world, BOARD);
     putOn(world, CRATE.tomato);
     expect(world.players[0]!.carried?.processes).toEqual(["chopped"]);
@@ -212,9 +246,9 @@ describe("kitchen basics", () => {
   test("a source hands its item into what you're already carrying", () => {
     const world = makeWorld();
     takeFrom(world, CRATE.lettuce);
-    chopOn(world, CRATE.lettuce, 0); // (no-op, keeps the sequence readable)
+    workOn(world, CRATE.lettuce, 0); // (no-op, keeps the sequence readable)
     putOn(world, BOARD);
-    chopOn(world, BOARD, 2.1);
+    workOn(world, BOARD, 2.1);
     takeFrom(world, BOARD);
 
     // Walk chopped lettuce to the plate stack: you leave with it plated.
@@ -228,14 +262,14 @@ describe("kitchen basics", () => {
     const world = makeWorld();
     takeFrom(world, CRATE.lettuce);
     putOn(world, BOARD);
-    chopOn(world, BOARD, 2.1);
+    workOn(world, BOARD, 2.1);
     takeFrom(world, BOARD);
     takeFrom(world, PLATES); // plated lettuce
     putOn(world, COUNTER);
 
     takeFrom(world, CRATE.tomato);
     putOn(world, BOARD);
-    chopOn(world, BOARD, 2.1);
+    workOn(world, BOARD, 2.1);
     takeFrom(world, BOARD);
     putOn(world, COUNTER); // onto the plate holding lettuce
 
@@ -290,7 +324,7 @@ describe("kitchen basics", () => {
     hold(world, 1.0, null);
     expect(applianceAtTile(world, BOARD[0], BOARD[1])!.item!.processes).toEqual([]);
 
-    chopOn(world, BOARD, 2.1);
+    workOn(world, BOARD, 2.1);
     expect(applianceAtTile(world, BOARD[0], BOARD[1])!.item!.processes).toEqual(["chopped"]);
   });
 
@@ -316,7 +350,7 @@ describe("kitchen basics", () => {
     const counterWorld = makeWorld();
     takeFrom(counterWorld, CRATE.tomato);
     putOn(counterWorld, COUNTER);
-    chopOn(counterWorld, COUNTER, 2.1);
+    workOn(counterWorld, COUNTER, 2.1);
     expect(applianceAtTile(counterWorld, COUNTER[0], COUNTER[1])!.item!.processes).toEqual([
       "chopped",
     ]);
@@ -325,14 +359,14 @@ describe("kitchen basics", () => {
     const boardWorld = makeWorld();
     takeFrom(boardWorld, CRATE.tomato);
     putOn(boardWorld, BOARD);
-    chopOn(boardWorld, BOARD, 1.25);
+    workOn(boardWorld, BOARD, 1.25);
     expect(applianceAtTile(boardWorld, BOARD[0], BOARD[1])!.item!.processes).toEqual(["chopped"]);
 
     // ...and a counter is not finished by then.
     const slowWorld = makeWorld();
     takeFrom(slowWorld, CRATE.tomato);
     putOn(slowWorld, COUNTER);
-    chopOn(slowWorld, COUNTER, 1.25);
+    workOn(slowWorld, COUNTER, 1.25);
     expect(applianceAtTile(slowWorld, COUNTER[0], COUNTER[1])!.item!.processes).toEqual([]);
   });
 
@@ -362,7 +396,7 @@ describe("kitchen basics", () => {
     const world = makeWorld();
     takeFrom(world, CRATE.potato);
     putOn(world, BOARD);
-    chopOn(world, BOARD, 2.6);
+    workOn(world, BOARD, 2.6);
     takeFrom(world, BOARD);
     putOn(world, FRYER, 1, 0);
 
@@ -371,6 +405,227 @@ describe("kitchen basics", () => {
 
     hold(world, 6.1, null);
     expect(applianceAtTile(world, FRYER[0], FRYER[1])!.item!.processes).toContain("burnt");
+  });
+});
+
+/**
+ * The plate economy: finite crockery, and the sink that keeps it moving.
+ *
+ * The invariant these are really about is that **plates are conserved**. A game
+ * where the supply can shrink is a game that soft-locks a few days in, from a
+ * save nobody can repair — so the last test here counts them across everything
+ * that could quietly eat one.
+ */
+describe("plates", () => {
+  test("the kitchen owns a fixed number of plates, and can run out", () => {
+    const world = makeWorld();
+    const stack = applianceAtTile(world, PLATES[0], PLATES[1])!;
+    expect(plateCount(stack.item)).toBe(LEVEL.plates);
+
+    takeFrom(world, PLATES);
+    expect(world.players[0]!.carried?.base).toBe("plate");
+    expect(plateCount(stack.item)).toBe(LEVEL.plates - 1);
+
+    // The last plate leaves an empty stack, and an empty stack hands out
+    // nothing. This is the pressure the whole feature exists to create.
+    stack.item = null;
+    putOn(world, COUNTER);
+    takeFrom(world, PLATES);
+    expect(world.players[0]!.carried).toBeNull();
+
+    // ...including for the shortcut that plates food where it stands.
+    takeFrom(world, CRATE.tomato);
+    takeFrom(world, PLATES);
+    expect(world.players[0]!.carried?.base).toBe("tomato");
+  });
+
+  test("dirty plates stack in hand, and the sink washes them one at a time", () => {
+    const world = makeWorld();
+    dirtyPlate(world, COUNTER);
+    dirtyPlate(world, PASS);
+
+    takeFrom(world, COUNTER);
+    takeFrom(world, PASS);
+    // One bussing sweep, not one trip per plate.
+    expect(plateCount(world.players[0]!.carried)).toBe(2);
+
+    putOn(world, SINK);
+    const sink = applianceAtTile(world, SINK[0], SINK[1])!;
+    expect(plateCount(sink.item)).toBe(2);
+
+    // One hold, one plate — and the pile still reads dirty while any of it is,
+    // because the plate that gives it its identity is washed last.
+    workOn(world, SINK, 1.6);
+    expect(isDirty(sink.item)).toBe(true);
+    expect(plateCount(sink.item)).toBe(2);
+
+    workOn(world, SINK, 1.6);
+    expect(isDirty(sink.item)).toBe(false);
+
+    takeFrom(world, SINK);
+    putOn(world, PLATES);
+    expect(world.players[0]!.carried).toBeNull();
+    expect(plateCount(applianceAtTile(world, PLATES[0], PLATES[1])!.item)).toBe(LEVEL.plates + 2);
+  });
+
+  test("a dirty plate refuses food, and the stack refuses a dirty plate", () => {
+    const world = makeWorld();
+    dirtyPlate(world, COUNTER);
+    takeFrom(world, COUNTER);
+
+    putOn(world, PLATES);
+    expect(isDirty(world.players[0]!.carried)).toBe(true);
+
+    // A dirty plate is not a workspace either — see `tryPlate`.
+    const before = plateCount(world.players[0]!.carried);
+    putOn(world, CRATE.tomato);
+    expect(plateCount(world.players[0]!.carried)).toBe(before);
+    expect(world.players[0]!.carried!.contents).toHaveLength(0);
+  });
+
+  test("the bin scrapes a plate rather than swallowing it", () => {
+    const world = makeWorld();
+    makeSalad(world);
+    expect(world.players[0]!.carried!.contents).toHaveLength(1);
+
+    putOn(world, BIN);
+    const kept = world.players[0]!.carried!;
+    expect(kept.base).toBe("plate");
+    expect(kept.contents).toHaveLength(0);
+    // Scraped, so it goes to the sink like any other used plate. The bin is not
+    // a way to make a mistake disappear entirely.
+    expect(isDirty(kept)).toBe(true);
+  });
+
+  test("a customer standing up scrapes what is on the table, whatever it is", () => {
+    const world = makeWorld();
+    const diner = seatCustomer(world, "salad");
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+    const table = applianceAtTile(world, TABLE[0], TABLE[1])!;
+
+    // Clear the table mid-meal and leave a pile of clean plates there instead.
+    // Nothing stops a chef doing this, and rewriting whatever is on the table
+    // into "one dirty plate" used to destroy the rest of the pile.
+    takeFrom(world, TABLE, 0, 1);
+    putOn(world, SINK);
+    takeFrom(world, PLATES);
+    putOn(world, PASS);
+    takeFrom(world, PLATES);
+    takeFrom(world, PASS);
+    expect(plateCount(world.players[0]!.carried)).toBe(2);
+    putOn(world, TABLE, 0, 1);
+
+    const before = platesInWorld(world);
+    hold(world, 13, null);
+    expect(diner.state).toBe("leaving");
+    expect(platesInWorld(world)).toBe(before);
+    expect(plateCount(table.item)).toBe(2);
+    // Nothing was eaten off them, so they are still clean.
+    expect(isDirty(table.item)).toBe(false);
+  });
+
+  test("a customer cannot conjure a plate out of whatever was left on the table", () => {
+    const world = makeWorld();
+    const diner = seatCustomer(world, "salad");
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+
+    takeFrom(world, TABLE, 0, 1);
+    putOn(world, SINK);
+    takeFrom(world, CRATE.tomato);
+    putOn(world, TABLE, 0, 1);
+
+    const before = platesInWorld(world);
+    hold(world, 13, null);
+    expect(diner.state).toBe("leaving");
+    expect(platesInWorld(world)).toBe(before);
+    expect(applianceAtTile(world, TABLE[0], TABLE[1])!.item?.base).toBe("tomato");
+  });
+
+  test("the sink takes more than a chef can carry, but not onto clean ones", () => {
+    const world = makeWorld();
+    const sink = applianceAtTile(world, SINK[0], SINK[1])!;
+
+    // Five, which is more than one chef can carry: a sink is where the
+    // washing-up goes, and the hands' limit has no business being its capacity.
+    for (let i = 0; i < 5; i++) {
+      dirtyPlate(world, COUNTER);
+      takeFrom(world, COUNTER);
+      putOn(world, SINK);
+    }
+    expect(plateCount(sink.item)).toBe(5);
+
+    // Washed, and still in the basin: dirty plates must not be piled on top of
+    // them, or they are washing-up hidden inside a pile that reads as clean.
+    workOn(world, SINK, 8);
+    expect(isDirty(sink.item)).toBe(false);
+
+    dirtyPlate(world, COUNTER);
+    takeFrom(world, COUNTER);
+    putOn(world, SINK);
+    expect(plateCount(sink.item)).toBe(5);
+    expect(isDirty(world.players[0]!.carried)).toBe(true);
+  });
+
+  test("a day cannot start under somebody carrying the plate stack", () => {
+    const world = makeWorld();
+    world.phase = "build";
+    const player = world.players[0]!;
+    face(player, PLATES[0], PLATES[1], 0, -1);
+    press(world, "grab");
+    expect(player.carriedAppliance).not.toBeNull();
+
+    // Both routes into service refuse. Opening a day always did; restarting one
+    // did not, and it wipes the kitchen on the way — with the only plate stack
+    // in somebody's hands, that wipe had nowhere to put the plates and the
+    // kitchen came back with none. It also strands the holder: there is no way
+    // to put an appliance down during service.
+    step(world, [{ ...emptyInput(), start: true }]);
+    restartDay(world);
+    expect(world.phase).toBe("build");
+    expect(player.carriedAppliance).not.toBeNull();
+    expect(platesInWorld(world)).toBe(LEVEL.plates);
+  });
+
+  test("plates are conserved: served, binned, carried off, closed up, rebuilt", () => {
+    const world = makeWorld();
+    const owned = LEVEL.plates;
+    expect(platesInWorld(world)).toBe(owned);
+
+    // A customer eats off one and leaves it dirty on the table.
+    seatCustomer(world, "salad");
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+    hold(world, 13, null);
+    expect(platesInWorld(world)).toBe(owned);
+
+    // A ruined dish goes in the bin.
+    makeSalad(world);
+    putOn(world, BIN);
+    expect(platesInWorld(world)).toBe(owned);
+
+    // Somebody's connection drops while they are holding the washing-up.
+    const leaver = addPlayer(world, LEVEL, "Ghost");
+    leaver.carried = world.players[0]!.carried;
+    world.players[0]!.carried = null;
+    removePlayer(world, leaver.id);
+    expect(platesInWorld(world)).toBe(owned);
+
+    // Closing time wipes the kitchen, dirty plates and all.
+    endDay(world);
+    expect(platesInWorld(world)).toBe(owned);
+    expect(plateCount(applianceAtTile(world, PLATES[0], PLATES[1])!.item)).toBe(owned);
+
+    // And the build phase, where lifting an appliance empties it — including
+    // the plate stack, whose contents are the kitchen's entire supply.
+    const player = world.players[0]!;
+    face(player, PLATES[0], PLATES[1], 0, -1);
+    press(world, "grab");
+    expect(platesInWorld(world)).toBe(owned);
+    face(player, COUNTER[0], COUNTER[1], 0, -1);
+    press(world, "grab");
+    expect(platesInWorld(world)).toBe(owned);
   });
 });
 
@@ -387,7 +642,7 @@ describe("the pizza pipeline", () => {
 
     // Knead it, park it on the counter.
     putOn(world, BOARD);
-    chopOn(world, BOARD, 3.1);
+    workOn(world, BOARD, 3.1);
     takeFrom(world, BOARD);
     putOn(world, COUNTER);
 
@@ -395,7 +650,7 @@ describe("the pizza pipeline", () => {
     // down means keeping working, straight through the finished first chop.
     takeFrom(world, CRATE.tomato);
     putOn(world, BOARD);
-    chopOn(world, BOARD, 3.0);
+    workOn(world, BOARD, 3.0);
     expect(applianceAtTile(world, BOARD[0], BOARD[1])!.item!.processes).toEqual([
       "chopped",
       "crushed",
@@ -407,7 +662,7 @@ describe("the pizza pipeline", () => {
     // Topping = chopped cheese.
     takeFrom(world, CRATE.cheese);
     putOn(world, BOARD);
-    chopOn(world, BOARD, 2.1);
+    workOn(world, BOARD, 2.1);
     takeFrom(world, BOARD);
     putOn(world, COUNTER);
     expect(specKey(applianceAtTile(world, COUNTER[0], COUNTER[1])!.item!)).toBe(
@@ -501,23 +756,6 @@ describe("day loop", () => {
  * patience is a person, and a lost order is somebody standing up and leaving.
  */
 describe("the dining room", () => {
-  /** Build the salad the seated customer is waiting for, and hold it. */
-  function makeSalad(world: World): void {
-    takeFrom(world, CRATE.lettuce);
-    putOn(world, BOARD);
-    chopOn(world, BOARD, 2.1);
-    takeFrom(world, BOARD);
-    putOn(world, COUNTER);
-    takeFrom(world, CRATE.tomato);
-    putOn(world, BOARD);
-    chopOn(world, BOARD, 2.1);
-    takeFrom(world, BOARD);
-    putOn(world, COUNTER); // combines into a salad
-    takeFrom(world, PLATES);
-    putOn(world, COUNTER); // plate the salad
-    takeFrom(world, COUNTER);
-  }
-
   test("the pass is two ordinary counters standing in the dividing wall", () => {
     const world = makeWorld();
     const pass = applianceAtTile(world, PASS[0], PASS[1])!;
@@ -604,7 +842,7 @@ describe("the dining room", () => {
     expect(table.tip).toBeGreaterThan(0);
   });
 
-  test("bussing the plate collects the tip, and the stack washes it", () => {
+  test("bussing the plate collects the tip, and the sink is what washes it", () => {
     const world = makeWorld();
     seatCustomer(world, "salad");
     makeSalad(world);
@@ -620,6 +858,20 @@ describe("the dining room", () => {
     expect(table.tip).toBe(0);
     expect(world.players[0]!.carried!.processes).toContain("dirty");
 
+    // The stack used to take it back and wash it for free. It does not any
+    // more, and refusing is the whole reason the sink exists.
+    putOn(world, PLATES);
+    expect(world.players[0]!.carried).not.toBeNull();
+
+    putOn(world, SINK);
+    const sink = applianceAtTile(world, SINK[0], SINK[1])!;
+    expect(world.players[0]!.carried).toBeNull();
+    expect(isDirty(sink.item)).toBe(true);
+
+    workOn(world, SINK, 1.6);
+    expect(sink.item!.processes).toEqual([]);
+
+    takeFrom(world, SINK);
     putOn(world, PLATES);
     expect(world.players[0]!.carried).toBeNull();
   });

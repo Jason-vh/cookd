@@ -2,7 +2,7 @@ import { applianceDef } from "../../data/appliances";
 import { BURNT } from "../../data/ingredients";
 import { BURN_INDEX, TRANSFORM_INDEX } from "../../data/recipes";
 import { specKey } from "../items";
-import type { Appliance, Transform, World } from "../types";
+import type { Appliance, Item, Transform, World } from "../types";
 
 /**
  * Advances every loaded appliance:
@@ -47,8 +47,7 @@ export function applianceSystem(world: World, dt: number): void {
       appliance.motion = transform.motion ?? null;
       appliance.progress += (dt * speed) / transform.duration;
       if (appliance.progress >= 1) {
-        item.base = transform.output.base;
-        item.processes = [...transform.output.processes];
+        applyOutput(item, transform);
         appliance.progress = 0;
         appliance.justFinished = true;
       }
@@ -70,6 +69,31 @@ export function applianceSystem(world: World, dt: number): void {
       appliance.progress = 0;
     }
   }
+}
+
+/**
+ * Complete one cycle of work on an item.
+ *
+ * A **stack** — an item whose contents are copies of itself, which today means
+ * a pile of dirty plates — is worked one unit per cycle, and the head goes
+ * last. Both halves of that matter:
+ *
+ *  - one per cycle, so the dial is a plate rather than a pile, and a chef
+ *    called away mid-sweep keeps everything already washed;
+ *  - head last, because the head is what the pile *is*. Wash it first and the
+ *    item's key becomes `plate`, no wash transform matches it any more, and the
+ *    sink stops with dirty plates sitting inside a clean one.
+ *
+ * Only a genuine stack can match here: `transform` was looked up by the head's
+ * own key, so a content can only equal the input if it is a duplicate of the
+ * head. A plate holding a salad is not one.
+ */
+function applyOutput(item: Item, transform: Transform): void {
+  const inputKey = specKey(transform.input);
+  const stacked = item.contents.find((child) => specKey(child) === inputKey);
+  const target = stacked ?? item;
+  target.base = transform.output.base;
+  target.processes = [...transform.output.processes];
 }
 
 function findTransform(appliance: Appliance, itemKey: string): Transform | undefined {

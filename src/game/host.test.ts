@@ -3,6 +3,7 @@ import { Host } from "./host";
 import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutVersion } from "./protocol";
 import { PLAYER_SPEED, addPlayer, createWorld, emptyInput, isIdleInput } from "../sim/world";
 import { endDay, predict, step } from "../sim/step";
+import { platesInWorld, unshelvePlate } from "../sim/plates";
 import { LEVEL } from "../data/level";
 import { saveSignature } from "../save";
 import type { Customer, Inputs, PlayerInput } from "../sim/types";
@@ -122,12 +123,14 @@ describe("protocol", () => {
   test("idle appliances are left out of the frame", () => {
     const host = new Host();
     host.join("Ann");
-    const idle = encodeFrame(host.world, host.acks);
-    expect(idle.appliances.length).toBe(0);
+    // Not zero: the plate stack is holding the kitchen's plates, and a pile of
+    // plates is an item like any other. Everything *else* is idle.
+    const quiet = encodeFrame(host.world, host.acks);
+    expect(quiet.appliances.length).toBe(1);
 
     const board = [...host.world.appliances.values()].find((a) => a.kind === "board")!;
     board.item = { id: 1, base: "tomato", processes: [], contents: [] };
-    expect(encodeFrame(host.world, host.acks).appliances.length).toBe(1);
+    expect(encodeFrame(host.world, host.acks).appliances.length).toBe(2);
   });
 
   test("a frame stays small enough for a slow link", () => {
@@ -202,7 +205,10 @@ describe("frames rebuild the world faithfully", () => {
     expect(client.players.map((p) => p.name)).toEqual(["Ann"]);
     expect(client.players[0]!.carried?.base).toBe("plate");
     // Idle appliances were never sent, and must have arrived at "idle" anyway.
-    const idle = [...client.appliances.values()].filter((a) => a.id !== board.id);
+    // The plate stack is not one of them: it is holding the kitchen's plates.
+    const idle = [...client.appliances.values()].filter(
+      (a) => a.id !== board.id && a.kind !== "plates",
+    );
     expect(idle.every((a) => a.item === null && a.progress === 0)).toBe(true);
   });
 
@@ -442,6 +448,33 @@ describe("frames must not be shared between worlds", () => {
     expect(drawn.customers.length).toBe(before.customers);
     expect(drawn.events.length).toBe(before.events);
     expect(drawn.effects.length).toBe(before.effects);
+  });
+
+  test("a predicted grab cannot take a plate out of the world being drawn", () => {
+    // Items were the one part of a frame still being shared, and it was
+    // survivable only while every rule rewrote an item *in place*. A pile of
+    // plates is an item that moves its contents into another item, so one
+    // predicted grab at the plate stack was enough to empty the pile the
+    // player was actually looking at.
+    const host = new Host();
+    host.join("Ann");
+    const frame = encodeFrame(host.world, host.acks);
+
+    const drawn = new Host().world;
+    const predicted = new Host().world;
+    applyLayout(drawn, encodeLayout(host.world));
+    applyLayout(predicted, encodeLayout(host.world));
+    applyFrame(drawn, frame);
+    applyFrame(predicted, frame);
+
+    const stack = [...predicted.appliances.values()].find((a) => a.kind === "plates")!;
+    const before = platesInWorld(drawn);
+    expect(before).toBe(LEVEL.plates);
+
+    predicted.players[0]!.carried = unshelvePlate(stack);
+    expect(platesInWorld(predicted)).toBe(before);
+    expect(platesInWorld(drawn)).toBe(before);
+    expect(drawn.players[0]!.carried).toBeNull();
   });
 
   test("a predicted tick cannot invent a customer in the world being drawn", () => {

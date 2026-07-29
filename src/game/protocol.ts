@@ -1,5 +1,14 @@
 import { adoptPlayer, touchLayout } from "../sim/world";
-import type { Appliance, Customer, Effect, Phase, Player, PlayerInput, World } from "../sim/types";
+import type {
+  Appliance,
+  Customer,
+  Effect,
+  Item,
+  Phase,
+  Player,
+  PlayerInput,
+  World,
+} from "../sim/types";
 
 /**
  * What goes over the wire, and nothing else.
@@ -272,6 +281,31 @@ export function applyLayout(world: World, layout: Layout): void {
 }
 
 /**
+ * Copy an item out of a frame, contents and all.
+ *
+ * One frame is applied to **two** worlds — the one being drawn and the one
+ * predicting local chefs — and the prediction world then replays up to 240
+ * ticks of `interactionSystem` over it. Handing both worlds the same `Item`
+ * meant a predicted grab reached into the drawn world and moved things that
+ * were still, as far as the server was concerned, where they had been.
+ *
+ * It was survivable while items were only ever rewritten in place. It stopped
+ * being survivable when a pile of plates became an item that *moves its
+ * contents into another item*: one predicted grab at the plate stack took a
+ * plate out of the pile everyone was looking at. This is the same rule the
+ * customer and effect arrays already follow, for the same reason.
+ */
+function cloneItem(item: Item | null): Item | null {
+  if (item === null) return null;
+  return {
+    id: item.id,
+    base: item.base,
+    processes: [...item.processes],
+    contents: item.contents.map((child) => cloneItem(child)).filter((child) => child !== null),
+  };
+}
+
+/**
  * Apply everything in a frame *except* player positions, which the caller
  * interpolates or predicts instead.
  */
@@ -324,7 +358,7 @@ export function applyFrame(world: World, frame: Frame): void {
   for (const snapshot of frame.appliances) {
     const appliance = world.appliances.get(snapshot.id);
     if (!appliance) continue;
-    appliance.item = snapshot.item;
+    appliance.item = cloneItem(snapshot.item);
     appliance.progress = snapshot.progress;
     appliance.overcook = snapshot.overcook;
     appliance.motion = snapshot.motion;
@@ -349,7 +383,7 @@ export function applyFrame(world: World, frame: Frame): void {
     }
     player.name = snapshot.name;
     player.away = snapshot.away;
-    player.carried = snapshot.carried;
+    player.carried = cloneItem(snapshot.carried);
     player.carriedAppliance = snapshot.carriedAppliance;
     player.workingOn = snapshot.workingOn;
   }

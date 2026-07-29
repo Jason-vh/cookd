@@ -153,9 +153,11 @@ describe("server messages", () => {
     const frame = encodeFrame(host.world, host.acks);
     const parsed = decode(JSON.stringify({ t: "frame", frame }), parseServerMessage);
     expect(parsed?.t).toBe("frame");
-    expect(parsed?.t === "frame" && parsed.frame.appliances[0]?.item?.processes).toEqual([
-      "chopped",
-    ]);
+    // By id: the board is not the only appliance holding something — the plate
+    // stack is holding the kitchen's plates.
+    const sent =
+      parsed?.t === "frame" ? parsed.frame.appliances.find((a) => a.id === board.id) : null;
+    expect(sent?.item?.processes).toEqual(["chopped"]);
   });
 
   test("a plated dish round-trips through nested contents", () => {

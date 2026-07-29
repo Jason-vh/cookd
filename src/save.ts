@@ -1,7 +1,8 @@
 import { APPLIANCES } from "./data/appliances";
-import { LEVEL } from "./data/level";
-import type { ApplianceKind, ItemSpec, World } from "./sim/types";
-import { touchLayout } from "./sim/world";
+import { LEGEND, LEVEL, type LevelDef } from "./data/level";
+import { MAX_PLATES, platesInWorld, stockPlates } from "./sim/plates";
+import type { ApplianceKind, ItemSpec, Vec2, World } from "./sim/types";
+import { nearestFreeTile, spawnAppliance, touchLayout } from "./sim/world";
 
 /**
  * The saved-kitchen format, and nothing else.
@@ -26,7 +27,7 @@ import { touchLayout } from "./sim/world";
  * schema bump was therefore indistinguishable from "everyone loses their
  * build", and nothing said so.
  */
-const SCHEMA = 2;
+const SCHEMA = 3;
 
 export type SavedAppliance = {
   kind: ApplianceKind;
@@ -49,6 +50,17 @@ export type Save = {
   appliances: SavedAppliance[];
   money: number;
   day: number;
+  /**
+   * How many plates this kitchen owns.
+   *
+   * Plates are conserved during play, so this only ever changes when a level
+   * says so — or, later, when somebody buys one. It is saved as a *number*
+   * rather than as where each plate happened to be: mid-flight items are
+   * deliberately discarded like everything else, and a plate comes back clean
+   * on the stack. A save that restored four dirty plates onto four tables would
+   * be restoring the washing-up, which is nobody's idea of resuming.
+   */
+  plates: number;
 };
 
 /**
@@ -64,7 +76,7 @@ export function saveSignature(world: World): string {
   for (const appliance of world.appliances.values()) {
     layout += `${appliance.id}:${appliance.kind}:${appliance.tile.x},${appliance.tile.y};`;
   }
-  return `${layout}|${world.money}|${world.day}`;
+  return `${layout}|${world.money}|${world.day}|${platesInWorld(world)}`;
 }
 
 export function snapshot(world: World, levelId: string = LEVEL.id): Save {
@@ -77,7 +89,14 @@ export function snapshot(world: World, levelId: string = LEVEL.id): Save {
       ...(appliance.source ? { source: appliance.source } : {}),
     });
   }
-  return { schema: SCHEMA, level: levelId, appliances, money: world.money, day: world.day };
+  return {
+    schema: SCHEMA,
+    level: levelId,
+    appliances,
+    money: world.money,
+    day: world.day,
+    plates: platesInWorld(world),
+  };
 }
 
 // --- reading an untrusted file -------------------------------------------------
@@ -111,6 +130,10 @@ export function parseSave(value: unknown): Save | null {
   const day = finite(value.day);
   const level = typeof value.level === "string" ? value.level : null;
   if (schema === null || money === null || day === null || level === null) return null;
+  // Absent in schema 1 and 2, and supplied by the migration. Present but wrong
+  // is still a file we do not understand.
+  const plates = value.plates === undefined ? 0 : finite(value.plates);
+  if (plates === null || plates < 0 || plates > MAX_PLATES) return null;
   if (!Array.isArray(value.appliances) || value.appliances.length > 4096) return null;
 
   const appliances: SavedAppliance[] = [];
@@ -126,7 +149,14 @@ export function parseSave(value: unknown): Save | null {
     appliances.push({ kind: entry.kind, x, y, ...(source ? { source } : {}) });
   }
 
-  return { schema, level, appliances, money, day: Math.max(1, Math.floor(day)) };
+  return {
+    schema,
+    level,
+    appliances,
+    money,
+    day: Math.max(1, Math.floor(day)),
+    plates: Math.floor(plates),
+  };
 }
 
 /** `null` for absent, `undefined` for "present but malformed". */
@@ -160,6 +190,21 @@ const MIGRATIONS: Record<number, (save: Save) => Save | null> = {
   // they are, and the appliance list — the part a player actually built — is
   // unchanged between the two versions.
   1: (save) => ({ ...save, schema: 2, level: LEVEL.id }),
+  // v2 predates finite plates, so it cannot say how many the kitchen owns. The
+  // rule the levels use — one per table, plus two — is recoverable from the
+  // save's own appliance list, which is better than a constant: a kitchen
+  // somebody built four tables into gets four tables' worth of crockery.
+  2: (save) => ({
+    ...save,
+    schema: 3,
+    plates: Math.min(MAX_PLATES, save.appliances.filter((e) => e.kind === "table").length + 2),
+    // v2 stored a `source` on the plate stack, from when it conjured plates out
+    // of nothing. Nothing reads it any more, but it would be re-saved for ever
+    // and it still makes the appliance draw a crate's ingredient marker.
+    appliances: save.appliances.map((entry) =>
+      entry.kind === "plates" ? { kind: entry.kind, x: entry.x, y: entry.y } : entry,
+    ),
+  }),
 };
 
 export function migrate(save: Save): Save | null {
@@ -191,10 +236,10 @@ export type RestoreResult = { ok: true } | { ok: false; reason: "schema" | "leve
  * decide whether to overwrite the file, and "this is from a different level" and
  * "this is from the future" call for opposite answers.
  */
-export function restore(world: World, save: Save, levelId: string = LEVEL.id): RestoreResult {
+export function restore(world: World, save: Save, level: LevelDef = LEVEL): RestoreResult {
   const migrated = migrate(save);
   if (!migrated) return { ok: false, reason: "schema" };
-  if (migrated.level !== levelId) return { ok: false, reason: "level" };
+  if (migrated.level !== level.id) return { ok: false, reason: "level" };
 
   // Decide everything before touching the world. An earlier version cleared the
   // grid and *then* discovered the save was unusable, which left the caller
@@ -220,26 +265,64 @@ export function restore(world: World, save: Save, levelId: string = LEVEL.id): R
 
   world.appliances.clear();
   world.applianceAt.fill(0);
-  for (const [index, saved] of placed) {
-    const id = world.nextId++;
-    world.appliances.set(id, {
-      id,
-      kind: saved.kind,
-      tile: { x: saved.x, y: saved.y },
-      item: null,
-      progress: 0,
-      overcook: 0,
-      justFinished: false,
-      motion: null,
-      heldBy: null,
-      source: saved.source ?? null,
-      tip: 0,
-    });
-    world.applianceAt[index] = id;
+  for (const saved of placed.values()) {
+    spawnAppliance(world, saved.kind, { x: saved.x, y: saved.y }, saved.source ?? null);
   }
+  topUp(world, level);
 
   world.money = migrated.money;
   world.day = migrated.day;
+  // Wherever they were when the room went quiet, plates come back clean and on
+  // the stack. See the note on `Save["plates"]`.
+  stockPlates(world, migrated.plates);
   touchLayout(world);
   return { ok: true };
+}
+
+/**
+ * Appliances a kitchen cannot run without, and cannot get back on its own.
+ *
+ * Deliberately two entries rather than "everything the level ships". A save
+ * that does not mention an oven is a kitchen with no oven, and that is the
+ * player's business — they moved it, and one day they will have sold it. These
+ * two are different: with plates finite, a room with nowhere to *keep* plates
+ * or nowhere to *wash* them is a room that stops working partway through a day
+ * and stays broken, because the broken state is what gets written back to disk.
+ *
+ * It is a real case, not a hypothetical: every save written before the sink
+ * existed looks exactly like this.
+ */
+const ESSENTIAL: ApplianceKind[] = ["plates", "sink"];
+
+/**
+ * Give a restored kitchen back the essentials its save has none of.
+ *
+ * The alternative was to change the level's id, which invalidates every save on
+ * every server — a real cost paid by real people to avoid twenty lines. An
+ * appliance arrives on the tile the level puts it on, or the nearest free one
+ * if the layout has moved on without it.
+ */
+function topUp(world: World, level: LevelDef): void {
+  const present = new Set<ApplianceKind>();
+  for (const appliance of world.appliances.values()) present.add(appliance.kind);
+
+  for (const kind of ESSENTIAL) {
+    if (present.has(kind)) continue;
+    const home = levelTileFor(level, kind) ?? { x: 0, y: 0 };
+    const free = nearestFreeTile(world, home);
+    if (!free) continue; // a kitchen with no room left has bigger problems
+    spawnAppliance(world, kind, free);
+  }
+}
+
+/** Where the level's own ASCII puts this kind of appliance, if it does. */
+function levelTileFor(level: LevelDef, kind: ApplianceKind): Vec2 | null {
+  for (let y = 0; y < level.rows.length; y++) {
+    const row = level.rows[y] ?? "";
+    for (let x = 0; x < row.length; x++) {
+      const spec = LEGEND[row[x] ?? ""];
+      if (spec?.kind === "appliance" && spec.appliance === kind) return { x, y };
+    }
+  }
+  return null;
 }

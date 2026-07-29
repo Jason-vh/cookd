@@ -20,6 +20,15 @@ that call site does.
   frame later. It got worse with latency, because more unacknowledged input
   means more ticks replayed, so more chances to invent one. `applyFrame` copies
   now, and the customer list arrives the same way.
+
+  **The rule is about state, not about arrays**, and the wording nearly cost us
+  the same bug twice. Items were still shared by reference long after the lists
+  were copied, and it looked safe because every rule of the game rewrote an item
+  *in place* — a shared tomato becoming a shared chopped tomato is the same
+  answer in both worlds. Then a pile of plates became an item that **moves its
+  contents into another item**, and a single predicted grab at the plate stack
+  took a plate out of the pile the player was looking at. A shared reference is
+  a bug waiting for someone to write a mutation you had not thought of.
 - **A request that takes a round trip needs a latch.** A single controller once
   produced **four** chefs. Online, `addLocalPlayer` is a *request*: the server
   owns player ids, so it returns nothing and the answer arrives a round trip
@@ -115,7 +124,7 @@ Several of these are no longer only advice:
 
 | Lesson | Now enforced by |
 | --- | --- |
-| Never hand two worlds the same arrays | `host.test.ts`, "frames must not be shared between worlds" |
+| Never hand two worlds the same arrays — or the same items | `host.test.ts`, "frames must not be shared between worlds" |
 | A round trip needs a latch | `input.test.ts`, "a pending online join is asked for once" |
 | A connected gamepad is not a player | `input.test.ts`, "a connected but untouched pad does not create a player" |
 | Never `world.players[id]` | `playerById` is the only lookup; ids are never array positions |

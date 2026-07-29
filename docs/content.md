@@ -18,11 +18,13 @@ deliberate: doing steps in the wrong order genuinely fails, which is where the
 difficulty comes from. `specKey()` flattens an item to a string like
 `pizza|sauced,topped` so every lookup is a single `Map.get`.
 
-Plates are items too (`base: "plate"`) and hold their dish in `contents`.
+Plates are items too (`base: "plate"`) and hold their dish in `contents` — or,
+when `contents` is more plates, they *are* a pile of plates. See
+[the plate economy](#the-plate-economy).
 
 ## Transforms (station × item → item)
 
-Transforms are keyed by **station** (`prep` / `fry` / `bake`), not by appliance
+Transforms are keyed by **station** (`prep` / `fry` / `bake` / `wash`), not by appliance
 kind. Appliances declare which stations they offer and how fast they work, so
 you can prep on any counter and a chopping board is simply better at it. This
 keeps the convenience without making the dedicated appliance pointless — and
@@ -76,7 +78,7 @@ ability to make it.
 The mistake is cheap anyway: an over-chopped tomato is still a pizza ingredient,
 and the bin is right there. Tuning a duration is balance. A latch would have cost
 a legible interface.
-- `motion` (`chop` / `knead` / `mix`) is a presentation hint. The simulation
+- `motion` (`chop` / `knead` / `mix` / `scrub`) is a presentation hint. The simulation
   treats every hold-transform identically, but new content brings its own
   animation with it rather than needing a change in the render layer.
 
@@ -116,16 +118,18 @@ sticks — a chef who kneaded once leant forward forever.
   appliance gains the `burnt` process — including if a player puts a cooked item
   back on it. Nothing accepts burnt food except the bin.
 
-## Sources (crates, plate stack)
+## Sources (crates)
 
 A source appliance dispenses an `ItemSpec` and **accepts back exactly that
 spec** — compared by `specKey`, with the extra condition that a container must
-be empty. One rule covers crates and the plate stack, and any source added
-later inherits it for free.
+be empty. Any source added later inherits the rule for free.
 
 The alternative — a crate that swallows anything — would quietly become a
 second bin in the corner of the kitchen, and "put it back where you got it" is
 a rule players already know from real kitchens.
+
+Ingredients are infinite; **plates are not**. The plate stack used to be a
+source like any crate and is no longer one — see below.
 
 ## Combines (item + item → item)
 
@@ -153,8 +157,70 @@ exactly what stops it being eaten: a dish is *one* item, so a plate holding two
 things is not what anybody ordered.
 
 A **dirty plate** is the one plate that is not a workspace. Nothing goes on it
-until it has been washed — which today means carrying it back to the plate
-stack, and will mean a sink in the next patch.
+until it has been washed, at the sink.
+
+That refusal looks like it contradicts "say yes", and it is the one worth
+keeping: plating onto a dirty plate is a mistake you would not discover until
+the delivery bounced, by which point it is too late to be information. It is
+fair because the plate *looks* dirty — the model is a different colour with
+leftovers on it, legible across the room. A refusal is only allowed when the
+thing refusing says why.
+
+## The plate economy
+
+A plate is the only thing in the kitchen there is a **fixed number of**. A level
+says how many (`plates: 6` for the park kitchen — one per table, plus two), they
+start clean on the plate stack, and from then on the game's job is to never lose
+one.
+
+```
+customer eats  ->  dirty plate on the table (with the tip)
+     bus       ->  a pile of up to four in your hands
+     sink      ->  hold Use: one plate per 1.5s
+ plate stack   ->  clean, and back in circulation
+```
+
+**A pile of plates is a plate holding plates.** One representation, not three:
+carrying a bussed sweep, the queue in the sink and the stock on the stack are
+all the same item shape, so there is one thing to audit rather than three. The
+**head** of the pile is its identity — what `isDirty` reads, what is drawn on
+top, and the last plate the sink washes, so a half-washed pile still behaves
+like a dirty one.
+
+Batching matters more than it looks. Carrying one plate per trip is a toll, not
+a decision: it makes the correct play obvious and tedious. Four per sweep makes
+"clear those three tables on the way back from the pass" a route worth planning.
+
+The sink is the one station with no failure state — nothing burns, nothing
+overflows, nothing spills. The pressure is scarcity, not hazard, and a game this
+noisy needs one place a player can catch their breath. It takes as many plates
+as you can bring it, too: four is a limit on *hands*, and had no business
+becoming the capacity of a sink.
+
+The one thing it refuses is dirty plates on top of clean ones. The head of a
+pile is what the sink reads to decide there is work to do, so a clean-headed
+pile with dirty plates buried in it is washing-up nobody can ever reach.
+
+### Nothing may destroy a plate
+
+Everything that could is routed through `sim/plates.ts`:
+
+| Where | What happens |
+| --- | --- |
+| The bin | **Scrapes**: the food goes, the plate stays in your hands, dirty |
+| A customer finishing | Scrapes whatever is on their table — which is not always the plate they were served, because anyone can clear a table mid-meal |
+| A player disconnecting | Their plates go back on the stack, washed |
+| Closing time | The kitchen is wiped — then counted back onto the stack |
+| Lifting an appliance in the build phase | Its plates go home; the plate stack's travel with it |
+| Saving | The *count* is saved, not where they were lying |
+
+The cost of getting this wrong is not a lost plate. It is a room that cannot
+serve anybody, in a state that gets written to disk, that nobody can repair from
+inside the game. `sim.test.ts` counts plates across every one of those paths.
+
+There is deliberately **no plate counter in the HUD**. The stack is in the
+kitchen, in front of you, and visibly empties — the same reason orders are
+bubbles over tables rather than tickets in the corner.
 
 ## Current recipes
 

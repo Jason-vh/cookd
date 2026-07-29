@@ -350,6 +350,21 @@ function poseWorking(chef: ChefParts, motion: ChefMotion, phase: number): void {
       chef.legR.rotation.x = 0;
       break;
     }
+    case "scrub": {
+      // Hands down in the basin, working in small circles half a beat apart.
+      // Deliberately the calmest of the four: the sink is where a chef catches
+      // their breath, and a frantic pose would say the opposite.
+      const circle = Math.sin(phase);
+      chef.armL.rotation.x = -1.05 + circle * 0.16;
+      chef.armR.rotation.x = -1.05 + Math.cos(phase) * 0.16;
+      chef.armL.rotation.z = 0.26 + Math.cos(phase) * 0.12;
+      chef.armR.rotation.z = -0.26 + circle * 0.12;
+      chef.body.rotation.x = 0.26;
+      chef.head.rotation.x = 0.22;
+      chef.legL.rotation.x = 0;
+      chef.legR.rotation.x = 0;
+      break;
+    }
     case "mix": {
       chef.armL.rotation.x = -1.3 + Math.sin(phase) * 0.28;
       chef.armR.rotation.x = -1.3 + Math.sin(phase + Math.PI) * 0.28;
