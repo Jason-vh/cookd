@@ -10,7 +10,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   DEPLOY_DIR: /home/exedev/apps/cookd
 
 jobs:
@@ -19,7 +18,7 @@ jobs:
     runs-on: [self-hosted, linux, cookd-prod]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Types were already gated, by `bun run build` inside the image. Tests,
       # lint and formatting were not — so a green deploy proved only that the
