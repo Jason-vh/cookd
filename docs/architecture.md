@@ -45,7 +45,9 @@ src/
     net.ts                online play: sockets, interpolation, prediction
     protocol.ts           wire format, and the only encode/decode
     wire.ts               the edge of trust: unknown bytes -> validated messages
-  input/index.ts          keyboard + Gamepad API -> Inputs (keyed by player id)
+  input/
+    index.ts            keyboard + Gamepad API -> Inputs (keyed by player id)
+    latch.ts            a control that must be released before it counts again
   save.ts                 the saved-kitchen format, its parser and its migrations
   identity.ts             what this *browser* remembers: your name, your seat count
   render/                 mirrors the simulation; never writes to it
@@ -76,6 +78,7 @@ src/
   ui/
     hud.ts                DOM HUD (stats, event log, build banner — no order list)
     menu.ts               the pause menu
+    menu-controller.ts    the menu's dealings with the controls, and the latches
     join.ts               the join screen: name, kitchen code, offline
     style.css
   main.ts                 the shell: input in, pixels out; owns no rules

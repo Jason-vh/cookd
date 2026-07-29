@@ -1,16 +1,16 @@
 import "./ui/style.css";
 import { LEVEL } from "./data/level";
-import { InputManager, type MenuNav } from "./input";
+import { InputManager } from "./input";
 import { View } from "./render/view";
 import { Hud } from "./ui/hud";
 import { PauseMenu } from "./ui/menu";
+import { MenuController } from "./ui/menu-controller";
 import { JoinScreen } from "./ui/join";
 import { loadIdentity, saveIdentity } from "./identity";
 import { assertContentValid } from "./data/validate";
 import type { Game } from "./game/game";
 import { LocalGame } from "./game/local";
 import { NetGame } from "./game/net";
-import { emptyInput } from "./sim/world";
 import type { Inputs } from "./sim/types";
 
 /**
@@ -137,74 +137,18 @@ else join.show();
 
 // --- menu -------------------------------------------------------------------
 
-let previousNav: MenuNav = { up: false, down: false, confirm: false, menu: false, back: false };
-
 /**
- * Is the menu key held down *right now*, tracked across the open/closed
- * boundary.
- *
- * Opening and closing used to use separate edge detectors — one against the
- * menu's own nav state, one against gameplay input — and holding `Esc` for two
- * frames closed the menu and immediately reopened it. One key, one latch: it
- * has to be released before it can act again, whichever side of the boundary
- * we are on.
+ * All of the menu's dealings with the controls live in `MenuController`, along
+ * with the three latches that span the open/closed boundary. This file used to
+ * carry four module-level booleans encoding that one idea in four shapes, and
+ * produced the same bug four times — see `input/latch.ts`.
  */
-let menuKeyDown = false;
-
-/**
- * The button that confirmed a menu item, held down across the boundary.
- *
- * `Enter` confirms in the menu **and** is the `start` button in play, and the
- * gamepad's `A` confirms and grabs. Picking "Close up early" therefore closed
- * the menu into the build phase and then, while the key was still down, read as
- * a fresh `start` press — which opens the next day. The kitchen shut and
- * reopened between two frames, so the menu item looked like it did nothing at
- * all, and the only trace was the day counter going up.
- *
- * Swallowing a single frame is not enough: a key is held for a tenth of a
- * second, which is six of them. It has to be *released* before play sees it,
- * exactly like `menuKeyDown` for the menu key. This is the third variant of
- * the same bug in this file — the general rule is that a control which means
- * two things either side of a boundary needs a latch that spans the boundary,
- * never an edge test on one side of it.
- */
-let confirmHeld = false;
-
-function openMenu(): void {
-  menu.show(game.world);
-  previousNav = { ...previousNav, menu: true, confirm: true, back: true };
-}
-
-function closeMenu(): void {
-  menu.hide();
-}
-
-function runMenuAction(): void {
-  confirmHeld = true;
-  switch (menu.confirm()) {
-    case "resume":
-      closeMenu();
-      break;
-    case "startDay":
-      game.menu("startDay");
-      closeMenu();
-      break;
-    case "endDay":
-      game.menu("endDay");
-      closeMenu();
-      break;
-    case "restartDay":
-      game.menu("restartDay");
-      closeMenu();
-      break;
-    case "resetKitchen":
-      game.reset();
-      closeMenu();
-      break;
-    default:
-      break;
-  }
-}
+const menuControl = new MenuController(
+  menu,
+  () => game.world,
+  (action) => game.menu(action),
+  () => game.reset(),
+);
 
 // --- loop --------------------------------------------------------------------
 
@@ -257,7 +201,6 @@ function shouldRender(now: number): boolean {
 }
 
 let last = performance.now();
-let menuWasOpen = false;
 
 function frame(now: number): void {
   requestAnimationFrame(frame);
@@ -283,71 +226,20 @@ function frame(now: number): void {
     game.removeLocalPlayer(game.localIds[game.localIds.length - 1]!);
   }
 
-  if (menu.isOpen) {
-    const nav = input.pollMenu();
-    const closing = nav.menu || nav.back;
-    if (closing && !menuKeyDown) closeMenu();
-    else if (nav.up && !previousNav.up) menu.move(-1);
-    else if (nav.down && !previousNav.down) menu.move(1);
-    else if (nav.confirm && !previousNav.confirm) runMenuAction();
-    // Carried across the open/closed boundary — see `menuKeyDown`.
-    menuKeyDown = closing;
-    previousNav = nav;
-    menu.sync(game.world);
-  }
+  menuControl.update(input);
 
   // Handed to the game as a function so it can be called once per *tick*. A
   // frame can run zero ticks, and the input layer clears its press buffer on
   // every poll, so polling once per frame silently eats quick taps.
-  const poll = (): Inputs => {
-    // The world keeps running while you read the menu. Online it has to — one
-    // player cannot stop a kitchen four people are standing in — so it does
-    // here too, rather than pause meaning two different things. Your chef
-    // stands still and everyone can see it.
-    //
-    // `menuWasOpen` swallows the frame the menu closed on, so the button that
-    // dismissed it does not also grab something.
-    if (menu.isOpen || menuWasOpen) return idleInputs();
-
-    const polled = input.poll(game.localIds);
-
-    // ...and the confirm button stays swallowed until it is let go. See
-    // `confirmHeld`.
-    if (confirmHeld) {
-      let stillDown = false;
-      for (const id of game.localIds) {
-        const one = polled[id];
-        if (!one) continue;
-        if (one.grab || one.start) stillDown = true;
-        one.grab = false;
-        one.start = false;
-      }
-      confirmHeld = stillDown;
-    }
-    const pressed = game.localIds.some((id) => polled[id]?.menu);
-    if (pressed && !menuKeyDown) {
-      menuKeyDown = true;
-      openMenu();
-      return idleInputs();
-    }
-    menuKeyDown = pressed;
-    return polled;
-  };
+  const poll = (): Inputs => menuControl.filter(input.poll(game.localIds), game.localIds);
 
   game.update(elapsed, poll);
-  menuWasOpen = menu.isOpen;
   if (shouldRender(now)) view.render(game.world, game.alpha, game.localIds);
   hud.update(game.world, {
     status: game.status,
     ping: game.ping,
     room: game.status === "local" ? "" : roomOf(),
   });
-}
-
-function idleInputs(): Inputs {
-  const inputs: Inputs = {};
-  for (const id of game.localIds) inputs[id] = emptyInput();
-  return inputs;
 }
 
 function roomOf(): string {
