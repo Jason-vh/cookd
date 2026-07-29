@@ -6,7 +6,8 @@ import { DT, endDay, restartDay, step } from "./step";
 import { canPlace, customerSpeed, kitchenWarnings, mealLeft, unreachableTables } from "./queries";
 import { isDirty, specKey } from "./items";
 import { plateCount, platesInWorld } from "./plates";
-import type { ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
+import type { Appliance, ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
+import { DOOR_QUEUE, DOOR_WAIT } from "./systems/customers";
 import {
   addPlayer,
   applianceAtTile,
@@ -180,6 +181,18 @@ function workOn(world: World, tile: readonly [number, number], seconds: number):
   face(world.players[0]!, tile[0], tile[1], 0, -1);
   hold(world, 2 * DT, null);
   hold(world, seconds);
+}
+
+/**
+ * Leave a dirty plate on every table: a dining room with nowhere to sit, which
+ * is what the door queue is for. Returns the tables, so a test can bus one.
+ */
+function blockTables(world: World): Appliance[] {
+  const tables = [...world.appliances.values()].filter((a) => a.kind === "table");
+  for (const table of tables) {
+    table.item = { id: table.id, base: "plate", processes: ["dirty"], contents: [] };
+  }
+  return tables;
 }
 
 /** A used plate, put somewhere directly — no customer required. */
@@ -1210,15 +1223,96 @@ describe("the dining room", () => {
 
   test("a table still holding a dirty plate cannot be sat at", () => {
     const world = makeWorld();
-    for (const appliance of world.appliances.values()) {
-      if (appliance.kind !== "table") continue;
-      appliance.item = { id: appliance.id, base: "plate", processes: ["dirty"], contents: [] };
-    }
+    blockTables(world);
     world.nextArrivalIn = 0;
     hold(world, 6, null);
 
     expect(world.customers).toHaveLength(1);
     expect(world.customers[0]!.state).toBe("waiting");
+  });
+
+  test("a full room grows a line outside, and the line has an end", () => {
+    const world = makeWorld();
+    blockTables(world);
+
+    // Six chances to walk up the path, at a room with nowhere at all to sit.
+    for (let i = 0; i < 6; i++) {
+      world.nextArrivalIn = 0;
+      hold(world, 0.5, null);
+    }
+
+    const queue = world.customers.filter((customer) => customer.state === "waiting");
+    expect(queue).toHaveLength(DOOR_QUEUE);
+
+    // A line, not a huddle: each one stands further back down the path than the
+    // person in front, and all of them outside the door rather than in it.
+    const xs = queue.map((customer) => customer.pos.x);
+    expect(xs[0]).toBeGreaterThan(xs[1]!);
+    expect(xs[1]).toBeGreaterThan(xs[2]!);
+    for (const customer of queue) expect(customer.pos.x).toBeLessThan(world.door.x);
+  });
+
+  test("the line is served from the front", () => {
+    // The tick loop walks customers backwards, so "whoever asks for a table"
+    // means the person who arrived last. A queue that does that is not one.
+    const world = makeWorld();
+    const tables = blockTables(world);
+
+    for (let i = 0; i < 3; i++) {
+      world.nextArrivalIn = 0;
+      hold(world, 0.5, null);
+    }
+    const [first, second] = world.customers.filter((customer) => customer.state === "waiting");
+    expect(second).toBeDefined();
+
+    // One table is bussed. Exactly one person sits down, and it is the one who
+    // has been standing there longest.
+    tables[0]!.item = null;
+    hold(world, 0.2, null);
+    expect(first!.table).not.toBeNull();
+    expect(second!.state).toBe("waiting");
+  });
+
+  test("a queue is one more thing to be impatient about", () => {
+    const world = makeWorld();
+    blockTables(world);
+    world.nextArrivalIn = 0;
+    step(world, idle());
+
+    // The kind's patience multiplies the door wait too, so the line thins from
+    // the impatient end first.
+    const waiting = world.customers[0]!;
+    expect(waiting.state).toBe("waiting");
+    expect(waiting.timer).toBeCloseTo(DOOR_WAIT * customerKind(waiting.kind).patience, 5);
+  });
+
+  test("a rush is several people on the path, not a faster clock", () => {
+    const world = makeWorld();
+    world.day = 10; // long enough for rushes to be at their ceiling
+
+    let biggest = 0;
+    for (let i = 0; i < 40; i++) {
+      world.customers.length = 0;
+      world.nextArrivalIn = 0;
+      step(world, idle());
+      biggest = Math.max(biggest, world.customers.length);
+      // Whoever came together came in single file, spread down the path.
+      const xs = world.customers.map((customer) => customer.pos.x);
+      expect(new Set(xs).size).toBe(xs.length);
+    }
+    expect(biggest).toBeGreaterThan(1);
+  });
+
+  test("day one is never a rush", () => {
+    // The curve has a shape: the room learns the loop before it is asked to
+    // hold a line of four.
+    const world = makeWorld();
+    for (let i = 0; i < 40; i++) {
+      world.customers.length = 0;
+      world.nextArrivalIn = 0;
+      step(world, idle());
+      expect(world.customers).toHaveLength(1);
+    }
   });
 
   test("patience runs out and the customer walks out", () => {

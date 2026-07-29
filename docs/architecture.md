@@ -35,7 +35,7 @@ src/
       movement.ts         circle-vs-tile collision, player separation
       interaction.ts      grab/place/combine/deliver, build-phase appliance moving
       appliances.ts       transforms (chop/fry/bake) and burning
-      customers.ts        arrivals, seating, patience, eating, leaving, tips
+      customers.ts        arrivals, the door queue, seating, patience, eating, tips
       cards.ts            arming and taking a recipe card
   data/                   content — plain data, no logic
     ingredients.ts        what exists and what it is called

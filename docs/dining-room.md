@@ -27,7 +27,8 @@ be abstract are now physical, and each of them paid for itself:
 3. **The queue became visible before it exists.** Customers walk the biome path
    to the door, so you can *see* demand coming. A rush stops being a spawn rate
    and becomes four people on the path — anticipation and prep-ahead decisions,
-   diegetically, for free.
+   diegetically, for free. That is now literally true rather than a hope: see
+   [the line at the door](#the-line-at-the-door).
 
    They walk it on **real tiles**. The approach used to be a straight line drawn
    from off-grid to the door, which was fine while outside was painted scenery;
@@ -41,7 +42,7 @@ be abstract are now physical, and each of them paid for itself:
          (no free table)
  arriving ──────────────> waiting ──(gave up)──> leaving
     │                             │
-    │ (reached seat)              │ (a table frees up)
+    │ (reached seat)              │ (front of the line, a table frees up)
     v                             v
  deciding ──(3s)──> ordering ──(fed)──> eating ──(12s)──> leaving
                        │
@@ -63,7 +64,8 @@ Two of those timers are load-bearing:
    spikes; somebody walking away from a full door is the visible cost of not
    having built enough tables. They wait on the paving outside rather than in
    the doorway, which is also where the stall is — so a queue you are failing to
-   serve stands next to the thing that would fix it.
+   serve stands next to the thing that would fix it. How the line behaves is
+   [below](#the-line-at-the-door).
 
 Patience only starts draining when the order appears, not when the customer
 arrives. The walk in is a beat of calm, and the number in `data/recipes.ts`
@@ -77,6 +79,58 @@ in `seat()` and nowhere else on purpose: "is there a chair free here?" is asked
 speculatively, of every table, on every tick somebody is queuing at the door,
 and spending the seeded RNG on a *question* would make the answer depend on how
 many tables happened to exist.
+
+## The line at the door
+
+A full room grows a **line**, up to `DOOR_QUEUE` people long, standing back down
+the path they walked in on. Three things make it a queue rather than a crowd:
+
+- **It is served from the front.** Only the person at the head may take a table
+  that frees up. This is not a nicety: the tick loop walks the customer list
+  backwards (so somebody can be removed mid-loop), which means "whoever asks for
+  a table" is *the person who arrived last*. A queue that does that is a lottery
+  wearing a line's clothes.
+- **It shuffles forward.** Where you stand is a function of how many are still
+  in front of you, recomputed every tick, so the line closes up as it is served
+  and as people give up. The rank comes from list order — customers are only
+  ever appended — so the queue needs no state of its own.
+- **It thins from the impatient end.** The door wait is `DOOR_WAIT` multiplied by
+  the kind's own `patience`, exactly as the dish's patience is. Somebody on their
+  lunch break gives up on a line for the same reason they give up on a kitchen,
+  and the coats left standing there are the ones who will wait.
+
+Past the end of the line **nobody new walks up the path at all**. A queue whose
+tail can never be seated is a stream of people arriving in order to leave again:
+it reads as a room failing, when what actually happened is a room that was full.
+The give-up is meant to be the rare, expensive event, not the common one.
+
+## Rushes
+
+An arrival is not always one person. The group size is rolled once per arrival —
+mostly one, sometimes two, occasionally three — and the chance of it being more
+than one **grows with the day**, to a ceiling of 45%. Day one never rushes: the
+room learns the loop before it is asked to hold a line.
+
+A rush is **people, not a faster clock**. Halving the interval and spawning three
+at once produce the same number of customers, and only one of them can be seen
+coming: a group starts spread out down the path and walks in single file, so
+three coats on the paving is a sentence — *stop chopping, plate what you have* —
+thirty seconds before the first of them sits down. A shortened interval is
+something you can only notice in hindsight.
+
+Two rules keep it from being a difficulty spike with no floor:
+
+- **A group is clamped to what the room can absorb** — free tables plus space in
+  the line. The rest simply never set off.
+- **The next interval is timed from the room the group leaves behind.** Arrivals
+  already track free seats; taking the last three tables and *then* asking
+  "when's the next one" is what stops a rush from compounding into a permanent
+  queue.
+
+A group is several separate orders that happen to arrive together — three people,
+three tables, three dishes. One table wanting several dishes is a **party**, and
+that is deliberately still ahead of us: it is the first thing the loop cannot
+express by multiplying a number it already has.
 
 ## Who walks in
 
@@ -102,9 +156,12 @@ to cook it, and the seat comes back twice as fast.
 
 **A kind can only multiply.** It cannot refuse a dish, order two, or do anything
 the loop does not already do, which is what keeps a new row from being a new
-system — and it is why there is no fifth column for something clever. Parties
-are the next thing the dining room does not do yet, and they will be a change to
-this file, not a row in that table.
+system — and it is why there is no fifth column for something clever. `patience`
+now multiplies two numbers rather than one — the dish's, and the wait at the
+door — which is the shape a dial is *supposed* to grow in: a new number the
+dining room already had, not a new column. Parties are the next thing the dining
+room does not do yet, and they will be a change to this file, not a row in that
+table.
 
 **Every kind has to be readable across the room**, without a label and without
 the HUD: a coat, a build, and a speed. That is the same rule the patience slump
@@ -169,7 +226,9 @@ steering, no avoidance. Two things make that enough:
   customer sets off cannot be invalidated while they walk it, so it is computed
   once and then followed.
 - **Customers are ghosts.** They do not collide with chefs, with each other, or
-  with anything except the tiles the flood fill already refused. Bodyblocking by
+  with anything except the tiles the flood fill already refused. The line at the
+  door is spaced by *arithmetic* rather than by bodies for that reason: rank
+  times a gap, down the arrival row. Bodyblocking by
   pathing NPCs is the fastest route to frustration in a game about hurrying, so
   the first version simply does not have it. Gentle "excuse me" soft-collision
   can come later, if the room ever feels too empty without it.

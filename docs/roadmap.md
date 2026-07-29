@@ -4,10 +4,14 @@
 
 Near term:
 
-- **Door queue and rushes.** Customers who find the room full wait at the door
-  and give up; the next step is showing that queue properly and weighting
-  arrivals into visible **groups** so a rush is four people on the path rather
-  than a spawn rate.
+- **The door queue is done**, and so are [rushes](dining-room.md#rushes): a full
+  room grows a line that is served from the front and thins from the impatient
+  end, and arrivals come in groups that grow with the day. What is left of that
+  bullet is *presentation* — the line is people standing on paving, with nothing
+  saying how long they have been there. A patience ring at the door would be the
+  obvious answer and is probably the wrong one: it would put a second countdown
+  on screen for something you are meant to read as a crowd.
+
 - **Parties** — one table, several dishes, wanted together. The coordination
   flagship ("table 2 wants a pizza *and* two fries"), and the reason tables are
   drawn with four chairs already. It is the first thing a customer *kind* cannot

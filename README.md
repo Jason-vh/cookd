@@ -87,6 +87,13 @@ The white square in front of your chef is what you'll interact with.
    and will then sit on your table twice as long. You can tell them apart from
    across the room, which is the point — [who walks
    in](docs/dining-room.md#who-walks-in).
+
+   **They don't always come one at a time.** Later days send **rushes** — two or
+   three people walking up the path in single file — and a room with no free
+   table grows a **line at the door**, served front first. The line is a warning
+   you can act on: it is standing right next to the market stall that sells
+   tables. Nobody waits forever, and the people who leave were the impatient
+   ones. See [the line at the door](docs/dining-room.md#the-line-at-the-door).
 7. When they finish eating they leave behind a **dirty plate and a tip**. Pick
    the plate up and the tip is yours. A table with a plate still on it cannot be
    sat at, so clearing up *is* the capacity.

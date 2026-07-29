@@ -32,8 +32,25 @@ const DECIDE_TIME = 3;
  */
 export const EAT_TIME = 12;
 
-/** How long someone will stand at a full door before giving up. */
-const DOOR_WAIT = 14;
+/** How long someone of ordinary patience will stand at a full door. */
+export const DOOR_WAIT = 14;
+/**
+ * How many people will stand in the line outside.
+ *
+ * The queue is an overflow valve, not a waiting list: past this nobody new
+ * walks up the path at all. A line long enough that its tail can never be
+ * seated is a stream of people arriving to leave again, which reads as demand
+ * the room is failing rather than as demand the room refused.
+ */
+export const DOOR_QUEUE = 3;
+/** Spacing between people in the line, in tiles. */
+const QUEUE_GAP = 0.85;
+/** How far apart a group starts down the path, so it walks in single file. */
+const GROUP_GAP = 1.1;
+/** How much likelier a rush gets with each day survived. */
+const RUSH_PER_DAY = 0.09;
+/** The ceiling on that: even a busy day is mostly ones and twos. */
+const MAX_RUSH_CHANCE = 0.45;
 /** Arrivals stop this long before closing time, so the day can finish cleanly. */
 export const LAST_ORDERS = 30;
 /** How much of the reward is left on the table rather than paid on delivery. */
@@ -140,8 +157,12 @@ export function customerSystem(world: World, dt: number): void {
   if (world.dayTime <= LAST_ORDERS) return;
   world.nextArrivalIn -= dt;
   if (world.nextArrivalIn > 0) return;
-  world.nextArrivalIn = arrivalInterval(world, reachable);
   arrive(world, reachable);
+  // Timed from the room the arrivals leave behind, not the one they found. A
+  // group that takes the last three tables must not also set the next interval
+  // as though those tables were still free — that is how a rush turns into a
+  // permanent queue instead of a spike the room recovers from.
+  world.nextArrivalIn = arrivalInterval(world, reachable);
 }
 
 /** Advance one customer. Returns true when they should be removed. */
@@ -156,11 +177,19 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
     }
 
     case "waiting": {
-      walk(customer, dt);
+      // The line shuffles forward as it is served, so where you stand is a
+      // function of how many are still in front of you rather than of where
+      // you happened to stop.
+      const rank = queueRank(world, customer);
+      standAt(customer, queueSpot(world, rank));
+      if (walk(customer, dt)) faceDoor(world, customer);
       customer.timer -= dt;
       // Keep trying: a table freeing up while you wait is the whole point of
-      // tolerating a queue at all.
-      const table = claimTable(world, reachable);
+      // tolerating a queue at all. Only the front of the line may take it,
+      // though — a queue that hands the table to whoever happens to ask is not
+      // a queue, and the tick loop runs backwards, so "whoever asks" would mean
+      // the person who arrived last.
+      const table = rank === 0 ? claimTable(world, reachable) : null;
       if (table) {
         sitDown(world, customer, table, reachable);
         return false;
@@ -238,17 +267,57 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
 
 // --- arrival -----------------------------------------------------------------
 
+/**
+ * One arrival event: a person, or a rush.
+ *
+ * How many were coming is decided **before** the room is consulted, in exactly
+ * one draw, for the same reason `orderFrom` and `pickKind` each spend exactly
+ * one: randomness spent conditionally makes two rooms on the same seed diverge
+ * over how their days happened to go. What the room can absorb then clamps it
+ * — nobody walks up a path they can only walk back down.
+ */
 function arrive(world: World, reachable: Set<number>): void {
-  const table = claimTable(world, reachable);
-  // Nobody comes when there is nowhere at all to sit; a queue that can never
-  // clear is just a stream of people walking in to walk out again.
-  if (!table && world.customers.some((c) => c.state === "waiting")) return;
+  const wanted = groupSize(world);
+  const queued = world.customers.reduce((n, c) => n + (c.state === "waiting" ? 1 : 0), 0);
+  const room = freeTables(world, reachable) + Math.max(0, DOOR_QUEUE - queued);
+  for (let i = 0; i < Math.min(wanted, room); i++) {
+    if (!walkUp(world, reachable, i)) return;
+  }
+}
 
+/**
+ * How many walk up the path together.
+ *
+ * A rush is **people**, not a faster spawn rate: four coats on the path is
+ * something you can see coming and prep for, and a shortened interval is
+ * something you can only notice afterwards. The chance grows with the day, so
+ * the difficulty curve has a shape the dining room can show rather than only a
+ * number — and it is a chance rather than a schedule, because a rush you can
+ * time is a rush you have already survived.
+ *
+ * A group is several *separate* orders that happen to arrive together, not one
+ * table wanting several dishes. That is a party, and it is deliberately still
+ * ahead of us — see the roadmap.
+ */
+function groupSize(world: World): number {
+  const chance = Math.min(MAX_RUSH_CHANCE, RUSH_PER_DAY * (world.day - 1));
+  const roll = random(world);
+  if (roll >= chance) return 1;
+  // The rarer third of a rush is the bigger one. Reading the same roll twice
+  // rather than drawing again keeps the draw count at one.
+  return roll < chance / 3 ? 3 : 2;
+}
+
+/** One customer up the path. Returns false when the room can take no orders. */
+function walkUp(world: World, reachable: Set<number>, index: number): boolean {
   const recipe = orderFrom(world);
-  if (!recipe) return; // a room with nothing on the menu takes no orders
+  if (!recipe) return false; // a room with nothing on the menu takes no orders
   const kind = pickKind(world);
 
-  const start = { x: world.door.x - OFF_GRID + 0.5, y: world.door.y + 0.5 };
+  // Single file: everybody behind the first starts a little further down the
+  // path, so a group arrives as a line walking up it rather than as one person
+  // wearing three coats.
+  const start = { x: world.door.x - OFF_GRID + 0.5 - index * GROUP_GAP, y: world.door.y + 0.5 };
 
   const customer: Customer = {
     id: world.nextId++,
@@ -272,15 +341,72 @@ function arrive(world: World, reachable: Set<number>): void {
   };
   world.customers.push(customer);
 
-  if (table) {
-    sitDown(world, customer, table, reachable);
-    return;
-  }
-  // No table: wait on the paving outside and hope one frees up.
+  const table = claimTable(world, reachable);
+  if (table) sitDown(world, customer, table, reachable);
+  else joinQueue(world, customer);
+  return true;
+}
+
+// --- the door queue ----------------------------------------------------------
+
+/**
+ * Take a place at the back of the line outside.
+ *
+ * How long they will stand there is the kind's `patience` again, multiplying a
+ * number the dining room already had: somebody on their lunch break gives up on
+ * a queue for the same reason they give up on a kitchen, and the line thins
+ * from the impatient end first.
+ */
+function joinQueue(world: World, customer: Customer): void {
   customer.state = "waiting";
-  customer.timer = DOOR_WAIT;
-  const wait = approachTile(world);
-  customer.path = [{ x: wait.x + 0.5, y: wait.y + 0.5 }];
+  customer.timer = DOOR_WAIT * customerKind(customer.kind).patience;
+  standAt(customer, queueSpot(world, queueRank(world, customer)));
+}
+
+/**
+ * How many are ahead of this customer in the line.
+ *
+ * Arrival order is list order — customers are only ever appended — so the queue
+ * needs no state of its own beyond that. Counting rather than building a list
+ * because this is asked of every waiter on every tick.
+ */
+function queueRank(world: World, customer: Customer): number {
+  let rank = 0;
+  for (const other of world.customers) {
+    if (other === customer) break;
+    if (other.state === "waiting") rank++;
+  }
+  return rank;
+}
+
+/**
+ * Where the nth person in the line stands: back down the path they walked in
+ * on, in front of the door rather than in it.
+ *
+ * On the arrival row on purpose. The paving outside is also where the market
+ * stall stands, so a queue you are failing to serve forms beside the thing that
+ * would fix it — and the line points off down the path, which is the direction
+ * the next one is coming from.
+ */
+function queueSpot(world: World, rank: number): Vec2 {
+  const head = approachTile(world);
+  return { x: head.x + 0.5 - rank * QUEUE_GAP, y: head.y + 0.5 };
+}
+
+/** Walk to a spot, without restarting the walk every tick it has not moved. */
+function standAt(customer: Customer, spot: Vec2): void {
+  const target = customer.path[0];
+  if (customer.path.length === 1 && target && target.x === spot.x && target.y === spot.y) return;
+  customer.path = [spot];
+}
+
+/** Stand facing the way you are hoping to be let in. */
+function faceDoor(world: World, customer: Customer): void {
+  const dx = world.door.x + 0.5 - customer.pos.x;
+  const dy = world.door.y + 0.5 - customer.pos.y;
+  const length = Math.hypot(dx, dy) || 1;
+  customer.facing.x = dx / length;
+  customer.facing.y = dy / length;
 }
 
 /**
