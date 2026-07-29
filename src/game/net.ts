@@ -14,6 +14,7 @@ import {
   type ServerMessage,
 } from "./protocol";
 import { decode, parseServerMessage } from "./wire";
+import { SnapshotBuffer } from "./snapshots";
 
 /**
  * The networked client.
@@ -33,19 +34,6 @@ import { decode, parseServerMessage } from "./wire";
  * `View` still receives a plain `World` plus one `alpha` and cannot tell the
  * difference between this and local play.
  */
-
-/**
- * How far behind the newest frame we render, in ms.
- *
- * This is the jitter budget: if a frame is late by less than this, nobody sees
- * anything. Too small and remote chefs stutter; too large and everyone is
- * watching the past. Two frame intervals is the usual starting point, and a
- * long-haul link wants the headroom.
- */
-const PLAYOUT_DELAY = 110;
-
-/** Drop the playout clock forward if it falls further behind than this. */
-const MAX_DRIFT = 400;
 
 const HISTORY = 240;
 
@@ -101,8 +89,6 @@ function definedInputs(inputs: Inputs): Record<number, PlayerInput> {
   return out;
 }
 
-type Timed = { frame: Frame; at: number };
-
 export class NetGame implements Game {
   readonly world: World;
   localIds: number[] = [];
@@ -118,10 +104,8 @@ export class NetGame implements Game {
   private readonly token: string;
   private wantedPlayers: number;
 
-  /** Received frames, oldest first, with local arrival times. */
-  private buffer: Timed[] = [];
-  private playout = 0;
-  private started = false;
+  /** The received timeline and the clock that reads it. */
+  private readonly snapshots = new SnapshotBuffer();
 
   /** Our own chefs, run ahead of the server. */
   private prediction: World;
@@ -190,7 +174,7 @@ export class NetGame implements Game {
     // half-applied the way three separate assignments can.
     if (this.socket) this.closeSocket();
 
-    this.status = this.buffer.length ? "offline" : "connecting";
+    this.status = this.snapshots.size > 0 ? "offline" : "connecting";
     const socket = new WebSocket(this.url);
     const listeners = new AbortController();
     const { signal } = listeners;
@@ -285,12 +269,11 @@ export class NetGame implements Game {
         // first reconcile and interpolate chefs towards stale positions.
         this.localIds = message.you;
         this.wantedPlayers = message.you.length;
-        this.buffer.length = 0;
+        this.snapshots.clear();
         this.history.length = 0;
         this.sentIdle = false;
         this.error.clear();
         this.seq = 0;
-        this.started = false;
         this.applyLayout(message.layout);
         this.pushFrame(message.frame);
         this.status = "online";
@@ -339,12 +322,7 @@ export class NetGame implements Game {
     // are between a reset and its layout message, so wait for it.
     if (frame.appliances.some((a) => !this.layoutIds.has(a.id))) return;
 
-    this.buffer.push({ frame, at: performance.now() });
-    while (this.buffer.length > 40) this.buffer.shift();
-
-    if (!this.started) {
-      this.started = true;
-      this.playout = performance.now() - PLAYOUT_DELAY;
+    if (this.snapshots.push(frame, performance.now())) {
       applyFrame(this.world, frame);
       applyFrame(this.prediction, frame);
       for (const snapshot of frame.players) this.seedPlayer(this.world, snapshot.id, snapshot);
@@ -421,7 +399,7 @@ export class NetGame implements Game {
   }
 
   private tick(inputs: Inputs): void {
-    if (!this.started) return;
+    if (!this.snapshots.started) return;
 
     // 1. Our own chefs move immediately, and the inputs are kept so they can be
     //    replayed when the server's answer arrives.
@@ -447,15 +425,8 @@ export class NetGame implements Game {
     predict(this.prediction, mine);
 
     // 2. The playout clock walks forward one tick and samples the timeline.
-    this.playout += DT * 1000;
-    const newest = this.buffer[this.buffer.length - 1];
-    if (newest) {
-      const target = newest.at - PLAYOUT_DELAY;
-      if (this.playout < target - MAX_DRIFT) this.playout = target;
-      if (this.playout > newest.at) this.playout = newest.at;
-    }
-
-    const latest = newest?.frame;
+    this.snapshots.advance(DT * 1000);
+    const latest = this.snapshots.newest;
     if (latest) applyFrame(this.world, latest);
 
     // 3. Remote chefs are sampled at this tick and the one before it, so the
@@ -480,13 +451,17 @@ export class NetGame implements Game {
         }
         continue;
       }
-      const now = this.sample("players", player.id, this.playout);
-      const before = this.sample("players", player.id, this.playout - DT * 1000);
+      const now = this.snapshots.sample("players", player.id, this.snapshots.playout);
+      const before = this.snapshots.sample(
+        "players",
+        player.id,
+        this.snapshots.playout - DT * 1000,
+      );
       if (now && before) {
         player.prevPos = before;
         player.pos = now;
       }
-      const facing = this.sampleFacing("players", player.id);
+      const facing = this.snapshots.facing("players", player.id);
       if (facing) player.facing = facing;
     }
 
@@ -495,46 +470,19 @@ export class NetGame implements Game {
     // position; walking them back onto the playout clock is what keeps them in
     // step with the remote chefs moving around them.
     for (const customer of this.world.customers) {
-      const now = this.sample("customers", customer.id, this.playout);
-      const before = this.sample("customers", customer.id, this.playout - DT * 1000);
+      const now = this.snapshots.sample("customers", customer.id, this.snapshots.playout);
+      const before = this.snapshots.sample(
+        "customers",
+        customer.id,
+        this.snapshots.playout - DT * 1000,
+      );
       if (now && before) {
         customer.prevPos = before;
         customer.pos = now;
       }
-      const facing = this.sampleFacing("customers", customer.id);
+      const facing = this.snapshots.facing("customers", customer.id);
       if (facing) customer.facing = facing;
     }
-  }
-
-  /** Position of a player or customer on the received timeline at a given moment. */
-  private sample(
-    kind: "players" | "customers",
-    id: number,
-    at: number,
-  ): { x: number; y: number } | null {
-    if (this.buffer.length === 0) return null;
-    let before = this.buffer[0]!;
-    let after = this.buffer[this.buffer.length - 1]!;
-    for (let i = 0; i < this.buffer.length - 1; i++) {
-      if (this.buffer[i]!.at <= at && this.buffer[i + 1]!.at >= at) {
-        before = this.buffer[i]!;
-        after = this.buffer[i + 1]!;
-        break;
-      }
-    }
-    const a = before.frame[kind].find((entity) => entity.id === id);
-    const b = after.frame[kind].find((entity) => entity.id === id);
-    if (!a || !b) return (b ?? a) ? { x: (b ?? a)!.x, y: (b ?? a)!.y } : null;
-    const span = after.at - before.at;
-    const t = span > 0 ? Math.max(0, Math.min(1, (at - before.at) / span)) : 1;
-    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-  }
-
-  private sampleFacing(kind: "players" | "customers", id: number): { x: number; y: number } | null {
-    const latest = this.buffer[this.buffer.length - 1]?.frame[kind].find(
-      (entity) => entity.id === id,
-    );
-    return latest ? { x: latest.fx, y: latest.fy } : null;
   }
 
   // --- shell actions ----------------------------------------------------------

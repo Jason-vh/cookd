@@ -47,6 +47,7 @@ src/
     net.ts                online play: sockets, interpolation, prediction
     protocol.ts           wire format, and the only encode/decode
     wire.ts               the edge of trust: unknown bytes -> validated messages
+    snapshots.ts          the received timeline, and the clock that reads it
   input/
     index.ts            keyboard + Gamepad API -> Inputs (keyed by player id)
     latch.ts            a control that must be released before it counts again
