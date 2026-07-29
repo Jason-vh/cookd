@@ -51,7 +51,9 @@ be abstract are now physical, and each of them paid for itself:
 Two of those timers are load-bearing:
 
 - **Dwell time is a throughput constraint.** A table is occupied while somebody
-   eats it, so fast service means more covers per day. Table turnover became an
+   eats it, so fast service means more covers per day. How long that is belongs
+   to the *person* — see [who walks in](#who-walks-in) — so the number below is
+   what an ordinary appetite does with it. Table turnover became an
    economic concept without a single new UI element. It is legible without a
    gauge, too: the customer bobs over the plate and the **food on it shrinks as
    they get through it**, so the dirty plate at the end is something you watched
@@ -65,7 +67,8 @@ Two of those timers are load-bearing:
 
 Patience only starts draining when the order appears, not when the customer
 arrives. The walk in is a beat of calm, and the number in `data/recipes.ts`
-still means what it says.
+still means what it says — scaled by how reasonable this particular person is
+feeling.
 
 **Which chair is a coin toss**, drawn once, at the moment a seat is actually
 taken. A fixed preference order made a full dining room look choreographed —
@@ -74,6 +77,55 @@ in `seat()` and nowhere else on purpose: "is there a chair free here?" is asked
 speculatively, of every table, on every tick somebody is queuing at the door,
 and spending the seeded RNG on a *question* would make the answer depend on how
 many tables happened to exist.
+
+## Who walks in
+
+A customer used to be one set of numbers: every diner waited exactly as long as
+the dish said, ate for exactly `EAT_TIME`, and tipped by the same formula.
+Demand had a *rate* and no texture.
+
+A **kind**, rolled at the door from `data/customers.ts`, is that texture. Four
+dials, each of which multiplies a number the dining room already had:
+
+| | patience | appetite | generosity | pace |
+| --- | --- | --- | --- | --- |
+| **Regular** | 1 | 1 | 1 | 1 |
+| **In a Hurry** | 0.6 | 0.5 | 1.7 | 1.35 |
+| **Taking Their Time** | 1.6 | 1.8 | 0.9 | 0.78 |
+| **Critic** | 0.85 | 1.1 | 3 | 1 |
+
+They pull against each other on purpose. `patience` is the pressure, but
+`appetite` is what happens *after* you succeed — the table is gone for as long
+as they sit at it, so the easiest customer in the room can be the most expensive
+one to have seated. Somebody in a hurry is the opposite bargain: half the time
+to cook it, and the seat comes back twice as fast.
+
+**A kind can only multiply.** It cannot refuse a dish, order two, or do anything
+the loop does not already do, which is what keeps a new row from being a new
+system — and it is why there is no fifth column for something clever. Parties
+are the next thing the dining room does not do yet, and they will be a change to
+this file, not a row in that table.
+
+**Every kind has to be readable across the room**, without a label and without
+the HUD: a coat, a build, and a speed. That is the same rule the patience slump
+follows, and it is why the coats live in `data/customers.ts` beside the numbers
+rather than in `render/palette.ts` — a kind owns its look, exactly as a
+[biome](art-direction.md) does. A dial nobody can see would be a difficulty
+change disguised as content, so `pace` earns its place partly by being the one
+that is legible before they even sit down.
+
+The critic is the only row that is really an *event*: 4% of arrivals, three
+ordinary tips, and the only one with hair of its own so that dropping what you
+are doing is a decision you can make from the fryer. Nothing is written to the
+event log about it. A person in the room is not news for the corner of the
+screen — see [the rule about where UI lives](architecture.md#why-this-shape).
+
+The kind is drawn from the room's own RNG stream, in **one** weighted draw
+whatever the dining room looks like, for the same reason `orderFrom` spends
+exactly one: randomness spent conditionally makes two rooms on one seed diverge
+over who happened to walk in. And it travels on the wire as an id, like a
+recipe does — an id the client does not recognise is served as a regular rather
+than dropped, because content moves faster than protocols.
 
 ## Say yes, and let the failure be visible
 

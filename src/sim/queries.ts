@@ -5,7 +5,7 @@ import { unlockedRecipes } from "./cards";
 import { isDirty, isPlate, specKey } from "./items";
 import { plateCount } from "./plates";
 import { reachableFrom, seatsAround } from "./pathing";
-import { EAT_TIME, LAST_ORDERS } from "./systems/customers";
+import { customerSpeed, eatTime, LAST_ORDERS } from "./systems/customers";
 import type { Appliance, Customer, Item, Player, Station, World } from "./types";
 import { applianceAtTile, inBounds, tileIndex } from "./world";
 
@@ -208,11 +208,24 @@ export function unreachableTables(world: World): Appliance[] {
  * module's arithmetic in another module's file. `timer` is reused by four
  * states with four meanings, so the day eating stopped counting down from
  * EAT_TIME the plates would silently have stopped emptying.
+ *
+ * It stopped counting down from EAT_TIME the day appetite became a property of
+ * the person, and this is why nothing broke: the divisor is theirs too.
  */
 export function mealLeft(customer: Customer): number {
   if (customer.state !== "eating") return 1;
-  return Math.max(0, Math.min(1, customer.timer / EAT_TIME));
+  return Math.max(0, Math.min(1, customer.timer / eatTime(customer)));
 }
+
+/**
+ * Top walking speed for this customer, in tiles per second.
+ *
+ * Re-exported here rather than imported from the system, so the render layer
+ * keeps reading things that are *true* and never things that *happen*. It
+ * drives the walk cycle: pace is a dial on the kind, and a hurried diner
+ * animated against the average speed would skate.
+ */
+export { customerSpeed };
 
 /**
  * Has the kitchen stopped taking new customers?

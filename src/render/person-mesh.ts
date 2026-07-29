@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { customerKind } from "../data/customers";
 import { PALETTE } from "./palette";
 import { cylinder, mesh, roundedBox, sphere } from "./primitives";
 
@@ -40,10 +41,18 @@ export function buildChef(index: number): ChefParts {
  * them for free. The toque and the apron are what say "staff", so those are the
  * only things a customer loses — at a glance across the room, who works here is
  * never in question.
+ *
+ * What they *are* comes out of `data/customers.ts`: the coat, the hair and the
+ * build are the whole of how a kind announces itself, alongside the speed it
+ * walks at. The index is the customer's id, so a crowd of regulars is a crowd
+ * of different coats and one visit is one coat.
  */
-export function buildCustomer(index: number): ChefParts {
-  const color = PALETTE.customers[index % PALETTE.customers.length]!;
-  return buildPerson(color, "customer");
+export function buildCustomer(kindId: string, index: number): ChefParts {
+  const kind = customerKind(kindId);
+  const color = kind.coats[index % kind.coats.length]!;
+  const parts = buildPerson(color, "customer", kind.hair);
+  parts.root.scale.multiplyScalar(kind.build);
+  return parts;
 }
 
 function eye(x: number): THREE.Mesh {
@@ -52,7 +61,7 @@ function eye(x: number): THREE.Mesh {
   return ball;
 }
 
-function buildPerson(color: number, role: "chef" | "customer"): ChefParts {
+function buildPerson(color: number, role: "chef" | "customer", hairColor?: number): ChefParts {
   const root = new THREE.Group();
   // Chefs are drawn slightly larger than life against the kitchen: readability
   // of who is where beats strict scale accuracy (Overcooked does the same).
@@ -90,7 +99,7 @@ function buildPerson(color: number, role: "chef" | "customer"): ChefParts {
     hatPuff.position.y = 0.24;
     head.add(hatPuff);
   } else {
-    const hair = mesh(sphere(0.155), PALETTE.hair, "cloth");
+    const hair = mesh(sphere(0.155), hairColor ?? PALETTE.hair, "cloth");
     hair.scale.set(1.03, 0.72, 1.0);
     hair.position.y = 0.06;
     head.add(hair);

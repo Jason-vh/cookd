@@ -2,7 +2,8 @@ import * as THREE from "three";
 
 import { DT } from "../sim/step";
 import type { ChefMotion, Customer, Player, World } from "../sim/types";
-import { CUSTOMER_SPEED, PLAYER_SPEED } from "../sim/world";
+import { customerSpeed } from "../sim/queries";
+import { PLAYER_SPEED } from "../sim/world";
 import { chopImpact, chopLift, ease, isChefMotion, lerp, workPhase } from "./anim";
 import { disposeSubtree } from "./dispose";
 import { setGhost } from "./ghost";
@@ -209,8 +210,9 @@ export class PeopleViews {
       let person = this.customers.get(customer.id);
       if (!person) {
         // Indexed by id so the same customer keeps the same coat all visit, and
-        // two people arriving together rarely match.
-        const parts = buildCustomer(customer.id);
+        // two people arriving together rarely match. The kind chooses which
+        // coats there are to match *within* — see `data/customers.ts`.
+        const parts = buildCustomer(customer.kind, customer.id);
         this.scene.add(parts.root);
         person = { ...parts, phase: 0, slump: 0 };
         this.customers.set(customer.id, person);
@@ -241,7 +243,10 @@ export class PeopleViews {
     person.root.position.set(x, 0, z);
     person.root.rotation.y = Math.atan2(customer.facing.x, customer.facing.y);
 
-    const speed = strideSpeed(customer.pos, customer.prevPos, CUSTOMER_SPEED);
+    // Against *their* top speed, not the average. Pace is a dial on the kind,
+    // and a hurried diner measured against everyone else's speed would come out
+    // over 1 and skate through the room with their legs at full swing.
+    const speed = strideSpeed(customer.pos, customer.prevPos, customerSpeed(customer));
     person.phase += dt * (5 + 7 * speed);
     const swing = Math.sin(person.phase * 2) * speed;
 

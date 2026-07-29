@@ -201,6 +201,17 @@ export type Customer = {
   seat: Vec2 | null;
   /** What they will ask for, decided before they sit down. */
   recipeId: string;
+  /**
+   * Which sort of person this is: a row in `data/customers.ts`, drawn once at
+   * the door.
+   *
+   * An id rather than the numbers themselves, for the reason `recipeId` is one:
+   * the content is compiled into both ends, so the wire carries the name and
+   * everybody looks up the same table. It is also the only thing that would
+   * have to be re-tuned mid-run, and a save that stored multipliers would pin
+   * yesterday's balance into every kitchen.
+   */
+  kind: string;
   /** Tile centres still to walk through. */
   path: Vec2[];
   /** Seconds left in the current timed state (deciding / eating / waiting). */

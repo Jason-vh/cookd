@@ -247,6 +247,10 @@ Delivery pays the reward. The **tip** — up to 40% more, proportional to the
 patience left when the plate landed — is left on the table and collected by
 whoever busses the dirty plate.
 
+Both numbers are what an *ordinary* customer does with the dish. Patience, dwell
+time and the tip are each multiplied by the kind of person who ordered it
+(`data/customers.ts`) — see [who walks in](dining-room.md#who-walks-in).
+
 **A kitchen does not have this menu; it has the part of it that it bought.**
 Every room starts with the salad and picks the rest from [recipe
 cards](the-menu.md), so `tier` is what the card stand rolls against and `needs

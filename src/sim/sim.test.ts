@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { CUSTOMER_KINDS, customerKind } from "../data/customers";
 import { LEVEL } from "../data/level";
 import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
 import { DT, endDay, restartDay, step } from "./step";
-import { canPlace, kitchenWarnings, unreachableTables } from "./queries";
+import { canPlace, customerSpeed, kitchenWarnings, mealLeft, unreachableTables } from "./queries";
 import { isDirty, specKey } from "./items";
 import { plateCount, platesInWorld } from "./plates";
 import type { ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
@@ -121,16 +122,28 @@ const FRYER = [20, 9] as const;
 const PASS = [9, 6] as const;
 /** A table in the dining room, approached from the tile above it. */
 const TABLE = [4, 4] as const;
+/** The dining room's other table, for tests that need two people at once. */
+const TABLE2 = [4, 8] as const;
 /** The middle slot of the market stall, faced from the patio beside it. */
 const STALL = [0, 4] as const;
 
 /**
  * Sit somebody at a table with an order already placed — the state the delivery
  * rules care about, without walking them in from the park first.
+ *
+ * An ordinary regular unless a test says otherwise, so every multiplier in
+ * `data/customers.ts` is 1 and the recipe's own numbers still mean what they
+ * say.
  */
-function seatCustomer(world: World, recipeId: string, tile = TABLE): Customer {
+function seatCustomer(
+  world: World,
+  recipeId: string,
+  tile: readonly [number, number] = TABLE,
+  kind = "regular",
+): Customer {
   const table = applianceAtTile(world, tile[0], tile[1])!;
   const recipe = RECIPE_BY_ID.get(recipeId)!;
+  const patience = recipe.patience * customerKind(kind).patience;
   const seat = { x: tile[0] + 1, y: tile[1] };
   const customer: Customer = {
     id: world.nextId++,
@@ -141,10 +154,11 @@ function seatCustomer(world: World, recipeId: string, tile = TABLE): Customer {
     table: table.id,
     seat,
     recipeId,
+    kind,
     path: [],
     timer: 0,
-    remaining: recipe.patience,
-    patience: recipe.patience,
+    remaining: patience,
+    patience,
     tip: 0,
   };
   world.customers.push(customer);
@@ -1258,5 +1272,99 @@ describe("the dining room", () => {
     world.nextArrivalIn = 0;
     hold(world, 5, null);
     expect(world.customers).toHaveLength(0);
+  });
+});
+
+/**
+ * Who walks in. Every kind multiplies numbers the dining room already had, so
+ * these tests are about the multipliers landing in the right places — there is
+ * no new rule to test, and that is the design.
+ */
+describe("customer variety", () => {
+  test("a hurry is less patience and a shorter meal, on the same dish", () => {
+    const world = makeWorld();
+    const regular = seatCustomer(world, "salad");
+    const hurried = seatCustomer(world, "salad", TABLE2, "hurried");
+
+    expect(hurried.patience).toBeLessThan(regular.patience);
+
+    // The table is the scarce thing, so appetite is the half that matters to a
+    // kitchen: they are gone sooner, and the seat comes back sooner.
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+    makeSalad(world);
+    putOn(world, TABLE2, 0, 1);
+    expect(regular.state).toBe("eating");
+    expect(hurried.state).toBe("eating");
+    expect(hurried.timer).toBeLessThan(regular.timer);
+
+    // ...and the plate empties over their meal, not over the average one. This
+    // is the arithmetic that used to live in the render layer.
+    expect(mealLeft(hurried)).toBeCloseTo(1, 1);
+    hold(world, 6.5, null);
+    expect(hurried.state).toBe("leaving");
+    expect(regular.state).toBe("eating");
+  });
+
+  test("the tip is what the trouble was worth", () => {
+    const world = makeWorld();
+    const regular = seatCustomer(world, "salad");
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+
+    const critic = seatCustomer(world, "salad", TABLE2, "critic");
+    makeSalad(world);
+    putOn(world, TABLE2, 0, 1);
+
+    // Both served the moment they ordered, so the only difference between the
+    // two tips is generosity. The base reward is not generous at all: what is
+    // paid on delivery is the dish's, and only what is left on the table is
+    // theirs.
+    expect(world.money).toBe(16);
+    expect(critic.tip).toBeGreaterThan(regular.tip * 2);
+  });
+
+  test("pace is legible before they sit down", () => {
+    const world = makeWorld();
+    const hurried = customerSpeed({ ...seatCustomer(world, "salad"), kind: "hurried" });
+    const leisurely = customerSpeed({ ...world.customers[0]!, kind: "leisurely" });
+    expect(hurried).toBeGreaterThan(leisurely);
+  });
+
+  test("a room draws its crowd from the seed, and only from the seed", () => {
+    // Everybody who came through the door, not just whoever is still sitting
+    // there at the end of it.
+    const crowd = (seed: number): string[] => {
+      const world = createWorld(LEVEL, seed);
+      equip(world);
+      openWorld(world);
+      world.nextArrivalIn = 0;
+      const kinds = new Map<number, string>();
+      for (let i = 0; i < Math.ceil(100 / DT); i++) {
+        step(world, idle());
+        for (const customer of world.customers) kinds.set(customer.id, customer.kind);
+      }
+      return [...kinds.values()];
+    };
+
+    // Same seed, same people: the kind is drawn from the room's stream like the
+    // chair and the order are, so two clients of one kitchen cannot disagree
+    // about who is sitting there.
+    expect(crowd(7)).toEqual(crowd(7));
+
+    const known = new Set(CUSTOMER_KINDS.map((kind) => kind.id));
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 8; seed++) for (const id of crowd(seed)) seen.add(id);
+    for (const id of seen) expect(known).toContain(id);
+    // A weighted draw that always returns the first row would pass everything
+    // above. The crowd has to actually be a crowd.
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  test("an unknown kind is served as a regular rather than dropped", () => {
+    // Content moves faster than protocols: a client one deploy behind will be
+    // sent kinds it has never heard of, and the honest answer is an ordinary
+    // customer rather than a crash halfway through drawing the dining room.
+    expect(customerKind("food-critic-from-the-future").id).toBe("regular");
   });
 });

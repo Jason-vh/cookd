@@ -41,8 +41,14 @@ import type {
  * rejects those wholesale (see `parseLayout`), so it would sit at "connecting"
  * with nothing logged. The version check turns that into the one sentence it
  * should be: refresh the page.
+ *
+ * v3 added `kind` to a customer. Note which direction that breaks: an unknown
+ * kind *id* is tolerated on purpose, because content moves faster than
+ * protocols — but a missing field is a v2 server, and `parseFrameCustomer`
+ * rejects the frame it is missing from, which is every frame with anybody in
+ * the dining room.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * Ticks between broadcasts: a 60Hz simulation goes out at 20Hz.
@@ -162,6 +168,16 @@ export type FrameCustomer = {
   fy: number;
   table: number | null;
   recipeId: string;
+  /**
+   * Which sort of person this is, by id from `data/customers.ts`.
+   *
+   * Sent rather than derived: it is drawn from the room's live RNG stream at
+   * the door, so no client can roll the same answer. One short string per
+   * customer, and it decides a coat, a build and a walking speed — all three of
+   * which have to match on every screen or two players are looking at different
+   * people.
+   */
+  kind: string;
   remaining: number;
   patience: number;
   /** Seconds left in the current timed state — what empties a plate as it is eaten. */
@@ -280,6 +296,7 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
       fy: customer.facing.y,
       table: customer.table,
       recipeId: customer.recipeId,
+      kind: customer.kind,
       remaining: customer.remaining,
       patience: customer.patience,
       timer: customer.timer,
@@ -428,6 +445,7 @@ export function applyFrame(world: World, frame: Frame): void {
     table: customer.table,
     seat: null,
     recipeId: customer.recipeId,
+    kind: customer.kind,
     path: [],
     timer: customer.timer,
     remaining: customer.remaining,

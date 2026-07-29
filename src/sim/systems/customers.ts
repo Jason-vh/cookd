@@ -1,3 +1,4 @@
+import { CUSTOMER_KINDS, type CustomerKind, customerKind } from "../../data/customers";
 import { LAUNCH_SHARE } from "../../data/progression";
 import { DISH_INDEX, RECIPE_BY_ID } from "../../data/recipes";
 import { isDirty, isPlate, specKey } from "../items";
@@ -22,7 +23,13 @@ import { CUSTOMER_SPEED, effect, log, random, tileIndex } from "../world";
 
 /** A beat of calm between sitting down and asking for something. */
 const DECIDE_TIME = 3;
-/** How long a table stays occupied after the food lands. Throughput lives here. */
+/**
+ * How long a table stays occupied after the food lands, for somebody of
+ * ordinary appetite. Throughput lives here.
+ *
+ * Read through `eatTime` rather than directly: what a *given* customer does
+ * with this number is their kind's business.
+ */
 export const EAT_TIME = 12;
 
 /** How long someone will stand at a full door before giving up. */
@@ -33,6 +40,29 @@ export const LAST_ORDERS = 30;
 export const TIP_FRACTION = 0.4;
 /** How far outside the door customers walk on and off screen. */
 const OFF_GRID = 3;
+
+/**
+ * How long this particular customer sits over their dinner.
+ *
+ * A function of the person rather than a constant, because appetite is a dial
+ * on the kind (`data/customers.ts`). Anything wanting the *fraction* eaten
+ * should ask `mealLeft` instead — see the note there.
+ */
+export function eatTime(customer: Customer): number {
+  return EAT_TIME * customerKind(customer.kind).appetite;
+}
+
+/**
+ * How fast this customer walks, in tiles per second.
+ *
+ * Pace is the one dial on a kind that is legible before they sit down, which is
+ * why the renderer asks for it too: the walk cycle is driven by distance
+ * covered against top speed, so a hurried diner animated against the average
+ * would glide.
+ */
+export function customerSpeed(customer: Customer): number {
+  return CUSTOMER_SPEED * customerKind(customer.kind).pace;
+}
 
 /**
  * How long a room with nothing free waits between customers.
@@ -216,6 +246,7 @@ function arrive(world: World, reachable: Set<number>): void {
 
   const recipe = orderFrom(world);
   if (!recipe) return; // a room with nothing on the menu takes no orders
+  const kind = pickKind(world);
 
   const start = { x: world.door.x - OFF_GRID + 0.5, y: world.door.y + 0.5 };
 
@@ -228,10 +259,15 @@ function arrive(world: World, reachable: Set<number>): void {
     table: null,
     seat: null,
     recipeId: recipe.id,
+    kind: kind.id,
     path: [],
     timer: 0,
-    remaining: recipe.patience,
-    patience: recipe.patience,
+    // The dish says how long it is reasonable to wait for; the person says how
+    // reasonable they are feeling. Stored resolved rather than looked up on
+    // demand because the patience ring reads `remaining / patience`, and both
+    // halves have to be on the same scale.
+    remaining: recipe.patience * kind.patience,
+    patience: recipe.patience * kind.patience,
     tip: 0,
   };
   world.customers.push(customer);
@@ -283,6 +319,23 @@ function orderFrom(world: World): Recipe | null {
   const rest = pool.slice(0, -1);
   const spread = (roll - LAUNCH_SHARE) / (1 - LAUNCH_SHARE);
   return rest[Math.min(rest.length - 1, Math.floor(spread * rest.length))] ?? newest;
+}
+
+/**
+ * Which sort of person this is.
+ *
+ * Weighted, and **exactly one draw** whatever the table looks like — the same
+ * rule `orderFrom` follows. Randomness spent conditionally is randomness that
+ * makes two rooms on the same seed diverge over who happened to walk in.
+ */
+function pickKind(world: World): CustomerKind {
+  const total = CUSTOMER_KINDS.reduce((sum, kind) => sum + kind.weight, 0);
+  let roll = random(world) * total;
+  for (const kind of CUSTOMER_KINDS) {
+    roll -= kind.weight;
+    if (roll < 0) return kind;
+  }
+  return CUSTOMER_KINDS.at(-1)!;
 }
 
 /**
@@ -354,7 +407,7 @@ function sitDown(world: World, customer: Customer, table: Appliance, reachable: 
 function walk(customer: Customer, dt: number): boolean {
   if (customer.path.length === 0) return true;
 
-  let step = CUSTOMER_SPEED * dt;
+  let step = customerSpeed(customer) * dt;
   while (step > 0) {
     const target = customer.path[0];
     if (!target) return true;
@@ -460,9 +513,10 @@ export function acceptDelivery(world: World, table: Appliance, customer: Custome
   if (!recipe || recipe.id !== customer.recipeId) return null;
 
   const speed = Math.max(0, customer.remaining / customer.patience);
-  customer.tip = Math.round(recipe.reward * TIP_FRACTION * speed);
+  const kind = customerKind(customer.kind);
+  customer.tip = Math.round(recipe.reward * TIP_FRACTION * speed * kind.generosity);
   customer.state = "eating";
-  customer.timer = EAT_TIME;
+  customer.timer = eatTime(customer);
 
   world.money += recipe.reward;
   world.served++;

@@ -480,16 +480,21 @@ function parseFrameCustomer(value: unknown): Frame["customers"][number] | null {
   const fx = num(value.fx);
   const fy = num(value.fy);
   const recipeId = str(value.recipeId, MAX_NAME);
+  // Checked for shape, not for membership. A newer server may know a kind this
+  // client does not, and `customerKind` resolves an unknown id to the default
+  // where it is read — rejecting the frame would freeze the whole kitchen over
+  // somebody's coat colour.
+  const kind = str(value.kind, MAX_NAME);
   const remaining = num(value.remaining);
   const patience = num(value.patience);
   const timer = num(value.timer);
   const state = str(value.state, MAX_NAME);
   if (id === null || x === null || y === null || fx === null || fy === null) return null;
   if (recipeId === null || remaining === null || patience === null || timer === null) return null;
-  if (state === null || !isCustomerState(state)) return null;
+  if (kind === null || state === null || !isCustomerState(state)) return null;
   const table = optionalInt(value.table);
   if (table === undefined) return null;
-  return { id, state, x, y, fx, fy, table, recipeId, remaining, patience, timer };
+  return { id, state, x, y, fx, fy, table, recipeId, kind, remaining, patience, timer };
 }
 
 function parseFramePlayer(value: unknown): Frame["players"][number] | null {

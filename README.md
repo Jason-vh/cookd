@@ -81,6 +81,12 @@ The white square in front of your chef is what you'll interact with.
    want and a ring counting down their patience. Placing the plate on that
    table feeds them. The two counters in the dividing wall are the **pass** —
    one player can plate and slide, another can run.
+
+   **Not everybody waits the same.** Somebody hurrying up the path in a dark
+   coat has half the patience and pays for it; somebody ambling in will wait,
+   and will then sit on your table twice as long. You can tell them apart from
+   across the room, which is the point — [who walks
+   in](docs/dining-room.md#who-walks-in).
 7. When they finish eating they leave behind a **dirty plate and a tip**. Pick
    the plate up and the tip is yours. A table with a plate still on it cannot be
    sat at, so clearing up *is* the capacity.

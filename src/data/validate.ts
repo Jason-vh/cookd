@@ -1,6 +1,7 @@
 import { specKey } from "../sim/items";
 import type { ItemSpec } from "../sim/types";
 import { APPLIANCES, APPLIANCE_KINDS } from "./appliances";
+import { CUSTOMER_KINDS, DEFAULT_CUSTOMER_KIND } from "./customers";
 import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
 import { LEVELS } from "./level";
@@ -120,6 +121,36 @@ export function validateContent(): string[] {
     for (const id of ids) {
       if (!byId.has(id)) problems.push(`${what}: no such recipe "${id}"`);
     }
+  }
+
+  // --- who walks in ---
+  // Every dial multiplies a number the dining room already has, so zero is
+  // never a tuning value: a patience of 0 is somebody who walks out on the tick
+  // they order, and an appetite of 0 is a table that is never occupied.
+  const kindIds = new Set<string>();
+  for (const kind of CUSTOMER_KINDS) {
+    const where = `customer "${kind.id}"`;
+    if (kindIds.has(kind.id)) problems.push(`${where}: duplicate id`);
+    kindIds.add(kind.id);
+    if (kind.weight <= 0) problems.push(`${where}: weight must be positive`);
+    for (const [dial, value] of Object.entries({
+      patience: kind.patience,
+      appetite: kind.appetite,
+      generosity: kind.generosity,
+      pace: kind.pace,
+      build: kind.build,
+    })) {
+      if (value <= 0) problems.push(`${where}: ${dial} must be positive`);
+    }
+    // A kind with no coat cannot be dressed, and `buildCustomer` indexes into
+    // the list without asking.
+    if (kind.coats.length === 0) problems.push(`${where}: no coat to wear`);
+  }
+  // The fallback for an id we do not know — an older client, a newer server —
+  // has to be somebody. Without it `customerKind` returns whatever row happens
+  // to be first, which is a silent tuning decision nobody made.
+  if (!kindIds.has(DEFAULT_CUSTOMER_KIND)) {
+    problems.push(`no customer kind "${DEFAULT_CUSTOMER_KIND}" for unknown ids to fall back to`);
   }
 
   // --- the shop ---

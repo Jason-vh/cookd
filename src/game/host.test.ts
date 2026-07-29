@@ -603,6 +603,7 @@ function customer(id: number, recipeId: string): Customer {
     table: null,
     seat: null,
     recipeId,
+    kind: "regular",
     path: [],
     timer: 0,
     remaining: 30,

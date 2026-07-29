@@ -112,10 +112,11 @@ export const PALETTE = {
   skin: 0xe3bd97,
 
   // --- customers ---
-  // Deliberately a *different* family from the chef colours: at a glance across
-  // the room, who works here must never be a question. Softer and cooler, so
-  // the four chef colours stay the brightest people on screen.
-  customers: [0xc7a98c, 0x8fa3ad, 0xb59aa8, 0x9fae8f, 0xc3b184, 0xa79bb5],
+  // Coats are not here: they belong to a *kind* of customer, so they live in
+  // `data/customers.ts` beside the patience and the appetite they arrive with,
+  // exactly as a biome's colours live in `data/biomes.ts`. The rule they follow
+  // is written down there — a different family from the chef colours, because
+  // at a glance across the room, who works here must never be a question.
   customerLegs: 0x7b7466,
   hair: 0x4c4038,
 

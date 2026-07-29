@@ -241,6 +241,31 @@ describe("server messages", () => {
     expect(good?.t === "layout" && good.layout.appliances[0]?.card).toBe("fries");
   });
 
+  test("a customer's kind travels, and an unfamiliar one is not a reason to drop them", () => {
+    const host = new Host();
+    host.join("Ann");
+    host.menu("startDay");
+    host.world.nextArrivalIn = 0;
+    for (let i = 0; i < 60; i++) host.advance(1 / 60);
+    expect(host.world.customers.length).toBeGreaterThan(0);
+
+    const frame = encodeFrame(host.world, host.acks);
+    const parsed = decode(JSON.stringify({ t: "frame", frame }), parseServerMessage);
+    expect(parsed?.t === "frame" && parsed.frame.customers[0]?.kind).toBe(
+      host.world.customers[0]!.kind,
+    );
+
+    // A kind this build has never heard of is a *newer server*, which is an
+    // ordinary state of the world mid-deploy. It resolves to a regular where it
+    // is read; rejecting the frame would freeze a whole kitchen over a coat.
+    const future = { ...frame, customers: [{ ...frame.customers[0], kind: "astronaut" }] };
+    expect(parseServerMessage({ t: "frame", frame: future })).not.toBeNull();
+    // A kind that is not a *string* is a malformed message, and those are still
+    // dropped whole.
+    const broken = { ...frame, customers: [{ ...frame.customers[0], kind: 7 }] };
+    expect(parseServerMessage({ t: "frame", frame: broken })).toBeNull();
+  });
+
   test("a fatal error is distinguishable from a passing one", () => {
     expect(parseServerMessage({ t: "error", message: "full", fatal: true })).toEqual({
       t: "error",

@@ -10,8 +10,10 @@ Near term:
   than a spawn rate.
 - **Parties** — one table, several dishes, wanted together. The coordination
   flagship ("table 2 wants a pizza *and* two fries"), and the reason tables are
-  drawn with four chairs already.
-- **Customer variety** — patience and appetite as data, like biomes are.
+  drawn with four chairs already. It is the first thing a customer *kind* cannot
+  express: the rows in `data/customers.ts` only multiply numbers the dining room
+  already has, deliberately, so a party is a change to the loop rather than a
+  fifth column.
 - **More biomes** — beach, night market, ski lodge. Mostly a data exercise now.
 - **Verify the gamepad mapping** on real hardware, add per-player join/leave UI
   and rumble on burn/serve.
