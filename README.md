@@ -33,8 +33,10 @@ skips the server entirely.
 For local development you only need `bun run dev` if you're playing offline; run
 the server too if you want online play.
 
-Before pushing, `bun run check` runs the typechecker, the linter, the formatter
-and the tests — the same command CI runs.
+`bun run check` runs the typechecker, the linter, the formatter and the tests.
+It also runs on its own: [lefthook](lefthook.yml) gates commits on the fast
+three and pushes on all four, and CI runs the same command again. `bun install`
+installs the hooks.
 
 ### Controls
 

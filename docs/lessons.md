@@ -103,8 +103,11 @@ refuses. Serving is where the game says no, and by then the mistake is obvious.
 - **Anything that creates a three.js object owns freeing it.** `scene.remove`
   does not. Shared resources come from `primitives.ts` and are freed by nobody
   — `disposeSubtree` knows the difference.
-- Run `bun run check` before pushing. CI runs the same command, on branches as
-  well as on `main`.
+- `bun run check` runs on commit and on push, via lefthook (`lefthook.yml`), and
+  again in CI. Commit gets the fast three — typecheck, lint, format, about a
+  second; push gets the tests too, because pushing `main` deploys. Escape hatch
+  is `--no-verify`, and using it means you have decided something, not that you
+  were in a hurry.
 
 ## Where these are enforced
 
@@ -124,6 +127,7 @@ Several of these are no longer only advice:
 | The renderer reads the world and never writes it | `layering.test.ts` |
 | One list of a union, not several | `Record<K, true>` instead of `Set`, in `wire.ts` |
 | Content the renderer cannot draw | `models.test.ts` |
+| Committing past a failing check | `lefthook.yml` — pre-commit and pre-push |
 
 The ones without a row are still only advice, which is worth knowing when you
 are about to break one.

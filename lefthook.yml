@@ -1,0 +1,36 @@
+# Local gates, so `bun run check` is not something you have to remember.
+#
+# It was. Twice in one afternoon a commit landed with the linter failing — once
+# a floating promise, once a shadowed variable — and both were only noticed
+# because the *next* command happened to run it. Neither is interesting; that is
+# the point. A rule enforced by remembering is a rule with a failure rate.
+#
+# CI runs the same commands, so this is a fast local answer rather than a second
+# source of truth. Escape hatch: `git commit --no-verify`, or `LEFTHOOK=0`.
+
+pre-commit:
+  parallel: true
+  jobs:
+    # The whole project, not just staged files. The linter is type-aware and
+    # `tsc` needs the whole program, so "only what changed" is not a thing
+    # either can answer — and a change in one file routinely breaks another.
+    - name: typecheck
+      run: bun run typecheck
+
+    - name: lint
+      run: bun run lint
+
+    # Deliberately a check, not a fix-and-restage. Auto-formatting is the usual
+    # choice here and it quietly stages hunks you did not stage, which for a
+    # repo this careful about "nothing happens silently" is the wrong trade.
+    # `bun run fmt` is one command and you will need it about once a month.
+    - name: format
+      run: bun run fmt:check
+      fail_text: "Formatting: run `bun run fmt`"
+
+pre-push:
+  jobs:
+    # Everything, including the tests — pushing `main` builds and deploys to
+    # production, so this is the last gate before real players see it.
+    - name: check
+      run: bun run check
