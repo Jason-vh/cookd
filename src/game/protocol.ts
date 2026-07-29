@@ -85,6 +85,12 @@ export type FrameCustomer = {
 
 export type Frame = {
   tick: number;
+  /**
+   * The server's id counter. Carried so a client's world hands out ids from
+   * where the server left off rather than from wherever `createWorld` stopped,
+   * which is far behind anything the server is minting by the first customer.
+   */
+  nextId: number;
   phase: Phase;
   day: number;
   dayTime: number;
@@ -166,6 +172,7 @@ export function layoutVersion(world: World): number {
 export function encodeFrame(world: World, acks: Map<number, number>): Frame {
   return {
     tick: world.tick,
+    nextId: world.nextId,
     phase: world.phase,
     day: world.day,
     dayTime: world.dayTime,
@@ -270,6 +277,7 @@ export function applyLayout(world: World, layout: Layout): void {
  */
 export function applyFrame(world: World, frame: Frame): void {
   world.tick = frame.tick;
+  world.nextId = frame.nextId;
   world.phase = frame.phase;
   world.day = frame.day;
   world.dayTime = frame.dayTime;

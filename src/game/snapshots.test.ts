@@ -13,6 +13,7 @@ import { PLAYOUT_DELAY, SnapshotBuffer } from "./snapshots";
 function frame(tick: number, players: { id: number; x: number; y: number }[] = []): Frame {
   return {
     tick,
+    nextId: 1,
     phase: "service",
     day: 1,
     dayTime: 100,

@@ -216,7 +216,14 @@ export class View {
     // A reset (or going online) hands us a world whose id counter starts over.
     // Keeping the old high-water mark would silently suppress every effect
     // until the new world counted past it.
-    if (world.nextId < this.lastEffectId) this.lastEffectId = 0;
+    //
+    // Judged from the cues themselves rather than from `world.nextId`: cues are
+    // appended in id order and only ever dropped from the front, so the last
+    // one is the highest id this world has reached. Asking `nextId` instead
+    // spawned every popup once per *frame* online, where the drawn world is
+    // filled in from the wire and its own counter never moves.
+    const newest = world.effects.at(-1);
+    if (newest && newest.id < this.lastEffectId) this.lastEffectId = 0;
 
     for (const cue of world.effects) {
       if (cue.id <= this.lastEffectId) continue;

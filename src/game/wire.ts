@@ -320,13 +320,15 @@ function parseFrame(value: unknown): Frame | null {
   if (!isRecord(value)) return null;
 
   const tick = int(value.tick);
+  const nextId = int(value.nextId);
   const day = int(value.day);
   const dayTime = num(value.dayTime);
   const dayLength = num(value.dayLength);
   const money = num(value.money);
   const served = int(value.served);
   const lost = int(value.lost);
-  if (tick === null || day === null || dayTime === null || dayLength === null) return null;
+  if (tick === null || nextId === null || day === null || dayTime === null) return null;
+  if (dayLength === null) return null;
   if (money === null || served === null || lost === null) return null;
   if (value.phase !== "service" && value.phase !== "build") return null;
 
@@ -355,6 +357,7 @@ function parseFrame(value: unknown): Frame | null {
 
   return {
     tick,
+    nextId,
     phase: value.phase,
     day,
     dayTime,
