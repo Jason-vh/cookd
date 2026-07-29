@@ -18,3 +18,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run build
+
+      # The deploy builds the image, not just the app. A green check that never
+      # exercised the Dockerfile once let a broken `bun install` reach `main`.
+      - run: docker build .

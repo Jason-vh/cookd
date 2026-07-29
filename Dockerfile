@@ -5,7 +5,11 @@
 FROM oven/bun:1 AS build
 WORKDIR /app
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+
+# `--ignore-scripts` because `prepare` installs git hooks, and an image build is
+# not a checkout: there is no git binary here and `.dockerignore` drops `.git`
+# anyway. The build wants dependencies, not lifecycle hooks.
+RUN bun install --frozen-lockfile --ignore-scripts
 COPY . .
 RUN bun run build
 
