@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { specKey } from "../sim/items";
-import type { Item } from "../sim/types";
+import type { IngredientId, Item } from "../sim/types";
 import { PALETTE } from "./palette";
 import {
   cylinder,
@@ -553,18 +553,21 @@ const fallback: Builder = (parent, item, y) => {
 // --- registry ----------------------------------------------------------------
 
 /**
- * Looked up by exact item key first (`tomato|chopped`), then by ingredient base
- * (`tomato`). Add a new entry to give any item state its own model.
+ * A model for every ingredient there is.
+ *
+ * A missing entry is not a crash, it is a **grey box**: `fallback` draws a
+ * rounded cube and the game carries on, with a green typecheck and nothing
+ * said. That is the worst kind of failure for content, because it looks like a
+ * modelling decision.
+ *
+ * `APPLIANCE_LOOK` prevents the equivalent with `Record<ApplianceKind, Look>`,
+ * but that only works because `ApplianceKind` is a closed union. `IngredientId`
+ * is `string`, and closing it would push a content decision into the wire
+ * format — `parseItem` would have to reject bases a newer server knows about.
+ * Not worth it for this. `models.test.ts` asserts the coverage instead, which
+ * fails `bun run check` just as loudly.
  */
-const MODELS: Record<string, Builder> = {
-  // exact states
-  "tomato|chopped": choppedTomato,
-  "tomato|chopped,crushed": crushedTomato,
-  "lettuce|chopped": choppedLettuce,
-  "cheese|chopped": choppedCheese,
-  "potato|chopped": choppedPotato,
-
-  // bases
+const BASE_MODELS: Record<IngredientId, Builder> = {
   tomato,
   lettuce,
   cheese,
@@ -578,12 +581,33 @@ const MODELS: Record<string, Builder> = {
   plate,
 };
 
+/**
+ * Models for a *specific* processed state, looked up before the base.
+ *
+ * Open-ended by design: an item state is a base plus an arbitrary list of
+ * processes, so there is no finite set to be exhaustive about. Anything without
+ * an entry falls back to its base model, which is the right default — chopped
+ * cheese that looks like cheese is not a bug, it is just less good.
+ */
+const STATE_MODELS: Record<string, Builder> = {
+  "tomato|chopped": choppedTomato,
+  "tomato|chopped,crushed": crushedTomato,
+  "lettuce|chopped": choppedLettuce,
+  "cheese|chopped": choppedCheese,
+  "potato|chopped": choppedPotato,
+};
+
+/** Which ingredient bases have a model. For the coverage test. */
+export function modelledBases(): string[] {
+  return Object.keys(BASE_MODELS);
+}
+
 export function addModel(parent: THREE.Object3D, item: Item, y: number): void {
   if (item.processes.includes("burnt")) {
     burnt(parent, item, y);
     return;
   }
-  const builder = MODELS[specKey(item)] ?? MODELS[item.base] ?? fallback;
+  const builder = STATE_MODELS[specKey(item)] ?? BASE_MODELS[item.base] ?? fallback;
   builder(parent, item, y);
 }
 
@@ -594,7 +618,7 @@ export function buildItemModel(item: Item): THREE.Object3D {
 }
 
 /** A display-only sample of an ingredient, used as the marker on crates. */
-export function buildIngredientSample(base: string): THREE.Object3D {
+export function buildIngredientSample(base: IngredientId): THREE.Object3D {
   const model = buildItemModel({ id: -1, base, processes: [], contents: [] });
   model.scale.setScalar(0.85);
   return model;

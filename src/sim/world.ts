@@ -1,4 +1,5 @@
 import { LEGEND, type LevelDef } from "../data/level";
+import { nextRandom } from "./random";
 import type { Appliance, EffectCue, Player, PlayerInput, Vec2, World } from "./types";
 
 export const TILE = 1;
@@ -61,13 +62,17 @@ export function touchLayout(world: World): void {
   world.layoutVersion++;
 }
 
-/** Deterministic PRNG (mulberry32) so replays and future netcode line up. */
+/**
+ * The simulation's random number, drawn from the world's own stream.
+ *
+ * State lives on the `World` so that a save, a replay and a network snapshot
+ * all carry it. The generator itself is shared with the render layer's scenery
+ * scattering — see `sim/random.ts`.
+ */
 export function random(world: World): number {
-  world.rngState = (world.rngState + 0x6d2b79f5) | 0;
-  let t = world.rngState;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  const next = nextRandom(world.rngState);
+  world.rngState = next.state;
+  return next.value;
 }
 
 function makePlayer(id: number, name: string, spawn: Vec2): Player {

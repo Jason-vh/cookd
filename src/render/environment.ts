@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { isMesh } from "./nodes";
-import type { Biome, PropKind, ScatterEntry } from "../data/biomes";
+import { scatter, type PropSpace } from "./scatter";
+import { mulberry32 } from "../sim/random";
+import type { Biome, PropKind } from "../data/biomes";
 import { box, cylinder, mesh, roundedBox, sphere } from "./primitives";
 import { mergeStatic } from "./merge";
 
@@ -169,7 +171,7 @@ function addPath(
 
 type PropBuilder = (biome: Biome, random: () => number) => THREE.Object3D;
 
-const PROPS: Record<PropKind, PropBuilder> = {
+const PROP_BUILDERS: Record<PropKind, PropBuilder> = {
   tree: (biome, random) => tree(biome, random, biome.foliage),
   blossom: (biome, random) => tree(biome, random, biome.blossom),
   bush: (biome, random) => {
@@ -279,25 +281,33 @@ function tree(biome: Biome, random: () => number, palette: number[]): THREE.Obje
 }
 
 /**
- * Ground footprint of each prop, in tiles. Used to keep props from growing
- * through each other — a bush sprouting out of a picnic table breaks the
- * illusion instantly.
+ * Everything the placement algorithm needs about a prop kind, in one table.
  *
- * These are deliberately smaller than the visual silhouette: tree canopies and
- * bush tops are *allowed* to overlap, which looks natural. It is the bases that
- * must not collide.
+ * There were four of these in four shapes: a builder map, a footprint map, an
+ * inline `entry.kind !== "tuft"` for shadows, and an inline
+ * `kind === "tuft" || kind === "flowers"` for patio clearance. Adding a prop
+ * failed the build in two of them and silently took a default in the other two
+ * — which is exactly the situation `APPLIANCE_LOOK` was written to end one
+ * directory over.
  */
-const FOOTPRINT: Record<PropKind, number> = {
-  tree: 0.55,
-  blossom: 0.5,
-  bush: 0.6,
-  rock: 0.45,
-  picnic: 1.35,
-  flowers: 0.28,
-  tuft: 0.14,
+type PropSpec = PropSpace & {
+  build: PropBuilder;
+  /**
+   * Grass tufts are dozens of tiny meshes whose shadows are invisible at this
+   * camera angle; a shadow-map pass each is not worth paying for.
+   */
+  castsShadow: boolean;
 };
 
-type Placed = { x: number; z: number; radius: number };
+const PROPS: Record<PropKind, PropSpec> = {
+  tree: { build: PROP_BUILDERS.tree, radius: 0.55, clearance: 1.4, castsShadow: true },
+  blossom: { build: PROP_BUILDERS.blossom, radius: 0.5, clearance: 1.4, castsShadow: true },
+  bush: { build: PROP_BUILDERS.bush, radius: 0.6, clearance: 1.4, castsShadow: true },
+  rock: { build: PROP_BUILDERS.rock, radius: 0.45, clearance: 1.4, castsShadow: true },
+  picnic: { build: PROP_BUILDERS.picnic, radius: 1.35, clearance: 1.4, castsShadow: true },
+  flowers: { build: PROP_BUILDERS.flowers, radius: 0.28, clearance: 0.6, castsShadow: true },
+  tuft: { build: PROP_BUILDERS.tuft, radius: 0.14, clearance: 0.6, castsShadow: false },
+};
 
 function addScatter(
   scene: THREE.Object3D,
@@ -311,66 +321,22 @@ function addScatter(
   // Keep props off the patio and out of the immediate approach to it.
   const halfW = bounds.width / 2 + biome.patio.overhang;
   const halfD = bounds.height / 2 + biome.patio.overhang;
-  const placed: Placed[] = [];
 
-  // Largest props first: they are the hardest to fit, and everything else can
-  // then arrange itself around them.
-  const order = [...biome.scatter].sort((a, b) => FOOTPRINT[b.kind] - FOOTPRINT[a.kind]);
-
-  for (const entry of order) {
-    const build = PROPS[entry.kind];
-    for (let i = 0; i < entry.count; i++) {
-      const spot = findSpot(random, entry, halfW, halfD, placed);
-      if (!spot) continue;
-      placed.push({ x: spot.x, z: spot.z, radius: FOOTPRINT[entry.kind] });
-      const prop = build(biome, random);
-      prop.position.set(cx + spot.x, groundY, cz + spot.z);
-      prop.rotation.y += random() * Math.PI * 2;
-      const scale = entry.scale[0] + random() * (entry.scale[1] - entry.scale[0]);
-      prop.scale.multiplyScalar(scale);
-      prop.traverse((child) => {
-        if (isMesh(child)) {
-          child.castShadow = entry.kind !== "tuft";
-          child.receiveShadow = true;
-        }
-      });
-      scene.add(prop);
-    }
+  for (const { entry, x, z } of scatter(biome.scatter, PROPS, halfW, halfD, random)) {
+    const spec = PROPS[entry.kind];
+    const prop = spec.build(biome, random);
+    prop.position.set(cx + x, groundY, cz + z);
+    prop.rotation.y += random() * Math.PI * 2;
+    const scale = entry.scale[0] + random() * (entry.scale[1] - entry.scale[0]);
+    prop.scale.multiplyScalar(scale);
+    prop.traverse((child) => {
+      if (isMesh(child)) {
+        child.castShadow = spec.castsShadow;
+        child.receiveShadow = true;
+      }
+    });
+    scene.add(prop);
   }
-}
-
-/**
- * Rejection sampling: anywhere in the ring, but never on the patio and never
- * overlapping a prop that is already there.
- */
-function findSpot(
-  random: () => number,
-  entry: ScatterEntry,
-  halfW: number,
-  halfD: number,
-  placed: Placed[],
-): { x: number; z: number } | null {
-  const radius = FOOTPRINT[entry.kind];
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const angle = random() * Math.PI * 2;
-    const distance = entry.minDistance + random() * (entry.maxDistance - entry.minDistance);
-    const x = Math.cos(angle) * distance;
-    const z = Math.sin(angle) * distance;
-
-    const clearance = entry.kind === "tuft" || entry.kind === "flowers" ? 0.6 : 1.4;
-    if (Math.abs(x) < halfW + clearance && Math.abs(z) < halfD + clearance) continue;
-
-    if (placed.some((other) => overlaps(x, z, radius, other))) continue;
-    return { x, z };
-  }
-  return null;
-}
-
-function overlaps(x: number, z: number, radius: number, other: Placed): boolean {
-  const minimum = radius + other.radius;
-  const dx = x - other.x;
-  const dz = z - other.z;
-  return dx * dx + dz * dz < minimum * minimum;
 }
 
 // --- generated textures ------------------------------------------------------
@@ -450,13 +416,3 @@ function hex(color: number): string {
 }
 
 /** Same PRNG as the simulation, so scattered scenery is reproducible. */
-function mulberry32(seed: number): () => number {
-  let state = seed;
-  return () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}

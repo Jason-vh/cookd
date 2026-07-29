@@ -1,47 +1,59 @@
 import type { IngredientId, ProcessId } from "../sim/types";
 
-export type Shape = "box" | "sphere" | "disc" | "plate";
-
+/**
+ * Everything the game can hold, and what to call it.
+ *
+ * Deliberately only the name. Each row used to carry `color`, `shape` and
+ * `container` as well, and not one of them was read anywhere: colour moved to
+ * `render/palette.ts`, shape was superseded by the sculpted models in
+ * `render/models.ts`, and `container` was set once on the plate while
+ * `isPlate()` hardcoded `base === "plate"` regardless.
+ *
+ * Three dead columns is not just clutter — it is three decisions demanded of
+ * whoever adds an ingredient, none of which do anything, in a file whose stated
+ * purpose is that adding content should be easy. If a row ever needs a field
+ * again, adding it back is a line.
+ */
 export type Ingredient = {
   id: IngredientId;
+  /** Shown on crate labels and in the HUD's item names. */
   name: string;
-  color: number;
-  shape: Shape;
-  /** Containers hold other items (currently only the plate). */
-  container?: boolean;
 };
 
 export const INGREDIENTS: Record<IngredientId, Ingredient> = {
-  tomato: { id: "tomato", name: "Tomato", color: 0xd83b2c, shape: "sphere" },
-  lettuce: { id: "lettuce", name: "Lettuce", color: 0x5fbf4a, shape: "sphere" },
-  cheese: { id: "cheese", name: "Cheese", color: 0xf2c24b, shape: "box" },
-  flour: { id: "flour", name: "Flour", color: 0xf0e6d2, shape: "box" },
-  water: { id: "water", name: "Water", color: 0x7fb2d9, shape: "sphere" },
-  dough: { id: "dough", name: "Dough", color: 0xe8d5a8, shape: "sphere" },
-  potato: { id: "potato", name: "Potato", color: 0xc08b4a, shape: "sphere" },
+  tomato: { id: "tomato", name: "Tomato" },
+  lettuce: { id: "lettuce", name: "Lettuce" },
+  cheese: { id: "cheese", name: "Cheese" },
+  flour: { id: "flour", name: "Flour" },
+  water: { id: "water", name: "Water" },
+  dough: { id: "dough", name: "Dough" },
+  potato: { id: "potato", name: "Potato" },
 
-  pizza: { id: "pizza", name: "Pizza", color: 0xe0a55a, shape: "disc" },
-  salad: { id: "salad", name: "Salad", color: 0x7fc95e, shape: "disc" },
-  fries: { id: "fries", name: "Fries", color: 0xf0b93b, shape: "box" },
+  pizza: { id: "pizza", name: "Pizza" },
+  salad: { id: "salad", name: "Salad" },
+  fries: { id: "fries", name: "Fries" },
 
-  plate: { id: "plate", name: "Plate", color: 0xf2f2f2, shape: "plate", container: true },
+  plate: { id: "plate", name: "Plate" },
 };
 
 /**
- * Processes are cosmetic-ish tags used for exact matching. `burnt` is special:
- * any transform with `burnAfter` appends it, and nothing accepts a burnt item
- * except the bin.
+ * Processes are tags used for exact item matching, and that is all they are —
+ * a set, not a table. They carried a display name and a colour that nothing
+ * read; item names are built from the tag itself in `itemLabel`.
+ *
+ * `burnt` is special: any transform with `burnAfter` appends it, and nothing
+ * accepts a burnt item except the bin.
  */
-export const PROCESSES: Record<ProcessId, { name: string; color: number }> = {
-  chopped: { name: "Chopped", color: 0xffffff },
-  crushed: { name: "Crushed", color: 0xb32b1c },
-  kneaded: { name: "Kneaded", color: 0xffffff },
-  sauced: { name: "Sauced", color: 0xd83b2c },
-  topped: { name: "Topped", color: 0xf2c24b },
-  baked: { name: "Baked", color: 0xb06a2c },
-  fried: { name: "Fried", color: 0xd79b2e },
-  burnt: { name: "Burnt", color: 0x2b2b2b },
-  dirty: { name: "Dirty", color: 0x8a8377 },
+export const PROCESSES: Record<ProcessId, true> = {
+  chopped: true,
+  crushed: true,
+  kneaded: true,
+  sauced: true,
+  topped: true,
+  baked: true,
+  fried: true,
+  burnt: true,
+  dirty: true,
 };
 
 export const BURNT: ProcessId = "burnt";

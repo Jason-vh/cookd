@@ -25,6 +25,7 @@ src/
     world.ts              world construction from a level, tile/collision helpers, PRNG
     items.ts              item identity + canonical keys
     pathing.ts            BFS over walkable tiles: customer routes and reachability
+    random.ts             the one PRNG — deterministic, shared with the scenery
     step.ts               fixed-timestep tick: runs the systems in order
     systems/
       movement.ts         circle-vs-tile collision, player separation
@@ -32,7 +33,7 @@ src/
       appliances.ts       transforms (chop/fry/bake) and burning
       customers.ts        arrivals, seating, patience, eating, leaving, tips
   data/                   content — plain data, no logic
-    ingredients.ts        ingredient + process definitions (colours, shapes)
+    ingredients.ts        what exists and what it is called
     appliances.ts         appliance definitions, and the ApplianceKind union
     recipes.ts            transforms, combines, recipes + derived lookup maps
     level.ts              ASCII kitchen layouts, their legend, and the registry
@@ -58,6 +59,7 @@ src/
     item-views.ts         food on counters and in hands, and plates emptying
     highlight-views.ts    the square in front of a chef, and the build-phase yes/no
     anim.ts               the animation maths, with no three.js in it
+    scatter.ts            where the scenery goes, also with no three.js in it
     camera.ts             the 3/4 ortho framing, and how it follows the local chefs
     environment.ts        biome rendering: sky, sun, ground, patio, scattered props
     bubble.ts             the order floating over a table: dish model + patience ring
