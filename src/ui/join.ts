@@ -37,6 +37,7 @@ export class JoinScreen {
   private readonly options: Options;
   private nameField!: HTMLInputElement;
   private roomField!: HTMLInputElement;
+  private readonly listeners = new AbortController();
 
   constructor(root: HTMLElement, options: Options) {
     this.root = root;
@@ -64,14 +65,33 @@ export class JoinScreen {
     this.nameField.value = identity.name;
     this.roomField.value = room || identity.room || randomRoom();
 
-    this.root.querySelector("#join-online")!.addEventListener("click", () => this.confirmOnline());
-    this.root.querySelector("#join-local")!.addEventListener("click", () => {
-      this.hide();
-      this.options.onPlayLocal();
-    });
-    this.root.addEventListener("keydown", (event: KeyboardEvent) => {
-      if (event.key === "Enter") this.confirmOnline();
-    });
+    // One signal for every listener, so `dispose` cannot detach some of them
+    // and leave others. The keydown handler in particular outlived the screen
+    // it belongs to, which is harmless for a process-lifetime singleton and
+    // exactly the sort of thing that stops being harmless later.
+    const { signal } = this.listeners;
+    this.root
+      .querySelector("#join-online")
+      ?.addEventListener("click", () => this.confirmOnline(), { signal });
+    this.root.querySelector("#join-local")?.addEventListener(
+      "click",
+      () => {
+        this.hide();
+        this.options.onPlayLocal();
+      },
+      { signal },
+    );
+    this.root.addEventListener(
+      "keydown",
+      (event: KeyboardEvent) => {
+        if (event.key === "Enter") this.confirmOnline();
+      },
+      { signal },
+    );
+  }
+
+  dispose(): void {
+    this.listeners.abort();
   }
 
   private confirmOnline(): void {

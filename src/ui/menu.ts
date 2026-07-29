@@ -152,10 +152,18 @@ export class PauseMenu {
       this.signature = signature;
       this.items = items;
       this.index = Math.min(this.index, items.length - 1);
+      // Built as nodes rather than an HTML string. Every value here is an
+      // internal literal today, but `Open for day ${world.day + 1}` is
+      // interpolated simulation state, and "safe because of where the data
+      // happens to come from" is not a property that survives a refactor.
       this.list.replaceChildren(
         ...items.map((item) => {
           const li = document.createElement("li");
-          li.innerHTML = `<span>${item.label}</span><em>${item.hint ?? ""}</em>`;
+          const label = document.createElement("span");
+          label.textContent = item.label;
+          const hint = document.createElement("em");
+          hint.textContent = item.hint ?? "";
+          li.append(label, hint);
           return li;
         }),
       );
