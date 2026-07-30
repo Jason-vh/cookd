@@ -92,6 +92,7 @@ describe("client messages", () => {
       name: "n",
       players: 1,
       token: "",
+      level: "",
     };
     expect(parseClientMessage({ ...base, room: 7 })).toBeNull();
     expect(parseClientMessage({ ...base, name: null })).toBeNull();
@@ -101,6 +102,11 @@ describe("client messages", () => {
     expect(parseClientMessage({ ...base, players: "x" })).toBeNull();
     expect(parseClientMessage({ ...base, players: 0 })).toBeNull();
     expect(parseClientMessage({ ...base, players: 99 })).toBeNull();
+    // A level id is checked for shape only, and an older client that has no
+    // opinion about where the kitchen is stays welcome.
+    expect(parseClientMessage({ ...base, level: 7 })).toBeNull();
+    const { level: _level, ...noLevel } = base;
+    expect(parseClientMessage(noLevel)).toEqual({ ...noLevel, level: "" });
     expect(parseClientMessage(base)).toEqual(base);
   });
 

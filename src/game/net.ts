@@ -1,4 +1,4 @@
-import { LEVEL, type LevelDef } from "../data/level";
+import { LEVEL, type LevelDef, levelById } from "../data/level";
 import { DT } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
 import { emptyInput } from "../sim/world";
@@ -57,7 +57,19 @@ import { Connection, type Socket } from "./connection";
  * takes to answer, rather than playing it and forming an opinion. See
  * `latency.test.ts`.
  */
-export type NetWiring = { open?: (url: string) => Socket; now?: () => number };
+export type NetWiring = {
+  open?: (url: string) => Socket;
+  now?: () => number;
+  /**
+   * The room turned out to be a different kitchen from the one we loaded.
+   *
+   * Handed back to the *shell* rather than dealt with here, because which
+   * level is running is the shell's decision: `View` bakes the walls and the
+   * floor into one static batch when it is built, so the answer is a new game
+   * and a new view, not a patch to this one.
+   */
+  onLevel?: (id: string) => void;
+};
 
 function definedInputs(inputs: Inputs): Record<number, PlayerInput> {
   const out: Record<number, PlayerInput> = {};
@@ -98,6 +110,9 @@ export class NetGame implements Game {
 
   readonly level: LevelDef;
 
+  /** Told when the room turns out to be a different kitchen. See `NetWiring`. */
+  private readonly onLevel?: (id: string) => void;
+
   constructor(
     url: string,
     room: string,
@@ -114,6 +129,7 @@ export class NetGame implements Game {
     this.onError = onError;
     this.level = level;
     this.wantedPlayers = Math.max(1, players);
+    this.onLevel = wiring.onLevel;
     this.now = wiring.now ?? (() => performance.now());
     this.reconciler = new Reconciler(level);
     this.world = this.reconciler.prediction;
@@ -131,6 +147,9 @@ export class NetGame implements Game {
           name: this.name,
           players: this.wantedPlayers,
           token: this.token,
+          // Only heeded when this room does not exist yet: a kitchen that has
+          // been played keeps its own level, and we load whatever it says.
+          level: this.level.id,
         }),
         hadFrames: () => this.snapshots.size > 0,
       },
@@ -155,6 +174,13 @@ export class NetGame implements Game {
         // before, silently, because the client simply assumed the one level it
         // was compiled with.
         if (message.level !== this.level.id) {
+          // Somebody else made this room, and they chose a different kitchen.
+          // Load theirs: a room code is an invitation to *their* restaurant,
+          // and the alternative is telling the guest they picked wrong.
+          if (this.onLevel && levelById(message.level)) {
+            this.onLevel(message.level);
+            return;
+          }
           this.die(`This kitchen is "${message.level}" — refresh to load it`);
           return;
         }

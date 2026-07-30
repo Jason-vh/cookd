@@ -19,7 +19,13 @@ Near term:
   left of the idea is the *ordering* of a party's dishes — courses, or a table
   that will not start until every plate has landed — which is a rule about
   waiting, and this game has enough of those for now.
-- **More biomes** — beach, night market, ski lodge. Mostly a data exercise now.
+- **A second kitchen exists**: the [Beach Shack](content.md#the-beach-shack), a
+  big deck and a small galley, in a beach biome. It cost one biome row, three
+  prop builders and a `<select>` on the join screen — the level registry and the
+  wire's level id were already there, waiting. What is left is *more* of them
+  (night market, ski lodge) and the harder half nobody has needed yet: a room's
+  level is fixed when it is created, so there is no way to move a kitchen you
+  have already built.
 - **Verify the gamepad mapping** on real hardware, add per-player join/leave UI
   and rumble on burn/serve.
 - **Multiplayer polish:** there is still no spectator mode and no proper

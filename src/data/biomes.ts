@@ -9,7 +9,17 @@
  * This is content: plain data, no logic, no three.js.
  */
 
-export type PropKind = "tree" | "blossom" | "bush" | "rock" | "flowers" | "tuft" | "picnic";
+export type PropKind =
+  | "tree"
+  | "blossom"
+  | "bush"
+  | "rock"
+  | "flowers"
+  | "tuft"
+  | "picnic"
+  | "palm"
+  | "parasol"
+  | "driftwood";
 
 export type ScatterEntry = {
   kind: PropKind;
@@ -87,8 +97,55 @@ export const PARK: Biome = {
   ],
 };
 
+/**
+ * The other end of the country: bleached sand, a hard sun and a sea breeze.
+ *
+ * A biome is a *mood*, and the two dials that carry it are the grade and the
+ * ground. Everything else here follows from "midday at the coast": the sun is
+ * higher and whiter than the park's afternoon, the fog is further away because
+ * sea air is clear, and the sand is bright enough that the grade pulls the
+ * exposure back down rather than letting the whole frame glare.
+ *
+ * It reuses the park's prop *kinds* wherever a shape does the same job — a rock
+ * is a rock, a tuft of grass is dune grass — and adds three that only make
+ * sense here. That is the test for a new `PropKind`: it earns its row when no
+ * existing shape means the same thing.
+ */
+export const BEACH: Biome = {
+  id: "beach",
+  name: "Beach Shack",
+  sky: { top: "#5f9fd0", middle: "#9ec9e4", horizon: "#eae2c8" },
+  fog: { color: 0xe8e0c8, near: 44, far: 120 },
+  sun: { color: 0xfff6e0, intensity: 2.6, azimuth: 122, elevation: 62 },
+  fill: { color: 0xcfe0ee, intensity: 0.5 },
+  ambient: { sky: 0xe8f0f6, ground: 0xbfa87e, intensity: 0.85 },
+  environmentIntensity: 0.62,
+  // Sand throws a great deal of light back up. Left at the park's exposure the
+  // whole frame sat half a stop hot and the white plates lost their edges.
+  exposure: 0.92,
+  grade: { saturation: 0.86, warmth: 0.3, lift: 0.012 },
+  ground: { base: 0xe0cfa4, patch: 0xd6c395, accent: 0xeadcb8 },
+  patio: { edge: 0xc9b489, trim: 0xa8946c, lift: 0.36, overhang: 0.7 },
+  path: { color: 0xd8c9a2, count: 7 },
+  foliage: [0x5f8f5a, 0x6f9d5e, 0x82a866],
+  blossom: [0xe0b070, 0xe8c98d],
+  trunk: 0xa8875e,
+  rock: 0xb7ac97,
+  flowers: [0xefe3b8, 0xdca9a0, 0xc9d3e2],
+  timber: 0xc2a173,
+  scatter: [
+    { kind: "palm", count: 11, minDistance: 3.5, maxDistance: 22, scale: [0.9, 1.5] },
+    { kind: "parasol", count: 5, minDistance: 4, maxDistance: 15, scale: [0.9, 1.2] },
+    { kind: "driftwood", count: 9, minDistance: 2.5, maxDistance: 20, scale: [0.7, 1.4] },
+    { kind: "rock", count: 14, minDistance: 2.5, maxDistance: 24, scale: [0.5, 1.2] },
+    { kind: "flowers", count: 40, minDistance: 2, maxDistance: 24, scale: [0.6, 1] },
+    { kind: "tuft", count: 220, minDistance: 1.4, maxDistance: 26, scale: [0.6, 1.4] },
+  ],
+};
+
 export const BIOMES: Record<string, Biome> = {
   park: PARK,
+  beach: BEACH,
 };
 
 export function biome(id: string): Biome {

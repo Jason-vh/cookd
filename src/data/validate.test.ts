@@ -10,6 +10,10 @@ import {
   TRANSFORM_INDEX,
 } from "./recipes";
 import { specKey } from "../sim/items";
+import { reachableFrom, seatsAround } from "../sim/pathing";
+import { kitchenWarnings, unreachableAppliances, unreachableTables } from "../sim/queries";
+import { createWorld, tileIndex } from "../sim/world";
+import { LEVELS } from "./level";
 import { validateContent } from "./validate";
 
 /** Every tier-1 recipe, by id, in a stable order. */
@@ -19,6 +23,33 @@ function tierOne(list: typeof RECIPES): string[] {
     .map((recipe) => recipe.id)
     .sort();
 }
+
+describe("every level ships a kitchen that works", () => {
+  // A level is data, and data with coordinates in it is data that can be
+  // subtly wrong: a sink boxed into a corner, a table nobody can walk to, a
+  // menu the room cannot cook. Each of those already has a sentence
+  // (`kitchenWarnings`) that a *player* would be shown at day open, so the
+  // cheapest possible test of a new level is to ask it that question.
+  for (const level of Object.values(LEVELS)) {
+    test(`${level.name} opens with nothing wrong with it`, () => {
+      const world = createWorld(level, level.spawns.length);
+      expect(kitchenWarnings(world)).toEqual([]);
+      expect(unreachableAppliances(world)).toEqual([]);
+      expect(unreachableTables(world)).toEqual([]);
+      // Every table in the open, so a level can seat the parties it will be
+      // sent. One against a wall is a legitimate thing for a *player* to build
+      // and a poor thing to ship.
+      const reachable = reachableFrom(world, world.door);
+      for (const appliance of world.appliances.values()) {
+        if (appliance.kind !== "table") continue;
+        const chairs = seatsAround(world, appliance.tile).filter((chair) =>
+          reachable.has(tileIndex(world, chair.x, chair.y)),
+        );
+        expect(chairs.length).toBeGreaterThan(2);
+      }
+    });
+  }
+});
 
 describe("the content the game actually ships", () => {
   test("is coherent", () => {

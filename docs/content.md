@@ -329,6 +329,40 @@ chose is the same kitchen in every room.
 what a level *may* contain, and saves written against the older, richer park
 kitchen keep every appliance they had.
 
+### The Beach Shack
+
+The second kitchen, and the reason the level registry exists:
+
+```
+,,,,,,,,,,,,,,,,,,,,
+,,################,,
+,,#.......#tl===X#,,
+$,#..T....=......#,,
+$,#.......#..B...#,,
+$,#.....T........#,,
+,,D.......#......#,,
+?,#..T....=......#,,
+?,#.......#......#,,
+,,#.......#PS===.#,,
+,,################,,
+,,,,,,,,,,,,,,,,,,,,
+```
+
+Same rules, opposite bargain: **a big deck and a small galley.** Three tables
+standing in the open against six columns of kitchen, where the park has two
+tables and eleven columns. Seats pull customers in, so the shack is busier from
+day one and has less floor to solve it with — the dials the shop hands a player,
+set differently before they arrive.
+
+Every table has four free sides on purpose. This is the room that seats
+[parties](dining-room.md#parties), and a kitchen that cannot cook two dishes at
+once is exactly the wrong one to be handed three orders at a table.
+
+**Which kitchen a room is, is decided once**, by whoever creates it: the choice
+rides the handshake, an existing room keeps the level in its save, and a guest
+who picked something else quietly loads the room's own. A level id is also what
+makes a save portable — see [the roadmap](roadmap.md#saving).
+
 **The pass is a place, not an appliance.** Those two `=` tiles at `x = 9` are
 ordinary counters that happen to stand in the dividing wall, and the gap beside
 them at `(9,5)` is how a chef walks round. There *was* a `serving` kind: it made

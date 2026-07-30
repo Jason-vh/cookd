@@ -150,12 +150,22 @@ const rooms = new Map<string, Room>();
  * memory (and, if untouched rooms were saved, the disk) by connecting in a
  * loop.
  */
-function roomFor(code: string, loaded: Awaited<ReturnType<typeof loadSave>>): Room | null {
+function roomFor(
+  code: string,
+  loaded: Awaited<ReturnType<typeof loadSave>>,
+  wanted = "",
+): Room | null {
   const existing = rooms.get(code);
   if (existing) return existing;
   if (rooms.size >= MAX_ROOMS && !evictColdestRoom()) return null;
 
-  const level = levelById(DEFAULT_LEVEL_ID);
+  // A room that has been played already **is** a kitchen, and its save says
+  // which one. Only a room being made for the first time can honour what the
+  // person at the door asked for — otherwise joining a friend with the wrong
+  // thing selected would rebuild their restaurant as a different level, which
+  // `restore` would then refuse as stale and quietly reset.
+  const id = loaded.save?.level || wanted;
+  const level = (id ? levelById(id) : null) ?? levelById(DEFAULT_LEVEL_ID);
   if (!level) throw new Error(`missing default level ${DEFAULT_LEVEL_ID}`);
   const host = new Host(loaded.save, level);
 
@@ -517,7 +527,7 @@ const listener = Bun.serve<SocketData, "/ws">({
           refuse(socket, "Kitchen codes are up to 8 letters or numbers");
           return;
         }
-        const room = roomFor(code, await loadSave(code));
+        const room = roomFor(code, await loadSave(code), message.level);
         if (!room) {
           refuse(socket, "Server is full — try again shortly");
           return;

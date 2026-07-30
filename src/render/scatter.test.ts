@@ -27,6 +27,9 @@ const SPACE: Record<PropKind, PropSpace> = {
   picnic: { radius: 1.35, clearance: 1.4 },
   flowers: { radius: 0.28, clearance: 0.6 },
   tuft: { radius: 0.14, clearance: 0.6 },
+  palm: { radius: 0.5, clearance: 1.4 },
+  parasol: { radius: 1, clearance: 1.4 },
+  driftwood: { radius: 0.55, clearance: 1 },
 };
 
 function entry(kind: PropKind, count: number, min = 14, max = 26): ScatterEntry {

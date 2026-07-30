@@ -24,6 +24,11 @@ export type Identity = {
   /** Last room joined, so a bare URL returns you to your friends. */
   room: string;
   /**
+   * Which kitchen to *make* when a room is new. Not which one you are in — an
+   * existing room keeps the place it was built in, and says so on arrival.
+   */
+  level: string;
+  /**
    * Sound off. Belongs to the *person*, not the kitchen: four players sharing
    * a room do not share a pair of headphones, and one of them muting the game
    * on everybody else's screen would be a strange thing for a mute button to do.
@@ -39,7 +44,7 @@ function newToken(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const FALLBACK: Identity = { name: "", token: "", room: "", muted: false };
+const FALLBACK: Identity = { name: "", token: "", room: "", level: "", muted: false };
 
 export function loadIdentity(): Identity {
   try {
@@ -54,6 +59,7 @@ export function loadIdentity(): Identity {
       name: typeof fields.name === "string" ? fields.name.slice(0, 16) : "",
       token: typeof fields.token === "string" && fields.token ? fields.token : newToken(),
       room: typeof fields.room === "string" ? fields.room : "",
+      level: typeof fields.level === "string" ? fields.level : "",
       muted: fields.muted === true,
     };
   } catch {

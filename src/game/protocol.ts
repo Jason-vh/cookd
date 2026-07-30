@@ -223,7 +223,24 @@ export type Frame = {
 // --- messages ----------------------------------------------------------------
 
 export type ClientMessage =
-  | { t: "hello"; version: number; room: string; name: string; players: number; token: string }
+  | {
+      t: "hello";
+      version: number;
+      room: string;
+      name: string;
+      players: number;
+      token: string;
+      /**
+       * Which kitchen to build if this room does not exist yet.
+       *
+       * A *preference*, not an instruction: a room that has been played keeps
+       * the level in its save, and the first person through the door is the
+       * only one whose choice can matter. Deliberately tolerated when missing
+       * rather than versioned — an older client simply has no opinion, and gets
+       * whatever the room already is.
+       */
+      level: string;
+    }
   | { t: "join"; name: string }
   | { t: "leave"; id: number }
   | { t: "input"; seq: number; inputs: Record<number, PlayerInput> }

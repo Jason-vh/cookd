@@ -3,7 +3,8 @@
 A browser-based, controller-first co-op cooking game. Chefs run around a
 tile-aligned kitchen turning raw ingredients into plated dishes, carrying them
 out to seated customers before they walk out, and rearranging the restaurant
-between days.
+between days. Two locations so far: a park kitchen, and a beach shack with a
+bigger deck and a smaller galley.
 
 Inspirations: **Overcooked** (moment-to-moment chaos, hold-to-chop, plate-and-serve
 loop) and **PlateUp!** (kitchen as a thing you design and optimise across days).
@@ -29,7 +30,8 @@ bun run build        # typecheck + production bundle
 bun start            # build, then serve everything from one process
 ```
 
-Open the client, pick a name and a kitchen code, and share the URL — the code
+Open the client, pick a name, a kitchen code and **where the kitchen is** — the
+city park or the beach shack — and share the URL — the code
 lives in the hash (`/#KITCHEN`), so the link *is* the invite. **Play offline**
 skips the server entirely.
 

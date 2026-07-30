@@ -71,6 +71,7 @@ function harness() {
       name: "Ann",
       players: 1,
       token: "t",
+      level: "",
     }),
     hadFrames: () => false,
   };

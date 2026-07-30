@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LEVEL } from "../src/data/level";
+import { BEACH_SHACK, LEVEL } from "../src/data/level";
 import { PROTOCOL_VERSION } from "../src/game/protocol";
 import { parseServerMessage } from "../src/game/wire";
 import type { ServerMessage } from "../src/game/protocol";
@@ -76,8 +76,8 @@ class Client {
     this.socket.send(typeof message === "string" ? message : JSON.stringify(message));
   }
 
-  hello(room: string, name = "Ann", players = 1, token = ""): void {
-    this.send({ t: "hello", version: PROTOCOL_VERSION, room, name, players, token });
+  hello(room: string, name = "Ann", players = 1, token = "", level = ""): void {
+    this.send({ t: "hello", version: PROTOCOL_VERSION, room, name, players, token, level });
   }
 
   /** Wait for the first message of a kind, or give up. */
@@ -125,6 +125,23 @@ describe("the handshake", () => {
     expect(welcome?.t === "welcome" && welcome.level).toBe(LEVEL.id);
     expect(welcome?.t === "welcome" && welcome.layout.appliances.length).toBeGreaterThan(20);
     client.close();
+  });
+
+  test("the first person through the door chooses where the kitchen is", async () => {
+    // A room is made by whoever arrives first, and their pick is what it is
+    // built from. Everyone after them is a guest in it — see the note on
+    // `roomFor`, and the client-side reload that follows from this.
+    const host = await new Client().open();
+    host.hello("BEACH", "Ann", 1, "", BEACH_SHACK.id);
+    expect((await host.waitFor("welcome"))?.t === "welcome").toBe(true);
+
+    const guest = await new Client().open();
+    guest.hello("BEACH", "Bea", 1, "", LEVEL.id);
+    const welcome = await guest.waitFor("welcome");
+    expect(welcome?.t === "welcome" && welcome.level).toBe(BEACH_SHACK.id);
+
+    host.close();
+    guest.close();
   });
 
   test("a version mismatch is fatal, so the client stops retrying", async () => {

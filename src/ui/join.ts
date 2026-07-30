@@ -1,3 +1,4 @@
+import { DEFAULT_LEVEL_ID, LEVELS } from "../data/level";
 import type { InputManager } from "../input";
 import type { Identity } from "../identity";
 
@@ -19,9 +20,16 @@ type Options = {
   /** Room parsed out of the URL hash, if any. */
   room: string;
   offline: boolean;
-  onPlayLocal: () => void;
-  onPlayOnline: (room: string, name: string) => void;
+  onPlayLocal: (level: string) => void;
+  onPlayOnline: (room: string, name: string, level: string) => void;
 };
+
+/** Every kitchen the game knows about, named. Levels are content, not a menu. */
+function levelOptions(): string {
+  return Object.values(LEVELS)
+    .map((level) => `<option value="${level.id}">${level.name}</option>`)
+    .join("");
+}
 
 function randomRoom(): string {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1
@@ -37,6 +45,7 @@ export class JoinScreen {
   private readonly options: Options;
   private nameField!: HTMLInputElement;
   private roomField!: HTMLInputElement;
+  private levelField!: HTMLSelectElement;
   private readonly listeners = new AbortController();
 
   constructor(root: HTMLElement, options: Options) {
@@ -52,18 +61,27 @@ export class JoinScreen {
         <h1>cookd</h1>
         <label>Your name<input id="join-name" maxlength="16" placeholder="Chef" autocomplete="off"></label>
         <label>Kitchen code<input id="join-room" maxlength="8" placeholder="MAIN" autocomplete="off"></label>
+        <label>Where<select id="join-level">${levelOptions()}</select></label>
         <div class="join-actions">
           <button id="join-online" class="primary">Join kitchen</button>
           <button id="join-local">Play offline</button>
         </div>
-        <p class="join-hint">Share the page URL to invite someone.</p>
+        <p class="join-hint">
+          Share the page URL to invite someone. A kitchen that already exists
+          keeps the place it was built in.
+        </p>
       </div>`;
 
     this.nameField = this.root.querySelector<HTMLInputElement>("#join-name")!;
     this.roomField = this.root.querySelector<HTMLInputElement>("#join-room")!;
+    this.levelField = this.root.querySelector<HTMLSelectElement>("#join-level")!;
 
     this.nameField.value = identity.name;
     this.roomField.value = room || identity.room || randomRoom();
+    // Only the person who *makes* a room chooses where it is; joining one that
+    // already exists loads whatever kitchen it is. The hint under the picker
+    // says so, because a control that is sometimes ignored has to admit it.
+    this.levelField.value = LEVELS[identity.level] ? identity.level : DEFAULT_LEVEL_ID;
 
     // One signal for every listener, so `dispose` cannot detach some of them
     // and leave others. The keydown handler in particular outlived the screen
@@ -77,7 +95,7 @@ export class JoinScreen {
       "click",
       () => {
         this.hide();
-        this.options.onPlayLocal();
+        this.options.onPlayLocal(this.levelField.value);
       },
       { signal },
     );
@@ -101,7 +119,7 @@ export class JoinScreen {
       .slice(0, 8);
     const name = this.nameField.value.trim().slice(0, 16) || "Chef";
     this.hide();
-    this.options.onPlayOnline(room || "MAIN", name);
+    this.options.onPlayOnline(room || "MAIN", name, this.levelField.value);
   }
 
   show(): void {

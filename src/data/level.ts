@@ -160,6 +160,45 @@ export const PARK_KITCHEN: LevelDef = {
   ],
 };
 
+export const BEACH_SHACK: LevelDef = {
+  id: "beach-shack-1",
+  name: "Beach Shack",
+  biome: "beach",
+  dayLength: 150,
+  plates: 4,
+  // The park kitchen's opposite bargain: **a big deck and a small galley.**
+  // Three tables standing in the open against six columns of kitchen, where the
+  // park has two tables and eleven. Seats pull customers in, so this room is
+  // busier from day one and has less floor to solve it with — the same dials
+  // the shop hands a player, set differently before they arrive.
+  //
+  // Every table has four free sides on purpose: this is the room that seats
+  // [parties](../../docs/dining-room.md), and a kitchen that cannot cook two
+  // dishes at once is exactly the wrong kitchen to be handed one.
+  //
+  // Patio (x 0..1) | dining room (x 3..9) | dividing wall with a gap and two
+  // pass counters (x 10) | galley (x 11..16) | patio again (x 18..19).
+  rows: [
+    ",,,,,,,,,,,,,,,,,,,,",
+    ",,################,,",
+    ",,#.......#tl===X#,,",
+    "$,#..T....=......#,,",
+    "$,#.......#..B...#,,",
+    "$,#.....T........#,,",
+    ",,D.......#......#,,",
+    "?,#..T....=......#,,",
+    "?,#.......#......#,,",
+    ",,#.......#PS===.#,,",
+    ",,################,,",
+    ",,,,,,,,,,,,,,,,,,,,",
+  ],
+  spawns: [
+    { x: 13, y: 5 },
+    { x: 15, y: 5 },
+    { x: 13, y: 7 },
+  ],
+};
+
 /**
  * Every kitchen the game knows about, by id.
  *
@@ -171,6 +210,7 @@ export const PARK_KITCHEN: LevelDef = {
  */
 export const LEVELS: Record<string, LevelDef> = {
   [PARK_KITCHEN.id]: PARK_KITCHEN,
+  [BEACH_SHACK.id]: BEACH_SHACK,
 };
 
 /** The level a room gets when nothing says otherwise. */

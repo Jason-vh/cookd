@@ -224,10 +224,15 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
       const name = str(value.name, MAX_NAME);
       const players = int(value.players);
       const token = str(value.token, MAX_TOKEN);
-      if (version === null || room === null || name === null) return null;
+      // Absent means "no opinion", which is what an older client has. Checked
+      // for shape only: whether the id names a kitchen is the server's
+      // question, and an unknown one falls back to the default rather than
+      // refusing somebody entry over a typo.
+      const level = value.level === undefined ? "" : str(value.level, MAX_NAME);
+      if (version === null || room === null || name === null || level === null) return null;
       if (players === null || token === null) return null;
       if (players < 1 || players > MAX_SEATS) return null;
-      return { t: "hello", version, room, name, players, token };
+      return { t: "hello", version, room, name, players, token, level };
     }
     case "join": {
       const name = str(value.name, MAX_NAME);

@@ -1,5 +1,5 @@
 import "./ui/style.css";
-import { LEVEL } from "./data/level";
+import { LEVEL, levelById } from "./data/level";
 import { InputManager } from "./input";
 import { KitchenAudio } from "./audio";
 import { View } from "./render/view";
@@ -39,6 +39,8 @@ const forceLocal = params.has("local");
 
 let game: Game = new LocalGame(null, 1);
 let view = new View(canvas, game.world, LEVEL.biome);
+/** Where a *new* kitchen would be built. An existing room keeps its own. */
+let wantedLevel = levelById(identity.level) ?? LEVEL;
 const audio = new KitchenAudio(identity.muted);
 
 function socketUrl(): string {
@@ -79,27 +81,49 @@ function useGame(next: Game): void {
 let onlineSince = 0;
 let wantedPlayers = 1;
 
-function goOnline(room: string, name: string): void {
-  saveIdentity({ ...identity, name, room });
+function goOnline(room: string, name: string, level = wantedLevel): void {
+  wantedLevel = level;
+  saveIdentity({ ...identity, name, room, level: level.id });
   if (location.hash.replace("#", "") !== room) history.replaceState(null, "", `#${room}`);
   // Always one chef to start with. More join by pressing `P` or picking up a
   // controller, which is how a second player actually turns up.
   wantedPlayers = 1;
   onlineSince = performance.now();
   useGame(
-    new NetGame(socketUrl(), room, name, 1, identity.token, (message, fatal) => {
-      // The server's own words, in front of the player. These used to go to
-      // `console.warn`, so "refresh to keep playing" — the one message that
-      // tells someone how to fix it — was the one nobody ever saw, while the
-      // client retried forever behind a "reconnecting" badge.
-      hud.notify(message);
-      // A fatal error means the client has stopped trying. Falling back to a
-      // private offline kitchen is better than a frozen one.
-      if (fatal) {
-        onlineSince = 0;
-        useGame(new LocalGame(null, wantedPlayers));
-      }
-    }),
+    new NetGame(
+      socketUrl(),
+      room,
+      name,
+      1,
+      identity.token,
+      (message, fatal) => {
+        // The server's own words, in front of the player. These used to go to
+        // `console.warn`, so "refresh to keep playing" — the one message that
+        // tells someone how to fix it — was the one nobody ever saw, while the
+        // client retried forever behind a "reconnecting" badge.
+        hud.notify(message);
+        // A fatal error means the client has stopped trying. Falling back to a
+        // private offline kitchen is better than a frozen one.
+        if (fatal) {
+          onlineSince = 0;
+          useGame(new LocalGame(null, wantedPlayers, level));
+        }
+      },
+      level,
+      {
+        // The room exists and it is somewhere else. A room code is an
+        // invitation to *their* restaurant, so we load theirs rather than
+        // telling the guest they picked the wrong place — which means a whole
+        // new game and a new view, because the walls are baked at construction.
+        onLevel: (id) => {
+          const theirs = levelById(id);
+          if (theirs) {
+            hud.notify(`This kitchen is in the ${theirs.name.toLowerCase()}`);
+            goOnline(room, name, theirs);
+          }
+        },
+      },
+    ),
   );
 }
 
@@ -130,15 +154,17 @@ const join = new JoinScreen(document.querySelector<HTMLElement>("#join")!, {
   identity,
   room: roomFromUrl,
   offline: forceLocal,
-  onPlayLocal: () => {
+  onPlayLocal: (id) => {
     // The click that starts the game is the gesture the audio hardware needs;
     // there is no earlier one, and without it the first sound is swallowed.
     audio.unlock();
-    useGame(new LocalGame(null, 1));
+    wantedLevel = levelById(id) ?? LEVEL;
+    saveIdentity({ ...identity, level: wantedLevel.id });
+    useGame(new LocalGame(null, 1, wantedLevel));
   },
-  onPlayOnline: (room, name) => {
+  onPlayOnline: (room, name, id) => {
     audio.unlock();
-    goOnline(room, name);
+    goOnline(room, name, levelById(id) ?? wantedLevel);
   },
 });
 

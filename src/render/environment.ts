@@ -223,6 +223,82 @@ const PROP_BUILDERS: Record<PropKind, PropBuilder> = {
     }
     return group;
   },
+  /**
+   * A palm: a leaning trunk in rings, and fronds hanging off the top.
+   *
+   * The lean is the whole character of it. A vertical palm reads as a mistake
+   * next to a park tree; one bent away from the sea reads as weather.
+   */
+  palm: (biome, random) => {
+    const group = new THREE.Group();
+    const height = 2.2 + random() * 1.1;
+    const lean = (random() - 0.5) * 0.5;
+    const segments = 5;
+    for (let i = 0; i < segments; i++) {
+      const t = i / segments;
+      const ring = mesh(
+        cylinder(0.1 - t * 0.03, 0.13 - t * 0.03, height / segments, 7),
+        biome.trunk,
+        "wood",
+      );
+      ring.position.set(lean * t * t * height * 0.35, (t + 0.5 / segments) * height, 0);
+      ring.rotation.z = -lean * t;
+      group.add(ring);
+    }
+
+    const top = new THREE.Vector3(lean * height * 0.35, height, 0);
+    const color = pick(biome.foliage, random);
+    const fronds = 6 + Math.floor(random() * 3);
+    for (let i = 0; i < fronds; i++) {
+      const angle = (i / fronds) * Math.PI * 2 + random() * 0.3;
+      const frond = mesh(box(1.15, 0.06, 0.3), color, "cloth");
+      // Anchored at the trunk and swung outward, so the blade hangs from the
+      // crown rather than passing through it.
+      frond.position.set(
+        top.x + Math.cos(angle) * 0.55,
+        top.y - 0.1 - random() * 0.12,
+        Math.sin(angle) * 0.55,
+      );
+      frond.rotation.set(0, -angle, -0.35 - random() * 0.25);
+      group.add(frond);
+    }
+
+    const nuts = Math.floor(random() * 3);
+    for (let i = 0; i < nuts; i++) {
+      const nut = mesh(sphere(0.09, 8), 0x7a5a3a, "cloth");
+      nut.position.set(top.x + (random() - 0.5) * 0.2, top.y - 0.16, (random() - 0.5) * 0.2);
+      group.add(nut);
+    }
+    return group;
+  },
+  /** A parasol on the sand: the beach's picnic table, and its splash of colour. */
+  parasol: (biome, random) => {
+    const group = new THREE.Group();
+    const height = 1.5 + random() * 0.3;
+
+    const pole = mesh(cylinder(0.035, 0.035, height, 7), biome.timber, "wood");
+    pole.position.y = height / 2;
+    pole.rotation.z = 0.12;
+    group.add(pole);
+
+    const canopy = mesh(cylinder(0.05, 0.95, 0.34, 12), pick(biome.blossom, random), "cloth");
+    canopy.position.set(-height * 0.06, height, 0);
+    canopy.rotation.z = 0.12;
+    group.add(canopy);
+    return group;
+  },
+  /** Driftwood: bleached, half-buried, and the reason the sand is not empty. */
+  driftwood: (biome, random) => {
+    const group = new THREE.Group();
+    const logs = 1 + Math.floor(random() * 2);
+    for (let i = 0; i < logs; i++) {
+      const log = mesh(cylinder(0.09, 0.12, 0.9 + random() * 0.7, 6), biome.rock, "wood");
+      log.rotation.set(0, random() * Math.PI, Math.PI / 2 + (random() - 0.5) * 0.3);
+      log.position.set((random() - 0.5) * 0.4, 0.1, (random() - 0.5) * 0.4);
+      group.add(log);
+    }
+    return group;
+  },
   // Foreshadows the dining room: these are where customers will eventually sit.
   picnic: (biome, random) => {
     const group = new THREE.Group();
@@ -305,6 +381,9 @@ const PROPS: Record<PropKind, PropSpec> = {
   bush: { build: PROP_BUILDERS.bush, radius: 0.6, clearance: 1.4, castsShadow: true },
   rock: { build: PROP_BUILDERS.rock, radius: 0.45, clearance: 1.4, castsShadow: true },
   picnic: { build: PROP_BUILDERS.picnic, radius: 1.35, clearance: 1.4, castsShadow: true },
+  palm: { build: PROP_BUILDERS.palm, radius: 0.5, clearance: 1.4, castsShadow: true },
+  parasol: { build: PROP_BUILDERS.parasol, radius: 1, clearance: 1.4, castsShadow: true },
+  driftwood: { build: PROP_BUILDERS.driftwood, radius: 0.55, clearance: 1, castsShadow: true },
   flowers: { build: PROP_BUILDERS.flowers, radius: 0.28, clearance: 0.6, castsShadow: true },
   tuft: { build: PROP_BUILDERS.tuft, radius: 0.14, clearance: 0.6, castsShadow: false },
 };

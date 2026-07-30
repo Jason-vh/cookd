@@ -103,12 +103,29 @@ grows through anything else. The footprints are deliberately smaller than the
 visual silhouette: tree canopies and bush tops *should* overlap, it is only the
 bases that must not collide.
 
-Adding a location (beach, night market, ski lodge, rooftop) is a data entry plus,
-at most, one new prop builder in `PROPS`. Because the biome also owns the
-lighting, a night or golden-hour variant is purely a matter of numbers.
+Adding a location was claimed to be "a data entry plus, at most, one new prop
+builder", and the **beach** was the invoice for that claim: one biome row, three
+prop builders (palm, parasol, driftwood), and nothing else in the render layer.
+The rest — sand instead of grass, a hard midday sun, clear air, an exposure
+pulled *down* because sand throws light back up — is numbers.
 
-The park deliberately includes **picnic tables**: they are set dressing today
-and the seed of the dining room described in the roadmap.
+Two things are worth stating from having done it:
+
+- **A biome is a mood, and the grade and the ground carry it.** Everything else
+  follows from a sentence. "Midday at the coast" decides the sun's height, the
+  fog distance and the desaturated bleach in one go; arguing about individual
+  colours before that sentence exists is how a location ends up looking like the
+  last one with a filter on.
+- **Reuse the prop kinds that mean the same thing.** A rock is a rock and a tuft
+  of grass is dune grass. A new `PropKind` earns its row when no existing shape
+  means what you need — which is why the beach added three and reused three.
+
+Because the biome also owns the lighting, a night or golden-hour variant is
+purely a matter of numbers.
+
+The park deliberately includes **picnic tables**: they were set dressing and the
+seed of the dining room, back when there was not one. The beach has parasols for
+the same reason — a place should look like it knows what it is for.
 
 ## Ingredient models
 
