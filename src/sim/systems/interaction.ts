@@ -26,9 +26,9 @@ import {
   tileIndex,
   touchLayout,
 } from "../world";
-import { acceptDelivery } from "./customers";
+import { serveTable } from "./customers";
 import { useCardStand } from "./cards";
-import { canPlace, customerAt, itemLabel, targetAppliance, targetTile } from "../queries";
+import { canPlace, itemLabel, targetAppliance, targetTile } from "../queries";
 
 export function interactionSystem(world: World, inputs: Inputs): void {
   for (const player of world.players) {
@@ -299,17 +299,16 @@ function collectTip(world: World, player: Player, appliance: Appliance): void {
 }
 
 /**
- * A plate just landed on a table. If the customer sitting there ordered it,
- * they start eating and the chef who ran the food is paid for it.
+ * A plate just landed on a table. If anybody sitting there ordered it, they
+ * start eating and the chef who ran the food is paid for it.
  *
- * The rule itself lives with the customers (`acceptDelivery`), because a
- * customer can also find their dish already waiting when they finish deciding.
- * Only the credit differs: there, nobody is standing at the table.
+ * *Anybody*, because a table is a party now: the rule that decides which of
+ * them this was for lives with the customers (`serveTable`), along with the
+ * one that lets a customer find their dish already waiting when they finish
+ * deciding. Only the credit differs: there, nobody is standing at the table.
  */
 function tryDeliver(world: World, player: Player, table: Appliance): void {
-  const customer = customerAt(world, table);
-  if (!customer) return;
-  const reward = acceptDelivery(world, table, customer);
+  const reward = serveTable(world, table);
   if (reward !== null) effect(world, { kind: "served", playerId: player.id, amount: reward });
 }
 

@@ -76,11 +76,20 @@ export function plateCount(item: Item | null): number {
   return plates;
 }
 
-/** Every plate anywhere in the kitchen: on appliances, and in hands. */
+/**
+ * Every plate anywhere in the kitchen: on appliances, in hands, and in front of
+ * somebody eating.
+ *
+ * The third one is easy to forget and would be a slow leak rather than a loud
+ * one: a diner takes their plate off the table for the length of a meal, so a
+ * count that skipped them would under-report during service and *mint the
+ * difference* the next time a day closed and counted them back on.
+ */
 export function platesInWorld(world: World): number {
   let plates = 0;
   for (const appliance of world.appliances.values()) plates += plateCount(appliance.item);
   for (const player of world.players) plates += plateCount(player.carried);
+  for (const customer of world.customers) plates += plateCount(customer.plate);
   return plates;
 }
 

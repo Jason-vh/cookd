@@ -12,12 +12,13 @@ Near term:
   obvious answer and is probably the wrong one: it would put a second countdown
   on screen for something you are meant to read as a crowd.
 
-- **Parties** — one table, several dishes, wanted together. The coordination
-  flagship ("table 2 wants a pizza *and* two fries"), and the reason tables are
-  drawn with four chairs already. It is the first thing a customer *kind* cannot
-  express: the rows in `data/customers.ts` only multiply numbers the dining room
-  already has, deliberately, so a party is a change to the loop rather than a
-  fifth column.
+- **Parties are in.** One table, a dish each, all wanted at once — and it landed
+  as predicted: a change to the loop (a group id, a chair count, and a diner who
+  takes their plate off the table) rather than a fifth column in
+  `data/customers.ts`. See [the dining room](dining-room.md#parties). What is
+  left of the idea is the *ordering* of a party's dishes — courses, or a table
+  that will not start until every plate has landed — which is a rule about
+  waiting, and this game has enough of those for now.
 - **More biomes** — beach, night market, ski lodge. Mostly a data exercise now.
 - **Verify the gamepad mapping** on real hardware, add per-player join/leave UI
   and rumble on burn/serve.

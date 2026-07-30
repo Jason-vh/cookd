@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
 import { mealLeft } from "../sim/queries";
 import { specKey } from "../sim/items";
-import type { Appliance, Item, World } from "../sim/types";
+import type { Appliance, Customer, Item, World } from "../sim/types";
 import { chopImpact, workPhase } from "./anim";
 import { disposeSubtree } from "./dispose";
 import { buildItemModel, contentsOf } from "./models";
@@ -20,6 +20,8 @@ export class ItemViews {
   private readonly live = new Set<number>();
   /** Reused every frame so anchoring a carried item allocates nothing. */
   private readonly anchor = new THREE.Vector3();
+  /** The same, for the plate in front of somebody eating. */
+  private readonly spot = new THREE.Vector3();
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -41,9 +43,17 @@ export class ItemViews {
       // Food squashes on the beat, so the work reads even when the chef is
       // hidden behind the counter they're working at.
       animateWorkedItem(object, appliance, time);
-      // ...and shrinks as it is eaten, so the dirty plate that follows is the
+    }
+
+    for (const customer of world.customers) {
+      if (!customer.plate) continue;
+      const spot = this.dinnerSpot(world, customer);
+      if (!spot) continue;
+      const object = this.place(customer.plate, spot.x, spot.y, spot.z);
+      object.scale.set(1, 1, 1);
+      // The meal shrinks as it is eaten, so the dirty plate that follows is the
       // end of something you watched happen rather than a swap.
-      setPlateFullness(object, this.mealAt(world, appliance.id));
+      setPlateFullness(object, mealLeft(customer));
     }
 
     for (const player of world.players) {
@@ -62,12 +72,28 @@ export class ItemViews {
     }
   }
 
-  /** How much of the meal on this table is left, 1 when nobody is eating. */
-  private mealAt(world: World, tableId: number): number {
-    for (const customer of world.customers) {
-      if (customer.table === tableId && customer.state === "eating") return mealLeft(customer);
-    }
-    return 1;
+  /**
+   * Where a diner's own plate sits: on the tabletop, in front of their chair.
+   *
+   * An eating customer takes their plate off the table so the next dish can
+   * land there, which is what makes a party possible — and four plates around
+   * the edge of one table is also exactly what a party looks like.
+   */
+  private dinnerSpot(world: World, customer: Customer): THREE.Vector3 | null {
+    const table = customer.table === null ? null : world.appliances.get(customer.table);
+    if (!table) return null;
+    // Measured from where the customer *is*, not from the seat tile they were
+    // given: `seat` is dining-room bookkeeping and never travels, so a client
+    // reading it would draw every online party's dinner in the middle of the
+    // table.
+    const dx = customer.pos.x - (table.tile.x + 0.5);
+    const dz = customer.pos.y - (table.tile.y + 0.5);
+    const length = Math.hypot(dx, dz) || 1;
+    return this.spot.set(
+      table.tile.x + 0.5 + (dx / length) * 0.28,
+      applianceDef("table").height + 0.06,
+      table.tile.y + 0.5 + (dz / length) * 0.28,
+    );
   }
 
   private place(item: Item, x: number, y: number, z: number): THREE.Object3D {

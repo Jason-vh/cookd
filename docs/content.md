@@ -187,11 +187,18 @@ start clean on the plate stack, and from then on the game's job is to never lose
 one.
 
 ```
-customer eats  ->  dirty plate on the table (with the tip)
+  delivered    ->  the diner takes their plate in front of them
+customer eats  ->  dirty plate back on the table (with the tip)
      bus       ->  a pile of up to four in your hands
      sink      ->  hold Use: one plate per 1.5s
  plate stack   ->  clean, and back in circulation
 ```
+
+The first line is there for [parties](dining-room.md#parties): a table holds one
+thing, so a diner takes their dinner off it and the next dish has somewhere to
+land. It means a plate can be **in front of somebody eating**, which is a place
+`platesInWorld` has to count — a count that missed it would under-report during
+service and mint the difference the next time a day closed.
 
 **A pile of plates is a plate holding plates.** One representation, not three:
 carrying a bussed sweep, the queue in the sink and the stock on the stack are
@@ -221,7 +228,7 @@ Everything that could is routed through `sim/plates.ts`:
 | Where | What happens |
 | --- | --- |
 | The bin | **Scrapes**: the food goes, the plate stays in your hands, dirty |
-| A customer finishing | Scrapes whatever is on their table — which is not always the plate they were served, because anyone can clear a table mid-meal |
+| A customer finishing | Scrapes the plate they took, and stacks it back onto the table — or sends it home clean if somebody has since left something else there |
 | A player disconnecting | Their plates go back on the stack, washed |
 | Closing time | The kitchen is wiped — then counted back onto the stack |
 | Lifting an appliance in the build phase | Its plates go home; the plate stack's travel with it |

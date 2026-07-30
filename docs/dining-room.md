@@ -127,10 +127,53 @@ Two rules keep it from being a difficulty spike with no floor:
   "when's the next one" is what stops a rush from compounding into a permanent
   queue.
 
-A group is several separate orders that happen to arrive together — three people,
-three tables, three dishes. One table wanting several dishes is a **party**, and
-that is deliberately still ahead of us: it is the first thing the loop cannot
-express by multiplying a number it already has.
+A group is a **party** — see below. Three people who walked in together sit at
+one table, and want three dishes inside one another's patience rings.
+
+## Parties
+
+A group takes **one table between them**, a dish each. That is the whole
+feature, and almost none of it is new machinery: a party is a shared id and a
+chair count, because everything else a party does is something a customer
+already did. Each of them keeps their own dish, their own patience, their own
+appetite and their own tip.
+
+What it changes is the *job*. Two dishes for one table inside overlapping
+patience rings is a different problem from two customers who happen to have
+arrived together: it is the first thing in the game that cannot be solved by
+doing one thing at a time well, and it is the reason a second chef is worth
+having. The coordination flagship the tables were always drawn with four chairs
+for.
+
+Three rules make it work:
+
+- **They sit together or not at all.** A party that finds no table with enough
+  chairs queues *as a party* and is seated as one. A group that walks in
+  together and ends up at three different tables is not a party, it is a
+  coincidence. If one of them gives up at the door the rest get easier to seat,
+  which is the right way round for a room that is already struggling.
+- **A table is as big as its free sides.** Chairs are the walkable tiles around
+  a table, so one in the open seats four and the same table shoved against a
+  wall seats one. **Where the tables go decides who you can serve**, not only
+  how many — a build-phase decision with a consequence you can watch walk back
+  down the path. Nobody is ever rolled as a party no table in the room could
+  seat: a group that can only ever stand at the door is a walkout with extra
+  steps.
+- **A diner takes their plate off the table.** A table holds one thing, so the
+  second dish would have nowhere to land while the first was being eaten. When
+  the food arrives it moves in front of the person who ordered it — which is
+  also just what people do — and comes back dirty when they leave. Four plates
+  around the edge of one table is what a party looks like from across the room.
+
+That last one is why `platesInWorld` counts customers: a plate in front of
+somebody eating is a plate the kitchen still owns, and a count that missed it
+would quietly mint the difference at closing time. A party leaves one **pile**
+of dirty plates and one pile of coins — one bussing run, one trip, both tips.
+
+Which of them a plate is for is decided by the dish, and ties go to **the most
+impatient match**: with two people at a table waiting for the same thing, the
+one whose ring is nearly empty is the one about to walk out, and feeding the
+other would lose an order the kitchen had already cooked.
 
 ## Who walks in
 
@@ -159,9 +202,9 @@ the loop does not already do, which is what keeps a new row from being a new
 system — and it is why there is no fifth column for something clever. `patience`
 now multiplies two numbers rather than one — the dish's, and the wait at the
 door — which is the shape a dial is *supposed* to grow in: a new number the
-dining room already had, not a new column. Parties are the next thing the dining
-room does not do yet, and they will be a change to this file, not a row in that
-table.
+dining room already had, not a new column. [Parties](#parties) were the thing
+that could not be expressed this way, and they arrived exactly as predicted: a
+change to the loop, not a fifth column.
 
 **Every kind has to be readable across the room**, without a label and without
 the HUD: a coat, a build, and a speed. That is the same rule the patience slump
@@ -191,10 +234,12 @@ and the bubble keeps showing what they actually wanted. The mistake is visible,
 harmless, and undone by picking the plate back up. No refusal, no error sound,
 no penalty beyond the walk you can see you wasted.
 
-Matching is **by table, not by ticket juggling**. The bubble over the table *is*
-the ticket, which is why the HUD's order list is gone rather than kept
+Matching is **by person, not by ticket juggling**. The bubble over a diner's
+head *is* the ticket, which is why the HUD's order list is gone rather than kept
 alongside: two places to read the same thing splits attention, and only one of
-them can also tell you how far you have to walk.
+them can also tell you how far you have to walk. The bubble used to float over
+the *table*, which was right while a table was one order and became ambiguous
+the day three people sat at one — so it moved to the head it belongs over.
 
 ## The tip is why bussing is not a chore
 

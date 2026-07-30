@@ -602,6 +602,8 @@ function customer(id: number, recipeId: string): Customer {
     facing: { x: 1, y: 0 },
     table: null,
     seat: null,
+    party: 0,
+    plate: null,
     recipeId,
     kind: "regular",
     path: [],

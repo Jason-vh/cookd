@@ -36,6 +36,8 @@ function seat(into: World, id: number): Customer {
     path: [],
     table: null,
     seat: null,
+    party: 0,
+    plate: null,
     recipeId: "salad",
     patience: 60,
     timer: 60,

@@ -14,7 +14,7 @@ import {
 import { isDirty, specKey } from "./items";
 import { plateCount, platesInWorld } from "./plates";
 import type { Appliance, ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
-import { DOOR_QUEUE, DOOR_WAIT } from "./systems/customers";
+import { DOOR_QUEUE, DOOR_WAIT, eatTime } from "./systems/customers";
 import {
   addPlayer,
   applianceAtTile,
@@ -161,6 +161,8 @@ function seatCustomer(
     facing: { x: -1, y: 0 },
     table: table.id,
     seat,
+    party: 0,
+    plate: null,
     recipeId,
     kind,
     path: [],
@@ -207,6 +209,21 @@ function dirtyPlate(world: World, tile: readonly [number, number]): Item {
   const plate: Item = { id: world.nextId++, base: "plate", processes: ["dirty"], contents: [] };
   applianceAtTile(world, tile[0], tile[1])!.item = plate;
   return plate;
+}
+
+/** Build a portion of fries from scratch, plate it, and hold it. */
+function makeFries(world: World): void {
+  takeFrom(world, CRATE.potato);
+  putOn(world, BOARD);
+  workOn(world, BOARD, 2.6);
+  takeFrom(world, BOARD);
+  putOn(world, FRYER, 1, 0);
+  hold(world, 5.1, null);
+  takeFrom(world, FRYER, 1, 0);
+  putOn(world, COUNTER);
+  takeFrom(world, PLATES);
+  putOn(world, COUNTER);
+  takeFrom(world, COUNTER);
 }
 
 /** Build a garden salad from scratch, plate it, and hold it. */
@@ -1395,6 +1412,52 @@ describe("the dining room", () => {
     expect(biggest).toBeGreaterThan(1);
   });
 
+  test("a party takes one table between them, and a chair each", () => {
+    const world = makeWorld();
+    world.day = 10;
+
+    let group: Customer[] = [];
+    for (let i = 0; i < 40 && group.length < 2; i++) {
+      world.customers.length = 0;
+      world.nextArrivalIn = 0;
+      step(world, idle());
+      if (world.customers.length > 1) group = [...world.customers];
+    }
+    expect(group.length).toBeGreaterThan(1);
+
+    // One table, one group id, and nobody sitting in anybody's lap.
+    expect(new Set(group.map((customer) => customer.table)).size).toBe(1);
+    expect(group.every((customer) => customer.table !== null)).toBe(true);
+    expect(new Set(group.map((customer) => customer.party)).size).toBe(1);
+    expect(group[0]!.party).not.toBe(0);
+    expect(new Set(group.map((c) => `${c.seat?.x},${c.seat?.y}`)).size).toBe(group.length);
+  });
+
+  test("a table with one chair is a table for one, whatever the day", () => {
+    // Where the tables go decides who can be served, not only how many. A table
+    // shoved into a corner takes singles for the rest of the run, and the
+    // arrival roll knows it: a party nobody could ever seat is a walkout with
+    // extra steps, so it is never rolled.
+    const world = makeWorld();
+    world.day = 10;
+    sellOff(world, ["table"]);
+    spawnAppliance(world, "table", { x: 4, y: 4 });
+    for (const [x, y] of [
+      [3, 4],
+      [4, 3],
+      [4, 5],
+    ] as const) {
+      spawnAppliance(world, "counter", { x, y });
+    }
+
+    for (let i = 0; i < 40; i++) {
+      world.customers.length = 0;
+      world.nextArrivalIn = 0;
+      step(world, idle());
+      expect(world.customers).toHaveLength(1);
+    }
+  });
+
   test("day one is never a rush", () => {
     // The curve has a shape: the room learns the loop before it is asked to
     // hold a line of four.
@@ -1435,6 +1498,44 @@ describe("the dining room", () => {
     world.nextArrivalIn = 0;
     hold(world, 6, null);
     expect(world.customers[0]!.state).toBe("waiting");
+  });
+
+  test("a table of two is fed one plate at a time, each dish to whoever ordered it", () => {
+    const world = makeWorld();
+    const plates = platesInWorld(world);
+    const table = applianceAtTile(world, TABLE[0], TABLE[1])!;
+
+    // Two people, one table, two different dishes — a party, without waiting
+    // for the door to roll one.
+    const salad = seatCustomer(world, "salad");
+    const fries = seatCustomer(world, "fries");
+    fries.seat = { x: TABLE[0], y: TABLE[1] + 1 };
+
+    makeSalad(world);
+    putOn(world, TABLE, 0, -1);
+
+    // The salad went to the person who ordered a salad, and the table is clear
+    // again: their dinner is in front of *them* now, which is the only reason
+    // the second dish has anywhere to land.
+    expect(salad.state).toBe("eating");
+    expect(fries.state).toBe("ordering");
+    expect(table.item).toBeNull();
+    expect(salad.plate?.base).toBe("plate");
+    expect(platesInWorld(world)).toBe(plates);
+
+    makeFries(world);
+    putOn(world, TABLE, 0, -1);
+    expect(fries.state).toBe("eating");
+    expect(table.item).toBeNull();
+
+    // Both finish: one pile of two dirty plates to bus, and both tips on it.
+    const tips = salad.tip + fries.tip;
+    hold(world, eatTime(salad) + eatTime(fries) + 0.2, null);
+    expect(world.customers.every((customer) => customer.state === "leaving")).toBe(true);
+    expect(plateCount(table.item)).toBe(2);
+    expect(isDirty(table.item)).toBe(true);
+    expect(table.tip).toBe(tips);
+    expect(platesInWorld(world)).toBe(plates);
   });
 
   test("the day does not end until the last customer has gone", () => {

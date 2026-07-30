@@ -211,8 +211,9 @@ live in [lessons.md](lessons.md).
   inside the kitchen's bounds, so hugging a wall never fills half the screen
   with empty park.
 - **Order bubbles can now be off-screen, and that is the trade we took.** The
-  bubble over a table *is* the ticket, and the HUD's order list was deleted
-  because of it. That worked partly because the camera framed the whole kitchen:
+  bubble over a diner's head *is* the ticket, and the HUD's order list was
+  deleted because of it. (It hung over the *table* until parties arrived, at
+  which point one bubble over three people could no longer say who wanted what.) That worked partly because the camera framed the whole kitchen:
   a chef at the fryer in the south-east corner can no longer see any of the four
   tables. Accepted deliberately — walking to the pass to see what is waiting is
   the same trip you were going to make anyway, and it puts the dining room back

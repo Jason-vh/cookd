@@ -496,7 +496,11 @@ function parseFrameCustomer(value: unknown): Frame["customers"][number] | null {
   if (kind === null || state === null || !isCustomerState(state)) return null;
   const table = optionalInt(value.table);
   if (table === undefined) return null;
-  return { id, state, x, y, fx, fy, table, recipeId, kind, remaining, patience, timer };
+  // Their dinner, off the table and in front of them. Parsed like any other
+  // item, because it is one: it is a plate the kitchen is still responsible for.
+  const plate = parseNullableItem(value.plate);
+  if (plate === undefined) return null;
+  return { id, state, x, y, fx, fy, table, plate, recipeId, kind, remaining, patience, timer };
 }
 
 function parseFramePlayer(value: unknown): Frame["players"][number] | null {

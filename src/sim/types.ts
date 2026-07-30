@@ -197,6 +197,25 @@ export type Customer = {
   facing: Vec2;
   /** Table appliance id, claimed on arrival so two customers never race for it. */
   table: number | null;
+  /**
+   * The group they walked in with, or 0 for somebody on their own.
+   *
+   * A party is several people at **one table**, each with their own dish,
+   * patience and appetite — so almost nothing downstream needs to know about
+   * it. This id exists for the two moments that do: finding a table with enough
+   * chairs for all of them, and being seated together out of the door queue.
+   */
+  party: number;
+  /**
+   * Their dinner, taken off the table when it arrives.
+   *
+   * A table holds one thing, and a party of three needs three dishes on it
+   * within a minute of each other — so an eating customer takes their plate,
+   * exactly as a person does, and puts it back dirty when they leave. Plates
+   * are conserved, so this counts as a place a plate can be: see
+   * `platesInWorld`.
+   */
+  plate: Item | null;
   /** Tile the customer stands on while seated, beside their table. */
   seat: Vec2 | null;
   /** What they will ask for, decided before they sit down. */

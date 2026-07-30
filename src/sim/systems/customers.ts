@@ -2,10 +2,10 @@ import { CUSTOMER_KINDS, type CustomerKind, customerKind } from "../../data/cust
 import { LAUNCH_SHARE } from "../../data/progression";
 import { DISH_INDEX, RECIPE_BY_ID } from "../../data/recipes";
 import { isDirty, isPlate, specKey } from "../items";
-import { scrape } from "../plates";
+import { MAX_PLATES, plateCount, scrape, stackPlates, stockPlates } from "../plates";
 import { pathTo, reachableFrom, seatsAround } from "../pathing";
 import { unlockedRecipes } from "../cards";
-import type { Appliance, Customer, Recipe, Vec2, World } from "../types";
+import type { Appliance, Customer, Item, Recipe, Vec2, World } from "../types";
 import { CUSTOMER_SPEED, effect, log, random, tileIndex } from "../world";
 
 /**
@@ -15,6 +15,11 @@ import { CUSTOMER_SPEED, effect, log, random, tileIndex } from "../world";
  * old order system did happens here, but attached to a person you can see:
  * demand arrives by walking up the path, patience drains over a table, and a
  * lost order is somebody standing up and leaving.
+ *
+ * They arrive alone or as a **party**: several people at one table, a dish
+ * each, all wanted at once. A party is deliberately not a new kind of entity —
+ * it is a group id and a chair count, because everything else a party does is
+ * something a customer already did.
  *
  * The state machine is deliberately small (see `CustomerState`). Moods,
  * reservations and menus-at-the-table all stay out until the loop has proved
@@ -189,9 +194,14 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
       // though — a queue that hands the table to whoever happens to ask is not
       // a queue, and the tick loop runs backwards, so "whoever asks" would mean
       // the person who arrived last.
-      const table = rank === 0 ? claimTable(world, reachable) : null;
+      //
+      // A party asks for a table big enough for whoever is **still here**: one
+      // of them giving up and walking off makes the rest easier to seat, which
+      // is the right way round for a room that is struggling.
+      const group = partyWith(world, customer);
+      const table = rank === 0 ? claimTable(world, reachable, group.length) : null;
       if (table) {
-        sitDown(world, customer, table, reachable);
+        for (const member of group) sitDown(world, member, table, reachable);
         return false;
       }
       if (customer.timer > 0) return false;
@@ -244,10 +254,15 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
       // (one conjured). Plates are conserved, so the one rule about what a used
       // plate becomes lives in `sim/plates.ts` and is called from here.
       const table = tableOf(world, customer);
-      const used = table?.item ?? null;
+      const used = customer.plate;
+      customer.plate = null;
       if (table && isPlate(used)) {
         scrape(used);
-        table.tip = customer.tip;
+        returnPlate(world, table, used);
+        // Added rather than assigned: a party leaves one pile of plates and one
+        // pile of coins, and the second one is what makes clearing a party's
+        // table worth the trip it costs.
+        table.tip += customer.tip;
       }
       leave(world, customer);
       return false;
@@ -268,21 +283,63 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
 // --- arrival -----------------------------------------------------------------
 
 /**
- * One arrival event: a person, or a rush.
+ * One arrival event: a person, or a **party**.
  *
  * How many were coming is decided **before** the room is consulted, in exactly
  * one draw, for the same reason `orderFrom` and `pickKind` each spend exactly
  * one: randomness spent conditionally makes two rooms on the same seed diverge
  * over how their days happened to go. What the room can absorb then clamps it
  * — nobody walks up a path they can only walk back down.
+ *
+ * They sit **together or not at all**. A party that finds no table with enough
+ * chairs queues as a party and is seated as one, rather than splitting up: a
+ * group that walks in together and ends up at three different tables is not a
+ * party, it is a coincidence, and the whole point of the feature is a table
+ * that wants three things at once.
  */
 function arrive(world: World, reachable: Set<number>): void {
-  const wanted = groupSize(world);
+  // Never roll a party no table in this kitchen could ever seat. A group that
+  // can only ever stand at the door is a walkout with extra steps — and how
+  // many chairs a table has is a fact about the room, so asking costs no
+  // randomness.
+  const wanted = Math.min(groupSize(world), biggestTable(world, reachable));
   const queued = world.customers.reduce((n, c) => n + (c.state === "waiting" ? 1 : 0), 0);
-  const room = freeTables(world, reachable) + Math.max(0, DOOR_QUEUE - queued);
-  for (let i = 0; i < Math.min(wanted, room); i++) {
-    if (!walkUp(world, reachable, i)) return;
+  // Room for the whole party at one table, or room in the line for as many of
+  // them as it will hold.
+  const seatable = claimTable(world, reachable, wanted) ? wanted : 0;
+  const size = Math.max(seatable, Math.min(wanted, Math.max(0, DOOR_QUEUE - queued)));
+  if (size <= 0) return;
+
+  // An id of their own, so the queue and the seating can find each other again.
+  // Somebody on their own is party 0: not a group of one.
+  const party = size > 1 ? world.nextId++ : 0;
+  const group: Customer[] = [];
+  for (let i = 0; i < size; i++) {
+    const customer = walkUp(world, i, party);
+    if (!customer) return; // a room with nothing on the menu takes no orders
+    group.push(customer);
   }
+
+  const table = claimTable(world, reachable, group.length);
+  if (table) for (const customer of group) sitDown(world, customer, table, reachable);
+  else for (const customer of group) joinQueue(world, customer);
+  if (group.length > 1) log(world, `A party of ${group.length} came in`);
+}
+
+/** The most chairs any table in this room offers. Nobody may arrive as more. */
+function biggestTable(world: World, reachable: Set<number>): number {
+  let most = 1;
+  for (const appliance of world.appliances.values()) {
+    if (appliance.kind !== "table") continue;
+    most = Math.max(most, reachableSeats(world, appliance.tile, reachable).length);
+  }
+  return most;
+}
+
+/** Everyone still here who walked in with this customer, themselves included. */
+function partyWith(world: World, customer: Customer): Customer[] {
+  if (customer.party === 0) return [customer];
+  return world.customers.filter((other) => other.party === customer.party);
 }
 
 /**
@@ -295,9 +352,10 @@ function arrive(world: World, reachable: Set<number>): void {
  * number — and it is a chance rather than a schedule, because a rush you can
  * time is a rush you have already survived.
  *
- * A group is several *separate* orders that happen to arrive together, not one
- * table wanting several dishes. That is a party, and it is deliberately still
- * ahead of us — see the roadmap.
+ * A group is a **party**: one table, one dish each, all wanted at once. Which
+ * makes the size roll the difficulty curve's real dial — two dishes to the same
+ * table inside one patience ring is a different job from two customers who
+ * happen to have arrived together.
  */
 function groupSize(world: World): number {
   const chance = Math.min(MAX_RUSH_CHANCE, RUSH_PER_DAY * (world.day - 1));
@@ -308,10 +366,10 @@ function groupSize(world: World): number {
   return roll < chance / 3 ? 3 : 2;
 }
 
-/** One customer up the path. Returns false when the room can take no orders. */
-function walkUp(world: World, reachable: Set<number>, index: number): boolean {
+/** One customer up the path, not yet seated. Null when the menu is empty. */
+function walkUp(world: World, index: number, party: number): Customer | null {
   const recipe = orderFrom(world);
-  if (!recipe) return false; // a room with nothing on the menu takes no orders
+  if (!recipe) return null;
   const kind = pickKind(world);
 
   // Single file: everybody behind the first starts a little further down the
@@ -326,6 +384,8 @@ function walkUp(world: World, reachable: Set<number>, index: number): boolean {
     prevPos: { ...start },
     facing: { x: 1, y: 0 },
     table: null,
+    party,
+    plate: null,
     seat: null,
     recipeId: recipe.id,
     kind: kind.id,
@@ -340,11 +400,7 @@ function walkUp(world: World, reachable: Set<number>, index: number): boolean {
     tip: 0,
   };
   world.customers.push(customer);
-
-  const table = claimTable(world, reachable);
-  if (table) sitDown(world, customer, table, reachable);
-  else joinQueue(world, customer);
-  return true;
+  return customer;
 }
 
 // --- the door queue ----------------------------------------------------------
@@ -465,20 +521,28 @@ function pickKind(world: World): CustomerKind {
 }
 
 /**
- * A free, reachable table, or null.
+ * A free, reachable table with room for `seats` of them, or null.
  *
  * "Free" means no customer has claimed it *and* nothing is left on it — a table
  * with a dirty plate still on it cannot be sat at, which is what gives bussing
  * its urgency during a rush.
+ *
+ * `seats` is where the build phase meets the dining room. A table in the open
+ * has four chairs and can take a party of four; the same table shoved against a
+ * wall has two, and a party of three will stand at the door waiting for one
+ * that is not. Where the tables go is a decision about **who you can serve**,
+ * not only about how many.
  */
-function claimTable(world: World, reachable: Set<number>): Appliance | null {
+function claimTable(world: World, reachable: Set<number>, seats = 1): Appliance | null {
   const taken = new Set(world.customers.map((c) => c.table).filter((id) => id !== null));
   let best: Appliance | null = null;
   let bestDistance = Infinity;
   for (const appliance of world.appliances.values()) {
     if (appliance.kind !== "table" || taken.has(appliance.id)) continue;
     if (appliance.item !== null || appliance.tip > 0) continue;
-    const chair = pickSeat(world, appliance.tile, reachable);
+    const chairs = reachableSeats(world, appliance.tile, reachable);
+    if (chairs.length < seats) continue;
+    const chair = chairs[0];
     if (!chair) continue;
     // Nearest table first, so a half-empty dining room fills from the door and
     // customers do not cross the room past a free seat.
@@ -498,21 +562,19 @@ function reachableSeats(world: World, tile: Vec2, reachable: Set<number>): Vec2[
   );
 }
 
-/**
- * Is there anywhere to sit at this table? Deliberately does **not** consume
- * randomness: it is asked speculatively, of every table, on every tick somebody
- * is queuing at the door. Burning the RNG stream on a question would make the
- * answer depend on how many tables happen to exist.
- */
-function pickSeat(world: World, tile: Vec2, reachable: Set<number>): Vec2 | null {
-  return reachableSeats(world, tile, reachable)[0] ?? null;
-}
-
 function sitDown(world: World, customer: Customer, table: Appliance, reachable: Set<number>): void {
   // Which chair is a coin toss, drawn once, here — the only place a seat is
   // actually taken. A fixed side made a full dining room look choreographed,
-  // every customer at the same o'clock of their own table.
-  const options = reachableSeats(world, table.tile, reachable);
+  // every customer at the same o'clock of their own table. A party takes
+  // whatever their friends left, which is why the taken chairs come out first.
+  const used = new Set(
+    world.customers
+      .filter((other) => other !== customer && other.table === table.id && other.seat)
+      .map((other) => `${other.seat?.x},${other.seat?.y}`),
+  );
+  const options = reachableSeats(world, table.tile, reachable).filter(
+    (chair) => !used.has(`${chair.x},${chair.y}`),
+  );
   const chair = options[Math.floor(random(world) * options.length)];
   if (!chair) return;
   customer.table = table.id;
@@ -643,6 +705,11 @@ export function acceptDelivery(world: World, table: Appliance, customer: Custome
   customer.tip = Math.round(recipe.reward * TIP_FRACTION * speed * kind.generosity);
   customer.state = "eating";
   customer.timer = eatTime(customer);
+  // They take their dinner off the table, which is what frees the table for
+  // the rest of their party. Plates are conserved and this is a place one can
+  // be — `platesInWorld` counts it, and they put it back dirty when they go.
+  customer.plate = plate;
+  table.item = null;
 
   world.money += recipe.reward;
   world.served++;
@@ -650,6 +717,45 @@ export function acceptDelivery(world: World, table: Appliance, customer: Custome
   world.today.served++;
   log(world, `${recipe.name} delivered  +$${recipe.reward}`);
   return recipe.reward;
+}
+
+/**
+ * Whatever is on this table, given to whoever at it ordered it.
+ *
+ * A table can be several orders now, so "the customer sitting here" is no
+ * longer a question with one answer. The **most impatient** match is fed
+ * first: with two people at a table waiting for the same dish, the one whose
+ * ring is nearly empty is the one about to walk out, and feeding the other
+ * would lose an order the kitchen had already cooked for.
+ */
+export function serveTable(world: World, table: Appliance): number | null {
+  const waiting = world.customers
+    .filter((customer) => customer.table === table.id && customer.state === "ordering")
+    .sort((a, b) => a.remaining - b.remaining);
+  for (const customer of waiting) {
+    const reward = acceptDelivery(world, table, customer);
+    if (reward !== null) return reward;
+  }
+  return null;
+}
+
+/**
+ * A used plate, back onto the table it was eaten at.
+ *
+ * Stacked onto whatever is already there when it can be — a party of four
+ * leaves one pile and one bussing run, which is the same trip the sink already
+ * rewards. When it cannot (a chef has left something else on the table), the
+ * plates go home to the stack clean rather than being dropped: a function whose
+ * job is "a plate does not cease to exist" must not have a branch where one
+ * does.
+ */
+function returnPlate(world: World, table: Appliance, plate: Item): void {
+  if (table.item === null) {
+    table.item = plate;
+    return;
+  }
+  if (stackPlates(plate, table.item, MAX_PLATES)) return;
+  stockPlates(world, plateCount(plate));
 }
 
 /**

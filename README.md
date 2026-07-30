@@ -10,7 +10,8 @@ loop) and **PlateUp!** (kitchen as a thing you design and optimise across days).
 
 Status: **playable, and multiplayer.** Multiple chefs, a kitchen that starts with
 one dish and buys the rest from recipe cards, burning, a dining room with
-customers who walk in, sit, order, eat and leave, tips left on tables, a sink and
+customers who walk in — alone or as a party — sit, order, eat and leave, tips
+left on tables, a sink and
 a kitchen with only four plates to its name, a day loop that begins in the
 morning, a market stall on the patio to spend the takings at — and a server so
 the chefs can be in different countries.
@@ -89,14 +90,19 @@ The white square in front of your chef is what you'll interact with.
    across the room, which is the point — [who walks
    in](docs/dining-room.md#who-walks-in).
 
-   **They don't always come one at a time.** Later days send **rushes** — two or
-   three people walking up the path in single file — and a room with no free
-   table grows a **line at the door**, served front first. The line is a warning
+   **They don't always come one at a time.** Later days send **parties** — two
+   or three people walking up the path in single file, who sit at *one table*
+   and want a dish each at the same time. A table seats as many as it has free
+   sides, so a table in the open takes a party of four and the same table shoved
+   against a wall takes one: where you put them decides who you can serve. A
+   room with no table big enough grows a **line at the door**, served front
+   first. The line is a warning
    you can act on: it is standing right next to the market stall that sells
    tables. Nobody waits forever, and the people who leave were the impatient
    ones. See [the line at the door](docs/dining-room.md#the-line-at-the-door).
-7. When they finish eating they leave behind a **dirty plate and a tip**. Pick
-   the plate up and the tip is yours. A table with a plate still on it cannot be
+7. When they finish eating they leave behind a **dirty plate and a tip** — a
+   party leaves a whole pile of both, in one place. Pick the plates up and the
+   tips are yours. A table with a plate still on it cannot be
    sat at, so clearing up *is* the capacity.
 8. **Wash up.** Your kitchen owns four plates and no more, so the dirty ones have
    to come back. Plates **stack in your hands** — up to four — so one sweep

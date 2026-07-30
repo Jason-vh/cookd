@@ -71,14 +71,15 @@ src/
     view.ts               composition root: renderer, lighting, camera, kitchen shell
     appliance-views.ts    appliance meshes, dials, moving parts, ghosts, stranded rings
     people-views.ts       chef and customer rigs, walk cycle, working and eating poses
-    table-views.ts        order bubbles and the tips left behind
+    table-views.ts        the tip left on a table
+    order-views.ts        the order bubble over the head that placed it
     item-views.ts         food on counters and in hands, and plates emptying
     highlight-views.ts    the square in front of a chef, and the build-phase yes/no
     anim.ts               the animation maths, with no three.js in it
     scatter.ts            where the scenery goes, also with no three.js in it
     camera.ts             the 3/4 ortho framing, and how it follows the local chefs
     environment.ts        biome rendering: sky, sun, ground, patio, scattered props
-    bubble.ts             the order floating over a table: dish model + patience ring
+    bubble.ts             one order: the dish model and its patience ring
     dial.ts               the work gauge over a busy appliance
     popups.ts             floating "+$12" text
     appliance-meshes.ts   appliance bodies, tops and details

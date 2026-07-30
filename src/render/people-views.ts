@@ -75,6 +75,17 @@ export class PeopleViews {
     return this.chefs.get(playerId)?.carry;
   }
 
+  /**
+   * Where a customer is being drawn, for anything that hangs over them.
+   *
+   * Read rather than recomputed: a seated customer is pulled off their tile and
+   * onto their chair here, and an order bubble doing that arithmetic for itself
+   * is a second opinion about where somebody is sitting.
+   */
+  customerRoot(customerId: number): THREE.Object3D | undefined {
+    return this.customers.get(customerId)?.root;
+  }
+
   colorOf(playerId: number): number {
     return PALETTE.chefs[this.colors.get(playerId) ?? 0] ?? PALETTE.chefs[0];
   }

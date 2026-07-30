@@ -182,6 +182,16 @@ export type FrameCustomer = {
   patience: number;
   /** Seconds left in the current timed state — what empties a plate as it is eaten. */
   timer: number;
+  /**
+   * The plate they took off the table when their dinner arrived, if they are
+   * eating.
+   *
+   * Sent because it is *drawn* — a diner's plate sits in front of their chair,
+   * and a client that could not see it would show a party eating off bare wood
+   * while the table stood empty. It also has to exist on both ends for the same
+   * reason the appliances' items do: it is crockery the kitchen still owns.
+   */
+  plate: Item | null;
 };
 
 export type Frame = {
@@ -300,6 +310,7 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
       remaining: customer.remaining,
       patience: customer.patience,
       timer: customer.timer,
+      plate: customer.plate,
     })),
     events: world.events,
     effects: world.effects,
@@ -444,6 +455,11 @@ export function applyFrame(world: World, frame: Frame): void {
     facing: { x: customer.fx, y: customer.fy },
     table: customer.table,
     seat: null,
+    // Nobody predicts customers, so the two fields only the dining room's own
+    // rules read never travel: which group they walked in with, and which chair
+    // they took. A client draws them where the server says they are.
+    party: 0,
+    plate: customer.plate === null ? null : cloneItem(customer.plate),
     recipeId: customer.recipeId,
     kind: customer.kind,
     path: [],

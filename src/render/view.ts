@@ -15,6 +15,7 @@ import { buildDoorway, buildWall, floorTexture } from "./shell-meshes";
 import { PALETTE } from "./palette";
 import { PeopleViews } from "./people-views";
 import { Popups } from "./popups";
+import { OrderViews } from "./order-views";
 import { TableViews } from "./table-views";
 import { createPost, postEnabled, type Post } from "./post";
 
@@ -73,6 +74,7 @@ export class View {
   private readonly appliances: ApplianceViews;
   private readonly people: PeopleViews;
   private readonly tables: TableViews;
+  private readonly orders: OrderViews;
   private readonly items: ItemViews;
   private readonly highlights: HighlightViews;
   private readonly popups = new Popups(this.scene);
@@ -106,7 +108,8 @@ export class View {
 
     this.appliances = new ApplianceViews(this.scene, this.camera);
     this.people = new PeopleViews(this.scene);
-    this.tables = new TableViews(this.camera, this.appliances);
+    this.tables = new TableViews(this.appliances);
+    this.orders = new OrderViews(this.scene, this.camera, this.people);
     this.items = new ItemViews(this.scene, this.people);
     this.highlights = new HighlightViews(this.scene, this.appliances, this.people);
 
@@ -217,7 +220,10 @@ export class View {
     this.appliances.sync(world, dt, time);
     this.people.syncChefs(world, alpha, dt, time);
     this.people.syncCustomers(world, alpha, dt, time);
-    this.tables.sync(world, dt, time);
+    this.tables.sync(world, dt);
+    // After the people: a bubble follows the head it is drawn over, and reading
+    // a rig that has not moved yet is a bubble one frame behind its customer.
+    this.orders.sync(world, dt, time);
     this.items.sync(world, time);
     this.highlights.sync(world);
     this.popups.update(dt);
@@ -362,6 +368,7 @@ export class View {
     this.appliances.dispose();
     this.people.dispose();
     this.tables.dispose();
+    this.orders.dispose();
     this.items.dispose();
     this.highlights.dispose();
     this.popups.dispose();

@@ -3,17 +3,19 @@ import { applianceDef } from "../data/appliances";
 import type { World } from "../sim/types";
 import { ease } from "./anim";
 import type { ApplianceViews } from "./appliance-views";
-import { Bubble } from "./bubble";
 import { disposeSubtree } from "./dispose";
 import { buildTipStack } from "./overlay-meshes";
 
 /**
- * What a table has to say: the order bubble above it, and the tip left on it.
+ * What a table has to say: the tip left on it.
  *
- * The ring over a table nobody can walk to used to live here too, back when a
- * table was the only thing that could be stranded. It is `ApplianceViews`'
- * business now that a chef can wall themselves away from the sink just as
- * easily — one marker, wherever the wall is.
+ * It used to say more. The ring over a table nobody can walk to went to
+ * `ApplianceViews` when a chef could wall themselves away from the sink just as
+ * easily, and the order bubble went to `OrderViews` when a table stopped being
+ * one order — a party is three people wanting three things, and a single bubble
+ * over the middle of the table cannot say who wants what. What is left is the
+ * one thing that genuinely belongs to the furniture rather than to a person:
+ * the coins somebody left behind on their way out.
  *
  * Keyed by appliance id and torn down when the appliance goes, which it can —
  * a reset renumbers the kitchen and online the server can hand us a different
@@ -21,7 +23,6 @@ import { buildTipStack } from "./overlay-meshes";
  */
 
 type TableVisual = {
-  bubble: Bubble;
   /** Tip coins, and how far they have risen into view. */
   tip: { object: THREE.Object3D; alpha: number };
 };
@@ -29,12 +30,9 @@ type TableVisual = {
 export class TableViews {
   private readonly visuals = new Map<number, TableVisual>();
 
-  constructor(
-    private readonly camera: THREE.Camera,
-    private readonly appliances: ApplianceViews,
-  ) {}
+  constructor(private readonly appliances: ApplianceViews) {}
 
-  sync(world: World, dt: number, time: number): void {
+  sync(world: World, dt: number): void {
     for (const [id, visual] of this.visuals) {
       if (world.appliances.get(id)?.kind === "table" && this.appliances.root(id)) continue;
       this.release(visual);
@@ -52,17 +50,6 @@ export class TableViews {
         this.visuals.set(appliance.id, visual);
       }
 
-      // Deliberately a loop rather than `.find`: this runs per table per frame,
-      // and `.find` allocated a closure for each one.
-      let waiting = null;
-      for (const customer of world.customers) {
-        if (customer.table === appliance.id && customer.state === "ordering") {
-          waiting = customer;
-          break;
-        }
-      }
-      visual.bubble.update(waiting, dt, time);
-
       // The tip rises out of the table when it appears and sinks away when
       // collected, so money never simply blinks into or out of the room.
       const tip = visual.tip;
@@ -79,26 +66,20 @@ export class TableViews {
   }
 
   private create(root: THREE.Object3D): TableVisual {
-    const bubble = new Bubble(this.camera);
-    root.add(bubble.object);
-
-    // Off to one side: the middle of the table belongs to the plate that has to
-    // be picked up with it.
+    // Off to one side: the middle of the table belongs to the plates that have
+    // to be picked up with it.
     const coins = buildTipStack();
     coins.position.set(0.26, applianceDef("table").height + 0.04, -0.22);
     coins.visible = false;
     root.add(coins);
 
-    return { bubble, tip: { object: coins, alpha: 0 } };
+    return { tip: { object: coins, alpha: 0 } };
   }
 
   private release(visual: TableVisual): void {
-    // Order matters, and it used to be wrong. `syncAppliances` ran first and
-    // deleted the appliance's object, so by the time the bubble was torn down
-    // its parent was already gone and `dispose` was skipped entirely — meaning
-    // the bubble's own Dial geometry and shader were never even reachable.
-    // These visuals now own their parts outright and free them directly.
-    visual.bubble.dispose();
+    // These visuals own their parts outright and free them directly: appliance
+    // meshes are torn down in the same frame, and a child freed through its
+    // parent after the parent has gone is a child that is never freed at all.
     disposeSubtree(visual.tip.object);
   }
 

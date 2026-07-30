@@ -66,12 +66,16 @@ export function canPlace(world: World, tx: number, ty: number): boolean {
   return !existing || applianceDef(existing.kind).movable;
 }
 
-/** The customer sitting at this table and waiting to be fed, if there is one. */
-export function customerAt(world: World, table: Appliance): Customer | null {
-  return (
-    world.customers.find(
-      (customer) => customer.table === table.id && customer.state === "ordering",
-    ) ?? null
+/**
+ * Everybody sitting at this table and still waiting to be fed.
+ *
+ * Plural since parties: one table can be three orders, and "the customer here"
+ * stopped being a question with one answer. Which of them a plate is for is a
+ * rule rather than a query — see `serveTable`.
+ */
+export function customersAt(world: World, table: Appliance): Customer[] {
+  return world.customers.filter(
+    (customer) => customer.table === table.id && customer.state === "ordering",
   );
 }
 
