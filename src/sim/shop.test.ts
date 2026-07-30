@@ -1,14 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { applianceDef } from "../data/appliances";
+import { APPLIANCE_KINDS, applianceDef } from "../data/appliances";
 import { PLATE_PRICE, SELLBACK, STALL_SLOTS } from "../data/economy";
 import { LEVEL } from "../data/level";
+import { RECIPES } from "../data/recipes";
 import { Host } from "../game/host";
 import { platesInWorld } from "./plates";
 import { canPlace } from "./queries";
 import { offerPrice, restockStall, stallSlots } from "./shop";
 import { endDay, step } from "./step";
 import type { Appliance, ApplianceKind, PlayerInput, World } from "./types";
-import { applianceAtTile, createWorld, emptyInput, removePlayer } from "./world";
+import {
+  applianceAtTile,
+  createWorld,
+  emptyInput,
+  nearestFreeTile,
+  removePlayer,
+  spawnAppliance,
+} from "./world";
 
 /**
  * The stall, the ledger and the morning.
@@ -343,6 +351,46 @@ describe("the stock is the same shop for everybody", () => {
       .filter((kind) => kind !== null);
     const scarce = kinds.some((kind) => counts(world, kind) < 2);
     expect(scarce || kinds.length < STALL_SLOTS).toBe(true);
+  });
+
+  test("an upgrade is a luxury rather than a gap, so it is never the promised slot", () => {
+    // A kitchen holding two of every plain kind is short of nothing — except
+    // upgrades, which it owns none of and will own none of for a week. Counted
+    // as scarce they would qualify forever, and the one slot reserved for what
+    // a room actually needs would spend every morning on a $320 oven.
+    const world = morning();
+    world.unlocked = RECIPES.map((recipe) => recipe.id);
+    for (const kind of APPLIANCE_KINDS) {
+      const def = applianceDef(kind);
+      if (!def.movable || def.upgrades !== null) continue;
+      while (counts(world, kind) < 2) {
+        const tile = nearestFreeTile(world, { x: 15, y: 6 });
+        if (!tile) throw new Error("the kitchen ran out of floor");
+        spawnAppliance(
+          world,
+          kind,
+          tile,
+          kind === "crate" ? { base: "tomato", processes: [] } : null,
+        );
+      }
+    }
+
+    let mornings = 0;
+    let bare = 0;
+    for (let day = 1; day <= 40; day++) {
+      world.day = day;
+      restockStall(world);
+      const upgrades = stallSlots(world).filter(
+        (slot) =>
+          slot.offer?.good === "appliance" && applianceDef(slot.offer.kind).upgrades !== null,
+      ).length;
+      if (upgrades > 0) mornings++;
+      else bare++;
+    }
+
+    // For sale, and not on offer every morning: the two halves of "rare".
+    expect(mornings).toBeGreaterThan(0);
+    expect(bare).toBeGreaterThan(0);
   });
 });
 

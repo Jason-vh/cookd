@@ -12,6 +12,20 @@ export type ApplianceDef = {
   /** Work-rate multiplier. A dedicated station beats improvising on a counter. */
   speed: number;
   /**
+   * How long finished food survives on it, as a multiple of the dish's burn
+   * time. 1 everywhere except on an upgrade bought to buy time.
+   */
+  patience: number;
+  /**
+   * The kind this is a better version of, or null when it is the plain one.
+   *
+   * A `string` rather than an `ApplianceKind` because the union is derived from
+   * this very table, and a column typed by its own keys is a circular type.
+   * `validate.ts` checks the name resolves, shares a station with its upgrade
+   * and costs more — the same job the type would have done, one startup later.
+   */
+  upgrades: string | null;
+  /**
    * Can a player pick the appliance itself up during the build phase?
    *
    * Doubles as the line between what the *level* owns and what a *player*
@@ -27,39 +41,60 @@ export type ApplianceDef = {
 /**
  * A table, read down its columns — see the note on TRANSFORMS in recipes.ts.
  *
- * The `price` column is the ledger, and it is written in three tiers on
+ * The `price` column is the ledger, and it is written in four tiers on
  * purpose: **staples** are felt on day one or two, **capacity** costs a good
- * day's profit, and **throughput** is two or three days of it — a thing to save
- * for rather than a thing to buy. Prices are the only balancing dial the shop
- * has, and they are here rather than in the shop so that one appliance means
- * one row.
+ * day's profit, **throughput** is two or three days of it — a thing to save
+ * for rather than a thing to buy — and an **upgrade** is a week of them.
+ * Prices are the only balancing dial the shop has, and they are here rather
+ * than in the shop so that one appliance means one row.
+ *
+ * An **upgrade** is the first purchase that changes how a kitchen works rather
+ * than how much of it there is: a second board means two people can chop, a
+ * steel one means one person chops faster. They are deliberately built out of
+ * columns that already existed — `speed` and now `patience` — so a better
+ * appliance is a row here and nothing anywhere else.
  */
+/**
+ * Columns every row would otherwise repeat. Spread first, so a row that has an
+ * opinion still wins — and so "this one is plain" stays the thing you do not
+ * have to write down.
+ */
+const PLAIN = { patience: 1, upgrades: null } as const;
+
 // prettier-ignore
 const DEFS = {
-  wall: { stations: [], speed: 1, label: "Wall", color: 0x4a4a55, height: 1.15, acceptsItems: false, movable: false, price: 0 },
+  wall: { ...PLAIN, stations: [], speed: 1, label: "Wall", color: 0x4a4a55, height: 1.15, acceptsItems: false, movable: false, price: 0 },
   // The stall is a place, not an appliance: it stands where the level puts it,
   // cannot be lifted, holds nothing and does its whole job through `Grab`.
-  stall: { stations: [], speed: 1, label: "Stall", color: 0x9c5f4a, height: 0.78, acceptsItems: false, movable: false, price: 0 },
+  stall: { ...PLAIN, stations: [], speed: 1, label: "Stall", color: 0x9c5f4a, height: 0.78, acceptsItems: false, movable: false, price: 0 },
   // The card stand is the stall's twin in every structural way: level
   // furniture, immovable, never saved, and it does its whole job through
   // `Grab`. What it sells is days rather than money — see `sim/cards.ts`.
-  cards: { stations: [], speed: 1, label: "Recipe card", color: 0xd9c9a8, height: 0.62, acceptsItems: false, movable: false, price: 0 },
-  counter: { stations: ["prep"], speed: 1, label: "Counter", color: 0x9a7b58, height: 0.62, acceptsItems: true, movable: true, price: 20 },
-  board: { stations: ["prep"], speed: 1.75, label: "Chopping board", color: 0xc9a06a, height: 0.66, acceptsItems: true, movable: true, price: 40 },
-  fryer: { stations: ["fry"], speed: 1, label: "Fryer", color: 0x8e8e99, height: 0.72, acceptsItems: true, movable: true, price: 120 },
-  oven: { stations: ["bake"], speed: 1, label: "Oven", color: 0x6f7076, height: 0.9, acceptsItems: true, movable: true, price: 160 },
-  crate: { stations: [], speed: 1, label: "Crate", color: 0x7a5c3c, height: 0.7, acceptsItems: false, movable: true, price: 15 },
-  plates: { stations: [], speed: 1, label: "Plate stack", color: 0xbfc7cf, height: 0.7, acceptsItems: false, movable: true, price: 60 },
+  cards: { ...PLAIN, stations: [], speed: 1, label: "Recipe card", color: 0xd9c9a8, height: 0.62, acceptsItems: false, movable: false, price: 0 },
+  counter: { ...PLAIN, stations: ["prep"], speed: 1, label: "Counter", color: 0x9a7b58, height: 0.62, acceptsItems: true, movable: true, price: 20 },
+  board: { ...PLAIN, stations: ["prep"], speed: 1.75, label: "Chopping board", color: 0xc9a06a, height: 0.66, acceptsItems: true, movable: true, price: 40 },
+  // The upgrades. A steel board is the cheap one on purpose: prep is what a
+  // kitchen does most of, so it is the upgrade a room can first imagine
+  // wanting, and the one whose effect is felt within a minute of buying it.
+  steel_board: { ...PLAIN, stations: ["prep"], speed: 2.75, label: "Steel board", color: 0xb8b2a6, height: 0.66, acceptsItems: true, movable: true, price: 110, upgrades: "board" },
+  fryer: { ...PLAIN, stations: ["fry"], speed: 1, label: "Fryer", color: 0x8e8e99, height: 0.72, acceptsItems: true, movable: true, price: 120 },
+  oven: { ...PLAIN, stations: ["bake"], speed: 1, label: "Oven", color: 0x6f7076, height: 0.9, acceptsItems: true, movable: true, price: 160 },
+  // The bell oven buys *time*, not speed: a pizza left in it lasts three times
+  // as long before it burns. Heat is the one appliance a chef has to come back
+  // to at a particular moment, so the thing worth selling is a later moment.
+  bell_oven: { ...PLAIN, stations: ["bake"], speed: 1.15, patience: 3, label: "Bell oven", color: 0x585b66, height: 0.9, acceptsItems: true, movable: true, price: 320, upgrades: "oven" },
+  crate: { ...PLAIN, stations: [], speed: 1, label: "Crate", color: 0x7a5c3c, height: 0.7, acceptsItems: false, movable: true, price: 15 },
+  plates: { ...PLAIN, stations: [], speed: 1, label: "Plate stack", color: 0xbfc7cf, height: 0.7, acceptsItems: false, movable: true, price: 60 },
   // The one station that never burns, never overflows and never punishes: the
   // pressure around a sink is that plates are finite, not that scrubbing is
   // dangerous. Somewhere to catch your breath is worth having in a game like
   // this, and the sink is it.
-  sink: { stations: ["wash"], speed: 1, label: "Sink", color: 0xa9b4bc, height: 0.7, acceptsItems: true, movable: true, price: 50 },
+  sink: { ...PLAIN, stations: ["wash"], speed: 1, label: "Sink", color: 0xa9b4bc, height: 0.7, acceptsItems: true, movable: true, price: 50 },
   // A table is an appliance like any other: it accepts a plate, so delivery is
   // the place verb players already know. Its price is what the build phase
   // charges for order capacity.
-  table: { stations: [], speed: 1, label: "Table", color: 0xb08d63, height: 0.55, acceptsItems: true, movable: true, price: 40 },
-  bin: { stations: [], speed: 1, label: "Bin", color: 0x35363c, height: 0.7, acceptsItems: true, movable: true, price: 10 },
+  table: { ...PLAIN, stations: [], speed: 1, label: "Table", color: 0xb08d63, height: 0.55, acceptsItems: true, movable: true, price: 40 },
+  bin: { ...PLAIN, stations: [], speed: 1, label: "Bin", color: 0x35363c, height: 0.7, acceptsItems: true, movable: true, price: 10 },
 } as const satisfies Record<string, ApplianceDef>;
 
 /**

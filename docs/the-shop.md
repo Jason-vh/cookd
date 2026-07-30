@@ -190,7 +190,7 @@ content, identical in every room, and a shop that edited them would be a shop
 whose tuning depended on who had been playing.
 
 One slot every morning is promised to a kind the kitchen owns fewer than two of
-*and has a use for*.
+*and has a use for*, and which is **not an upgrade** — see below.
 Three duds is a shop players stop walking to, and a shop nobody walks to is a
 feature that has quietly stopped existing. That slot is still rolled *by
 weight* — evenly made a fryer as likely as a counter, because a lean kitchen is
@@ -215,6 +215,48 @@ morning after a card delivers some.
 A shop that teaches, and then becomes a rhythm. It falls out of the two rules
 rather than being arranged, which is the only reason to trust it.
 
+### Upgrades
+
+Everything the stall sold at first was another one of something: a second board
+means two people can chop. An **upgrade** is the other kind of purchase — the
+same job done better by one person.
+
+| | | |
+| --- | --- | --- |
+| **Steel board** $110 | prep at 2.75x, against the wooden board's 1.75x | speed |
+| **Bell oven** $320 | bakes slightly faster, and holds a finished dish **three times as long** before it burns | time |
+
+They are built out of columns that already existed — `speed`, and a new
+`patience` multiplier on the dish's own burn time — so a better appliance is a
+row in `data/appliances.ts` and nothing anywhere else. No upgrade tier, no
+levels, no second table of burn times to keep in step with the first.
+
+The two axes are deliberate: service pressure is *how fast you can work* and
+*how long you can leave something*, and one upgrade answers each. The bell oven
+is the more interesting of the two because it does not make a pizza sooner, it
+makes the moment you have to be back at the oven later — which is the whole
+subject of the game. It is a longer fuse and not a fireproof one: forget it
+entirely and it still burns.
+
+Three rules keep them from disturbing anything already here:
+
+- **Never promised.** The scarcity guarantee is about gaps, and a kitchen that
+  owns no steel board is missing nothing. Left in the shortlist an upgrade would
+  qualify forever — nobody buys two — and the one slot reserved for what a room
+  actually needs would spend every morning showing it a $320 oven.
+- **Never delivered.** A recipe card delivers *the cheapest movable appliance
+  that offers the station*, which was written before upgrades existed and turns
+  out to be exactly the rule that stops a free card handing over the good oven.
+- **As rare as throughput**, and several days dearer. A slot holding one is a
+  thing to plan a week around, which is why it is worth seeing before it is
+  affordable.
+
+The `upgrades` column names the plain kind an upgrade improves on. It is typed
+`string` rather than `ApplianceKind` — the union is derived from the table the
+column sits in, and a column typed by its own keys is a circular type — so
+`data/validate.ts` checks what the type would have: that it names a real kind,
+that it does the same job, that it costs more, and that it is not somehow worse.
+
 ### Plates are the exception
 
 A single plate is a shop item, and it is the **only path in the game that
@@ -228,13 +270,14 @@ back would mean destroying it.
 
 ## The ledger
 
-Prices are the `price` column in `data/appliances.ts`, in three tiers:
+Prices are the `price` column in `data/appliances.ts`, in four tiers:
 
 | Tier | Items | What it costs you |
 | --- | --- | --- |
 | Staples | plate $10, bin $10, crate $15, counter $20 | felt on day 1–2 |
 | Capacity | table $40, board $40, sink $50, plates stack $60 | a good day's profit |
 | Throughput | fryer $120, oven $160 | 2–3 days of *profit* — a saving goal |
+| Upgrades | steel board $110, bell oven $320 | a week of them — a plan |
 
 There is deliberately **no fail state** and no standing cost. The pressure is
 meant to be "we can't afford the oven", not "we lost", and the till only ever

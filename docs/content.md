@@ -45,10 +45,18 @@ adding "a hob that can also bake, slowly" is one line of data.
 `data/appliances.ts`:
 
 ```ts
-counter: { stations: ["prep"], speed: 1,    ... }
-board:   { stations: ["prep"], speed: 1.75, ... }
-oven:    { stations: ["bake"], speed: 1,    ... }
+counter:     { stations: ["prep"], speed: 1,    ... }
+board:       { stations: ["prep"], speed: 1.75, ... }
+steel_board: { stations: ["prep"], speed: 2.75, upgrades: "board", ... }
+oven:        { stations: ["bake"], speed: 1,    ... }
+bell_oven:   { stations: ["bake"], speed: 1.15, patience: 3, upgrades: "oven", ... }
 ```
+
+An **upgrade** is a row like any other: it offers the same station and is better
+at it, either in `speed` or in `patience` — the multiplier on how long finished
+food survives on it before burning. What makes it an upgrade rather than a
+second appliance is the `upgrades` column naming what it improves on, which the
+[shop](the-shop.md#upgrades) reads so that a luxury is never mistaken for a gap.
 
 - `mode: "hold"` requires a player to stand there holding `Use` (chopping).
   Progress decays slowly if they walk away.
@@ -116,7 +124,10 @@ A pose must reset every channel it touches in the baseline pose above it, or it
 sticks — a chef who kneaded once leant forward forever.
 - `burnAfter` is derived into a reverse index, so a finished item left on a hot
   appliance gains the `burnt` process — including if a player puts a cooked item
-  back on it. Nothing accepts burnt food except the bin.
+  back on it. Nothing accepts burnt food except the bin. How long a *dish*
+  survives is content; how forgiving an *appliance* is is its `patience`
+  multiplier, so a bell oven is a factor on this number rather than a second
+  table of burn times to keep in step with it.
 
 ## Sources (crates)
 

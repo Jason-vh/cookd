@@ -1,6 +1,6 @@
 import { specKey } from "../sim/items";
 import type { ItemSpec } from "../sim/types";
-import { APPLIANCES, APPLIANCE_KINDS } from "./appliances";
+import { APPLIANCES, APPLIANCE_KINDS, isApplianceKind } from "./appliances";
 import { CUSTOMER_KINDS, DEFAULT_CUSTOMER_KIND } from "./customers";
 import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
@@ -164,6 +164,31 @@ export function validateContent(): string[] {
     // by construction — the buyer would be given something they cannot carry.
     if (STOCK_WEIGHT[kind] > 0 && !APPLIANCES[kind].movable) {
       problems.push(`stall: "${kind}" is for sale but cannot be picked up`);
+    }
+  }
+
+  // --- upgrades ---
+  // The `upgrades` column is a `string`, because the union it names is derived
+  // from the table it sits in. These three checks are what the type would have
+  // said: it points at a real kind, it does the same job, and it costs more.
+  // Without the last one a card would deliver the upgrade instead of the plain
+  // appliance, since delivery picks the cheapest kind that offers the station.
+  for (const kind of APPLIANCE_KINDS) {
+    const def = APPLIANCES[kind];
+    if (def.upgrades === null) continue;
+    const base = isApplianceKind(def.upgrades) ? APPLIANCES[def.upgrades] : null;
+    if (!base) {
+      problems.push(`appliance "${kind}": upgrades unknown kind "${def.upgrades}"`);
+      continue;
+    }
+    if (!base.stations.some((station) => def.stations.includes(station))) {
+      problems.push(`appliance "${kind}": upgrades "${def.upgrades}", which does another job`);
+    }
+    if (def.price <= base.price) {
+      problems.push(`appliance "${kind}": costs no more than the "${def.upgrades}" it improves on`);
+    }
+    if (def.speed < base.speed || def.patience < base.patience) {
+      problems.push(`appliance "${kind}": is worse than the "${def.upgrades}" it improves on`);
     }
   }
 

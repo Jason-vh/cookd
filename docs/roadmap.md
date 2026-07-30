@@ -31,11 +31,14 @@ Near term:
   ever becomes the limit, the encoder is one file and the format is already
   split static/dynamic. See the table in [multiplayer.md](multiplayer.md).
 
-- **Upgrade appliances** — a double fryer, a pro board, an oven with a bell. The
-  [stall](the-shop.md) exists and sells the kinds that already exist; the next
-  slice is kinds that are *better*, which is the first time a purchase changes
-  how the kitchen works rather than how much of it there is. Deliberately not
-  anticipated anywhere in the shop's code.
+- **Upgrade appliances are in**, two of them: a [steel board and a bell
+  oven](the-shop.md#upgrades), one buying speed and one buying time. They cost a
+  `patience` column and three rules in the shop, because a better appliance is a
+  row rather than a tier. What is left of the bullet is the kind that cannot be
+  spelled in the existing columns — a **double fryer**, which is two baskets and
+  therefore an appliance holding two items. Everything in the game assumes
+  `appliance.item` is one thing or nothing, and that assumption is worth more
+  than the dish.
 - **A menu cap** — [recipe cards](the-menu.md) ship without one: nothing stops a
   room unlocking the whole library. Deferred on purpose until the library is
   bigger than about five dishes, because "which five do we keep" is only a

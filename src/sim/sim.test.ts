@@ -482,6 +482,64 @@ describe("kitchen basics", () => {
   });
 });
 
+/** A pizza that has just come out, put straight onto an appliance. */
+function bakedPizza(): Item {
+  return { id: 1, base: "pizza", processes: ["sauced", "topped", "baked"], contents: [] };
+}
+
+/**
+ * Upgrades: the first purchase that changes how a kitchen works rather than how
+ * much of it there is.
+ *
+ * Both of them are built out of columns that already existed — `speed` and
+ * `patience` — so what these tests really pin is that a better appliance is a
+ * row in `data/appliances.ts` and nothing anywhere else.
+ */
+describe("upgrades", () => {
+  /** Free interior tiles, faced from the row above, as everything here is. */
+  const STEEL_BOARD = [15, 6] as const;
+  const BELL_OVEN = [18, 6] as const;
+
+  test("a steel board finishes a chop a wooden one is still working on", () => {
+    const world = makeWorld();
+    spawnAppliance(world, "steel_board", { x: STEEL_BOARD[0], y: STEEL_BOARD[1] });
+    takeFrom(world, CRATE.tomato);
+    putOn(world, STEEL_BOARD);
+    workOn(world, STEEL_BOARD, 0.8);
+    expect(applianceAtTile(world, STEEL_BOARD[0], STEEL_BOARD[1])!.item!.processes).toEqual([
+      "chopped",
+    ]);
+
+    // The same 0.8s on the wooden board it improves on is not enough.
+    const wooden = makeWorld();
+    takeFrom(wooden, CRATE.tomato);
+    putOn(wooden, BOARD);
+    workOn(wooden, BOARD, 0.8);
+    expect(applianceAtTile(wooden, BOARD[0], BOARD[1])!.item!.processes).toEqual([]);
+  });
+
+  test("a bell oven sells time: the same pizza lasts three times as long", () => {
+    // This is about what happens *after* the timer finishes, which is the only
+    // moment heat is dangerous.
+    const world = makeWorld();
+    applianceAtTile(world, OVEN[0], OVEN[1])!.item = bakedPizza();
+    spawnAppliance(world, "bell_oven", { x: BELL_OVEN[0], y: BELL_OVEN[1] });
+    applianceAtTile(world, BELL_OVEN[0], BELL_OVEN[1])!.item = bakedPizza();
+
+    // A pizza burns after 8s on a plain oven, and the bell one is still fine.
+    hold(world, 8.2, null);
+    expect(applianceAtTile(world, OVEN[0], OVEN[1])!.item!.processes).toContain("burnt");
+    expect(applianceAtTile(world, BELL_OVEN[0], BELL_OVEN[1])!.item!.processes).not.toContain(
+      "burnt",
+    );
+
+    // It is a longer fuse, not a fireproof one: forget it entirely and it goes
+    // the same way. Nothing in this kitchen looks after itself.
+    hold(world, 16.2, null);
+    expect(applianceAtTile(world, BELL_OVEN[0], BELL_OVEN[1])!.item!.processes).toContain("burnt");
+  });
+});
+
 /**
  * The plate economy: finite crockery, and the sink that keeps it moving.
  *

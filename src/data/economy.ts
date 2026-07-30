@@ -78,6 +78,12 @@ export const STOCK_WEIGHT: Record<ApplianceKind, number> = {
   // Throughput.
   fryer: 1,
   oven: 1,
+
+  // Upgrades: as rare as throughput, and several days dearer. A slot holding
+  // one is a thing to plan a week around rather than a thing to buy today,
+  // which is the whole reason it is worth seeing before it is affordable.
+  steel_board: 1,
+  bell_oven: 1,
 };
 
 /**
@@ -90,7 +96,8 @@ export const PLATE_WEIGHT = 5;
 
 /**
  * The stall guarantees one slot holds a kind the kitchen owns fewer than this
- * many of.
+ * many of — and never an **upgrade**, which is a luxury rather than a gap.
+ * A kitchen owns none of them for a long time and is not missing anything.
  *
  * Three duds is a shop a player stops walking to, and a shop nobody walks to is
  * a feature that has quietly stopped existing. Two is the threshold because one

@@ -104,10 +104,18 @@ function findTransform(appliance: Appliance, itemKey: string): Transform | undef
   return undefined;
 }
 
+/**
+ * How long this appliance will hold finished food before ruining it.
+ *
+ * How long the *dish* survives is content (`BURN_INDEX`); how forgiving the
+ * appliance is is a column on the appliance, so a bell oven is a multiplier on
+ * the same number rather than a second table of burn times to keep in step.
+ */
 function findBurnTime(appliance: Appliance, itemKey: string): number | undefined {
-  for (const station of applianceDef(appliance.kind).stations) {
+  const def = applianceDef(appliance.kind);
+  for (const station of def.stations) {
     const burnAfter = BURN_INDEX.get(`${station}|${itemKey}`);
-    if (burnAfter !== undefined) return burnAfter;
+    if (burnAfter !== undefined) return burnAfter * def.patience;
   }
   return undefined;
 }

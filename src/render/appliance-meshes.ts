@@ -338,8 +338,21 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   cards: { body: [PALETTE.cardEasel, "wood"] },
   counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"] },
   board: { body: [PALETTE.wood, "wood"], top: [PALETTE.boardTop, "wood"], label: "Chop" },
+  // An upgrade has to be tellable from its plain twin across the kitchen, so
+  // each one changes *material* rather than shape: a steel top where the wood
+  // was, dark enamel and brass where the oven is grey.
+  steel_board: {
+    body: [PALETTE.wood, "wood"],
+    top: [PALETTE.steel, "metal"],
+    label: "Chop (fast)",
+  },
   fryer: { body: [PALETTE.fryerBody, "enamel"], top: [PALETTE.ceramic, "enamel"], label: "Fryer" },
   oven: { body: [PALETTE.ovenBody, "enamel"], top: [PALETTE.ovenGlass, "enamel"], label: "Oven" },
+  bell_oven: {
+    body: [PALETTE.ovenBodyPro, "enamel"],
+    top: [PALETTE.brass, "metal"],
+    label: "Bell oven",
+  },
   crate: { body: [PALETTE.crate, "wood"], top: [PALETTE.crateTop, "wood"] },
   // No top slab and no decorative crockery: what the stack is holding is drawn
   // by `item-views.ts`, because it is now a real, countable pile. An empty
@@ -355,6 +368,7 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
 function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): void {
   const group = parts.root;
   switch (appliance.kind) {
+    case "bell_oven":
     case "oven": {
       // Dark glass door on both camera-facing sides.
       for (const [x, z, ry] of [
@@ -398,6 +412,7 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
       parts.basket = basket;
       break;
     }
+    case "steel_board":
     case "board": {
       // A little knife resting on the board reads instantly as "chop here".
       // It hangs off a pivot at the handle so it can be swung when chopping.

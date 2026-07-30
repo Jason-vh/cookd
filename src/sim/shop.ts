@@ -139,9 +139,17 @@ export function restockStall(world: World): void {
  * a fryer the room cannot cook with is the least relevant thing there is. It
  * covers a delivered kind the morning after a card arrives, without being told
  * to — a kitchen with one oven owns fewer than two ovens.
+ *
+ * **Upgrades are never promised.** A kitchen owns none of them for a long time
+ * and is missing nothing: the guarantee is about gaps, and a steel board is a
+ * luxury. Left in, it would qualify forever — nobody buys two — and the one
+ * slot reserved for what a room actually needs would spend every morning
+ * showing it something it cannot afford.
  */
 function scarceKinds(world: World, sold: ApplianceKind[]): ApplianceKind[] {
-  return sold.filter((kind) => countKind(world, kind) < SCARCE_BELOW);
+  return sold.filter(
+    (kind) => applianceDef(kind).upgrades === null && countKind(world, kind) < SCARCE_BELOW,
+  );
 }
 
 /**

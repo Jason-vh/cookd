@@ -128,6 +128,12 @@ The white square in front of your chef is what you'll interact with.
     waiting, so a bigger dining room is a busier one. That is the difficulty
     dial, and it is in your hands.
 
+    **Some things are better rather than more.** A *steel board* chops far
+    faster than a wooden one, and a *bell oven* holds a finished pizza three
+    times as long before it burns. They cost a week of takings and turn up as
+    rarely as an oven does — something to plan around rather than buy. See
+    [upgrades](docs/the-shop.md#upgrades).
+
 11. **Choose what you cook.** You start with one dish — a garden salad — and
     that is the whole menu. On the morning of day 2, and every third morning
     after, **two recipe cards** stand on the apron beside the stall. Face one and

@@ -47,6 +47,9 @@ export const PALETTE = {
   // Classic enamel range: cream body, charcoal hotplate. The camera sees a lot
   // of the top face, so the *top* is what makes an appliance identifiable.
   ovenBody: 0xdfd4c0,
+  // The bell oven, a tier up: the same range in dark enamel, so an upgrade is
+  // legible as "the good one" from across the kitchen without changing shape.
+  ovenBodyPro: 0x3f4550,
   fryerBody: 0xa96b55,
   crate: 0x9c7a52,
   crateTop: 0x87683f,
