@@ -44,8 +44,11 @@ Near term:
   bigger than about five dishes, because "which five do we keep" is only a
   decision when keeping one means dropping another. There is no hook for it.
 - **More content** — soups (pots + liquids), drinks, sides.
-- **Juice** — pickup/serve/burn sounds, steam and sizzle particles, screen shake
-  on burn.
+- **Juice.** The [sounds are in](sound.md) — pickup, serve, tip, burn, door
+  chime, the day opening and closing, synthesised rather than sampled. What is
+  left is the *visual* half: steam and sizzle particles, and screen shake on a
+  burn. Both want a particle system, which the renderer does not have and which
+  is a bigger commitment than the shake is worth on its own.
 - **Chef–customer soft collision** — a gentle "excuse me" nudge, if the dining
   room ever feels too empty with everyone walking through each other.
 - **Rendered icons** — render each ingredient once to a texture with an

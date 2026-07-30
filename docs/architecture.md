@@ -4,8 +4,8 @@
 
 The single most important rule in this codebase:
 
-> **`src/sim` is pure. It must never import from `src/render`, `src/ui` or
-> `src/input`, and must never touch the DOM.**
+> **`src/sim` is pure. It must never import from `src/render`, `src/ui`,
+> `src/input` or `src/audio`, and must never touch the DOM.**
 
 The simulation is advanced only by `step(world, inputs, dt)` — a function of the
 world and one `PlayerInput` per player. Everything else (rendering, HUD,
@@ -60,6 +60,11 @@ src/
   input/
     index.ts            keyboard + Gamepad API -> Inputs (keyed by player id)
     latch.ts            a control that must be released before it counts again
+  audio/                the kitchen, heard: an observer like the renderer
+    cues.ts             pure: the world -> the sounds it is making this frame
+    voices.ts           every sound as data; there are no audio files
+    synth.ts            the only WebAudio in the program: a voice -> a noise
+    index.ts            what the shell calls once a frame
   save.ts                 the saved-kitchen format, its parser and its migrations
   identity.ts             what this *browser* remembers: your name, your seat count
   render/                 mirrors the simulation; never writes to it

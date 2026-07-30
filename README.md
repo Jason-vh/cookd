@@ -52,6 +52,7 @@ installs the hooks.
 | Close the menu | `B` (east) or `Start` | `Esc` or `Backspace` | — |
 | Add a local player | press any button | `P` | — |
 | Remove a local player | — | `Shift`+`P` | — |
+| Sound on / off | — | `M` | — |
 
 **Press any button to join.** The first pad picks up player 1; any further pad
 creates a new chef when *it* is used (up to 4). A pad that is merely plugged in
@@ -178,6 +179,7 @@ noticing. [A test](docs/docs.test.ts) now catches that much.
 | [The shop](docs/the-shop.md) | The morning, the market stall, and the patio they stand on. |
 | [The menu](docs/the-menu.md) | Recipe cards: how a kitchen chooses what it cooks, and the equipment that comes with it. |
 | [Art direction](docs/art-direction.md) | The look, the biomes, and the rendering gotchas behind both. |
+| [Sound](docs/sound.md) | What the kitchen sounds like, and why there are no audio files. |
 | [Performance](docs/performance.md) | The frame budget and the wire budget, and where each one goes. |
 | [Testing](docs/testing.md) | What is covered, and what is only ever checked by hand. |
 | [Roadmap](docs/roadmap.md) | What is next, and what has deliberately been left out. |

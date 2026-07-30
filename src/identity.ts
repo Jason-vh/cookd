@@ -23,6 +23,12 @@ export type Identity = {
   token: string;
   /** Last room joined, so a bare URL returns you to your friends. */
   room: string;
+  /**
+   * Sound off. Belongs to the *person*, not the kitchen: four players sharing
+   * a room do not share a pair of headphones, and one of them muting the game
+   * on everybody else's screen would be a strange thing for a mute button to do.
+   */
+  muted: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -33,7 +39,7 @@ function newToken(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const FALLBACK: Identity = { name: "", token: "", room: "" };
+const FALLBACK: Identity = { name: "", token: "", room: "", muted: false };
 
 export function loadIdentity(): Identity {
   try {
@@ -48,6 +54,7 @@ export function loadIdentity(): Identity {
       name: typeof fields.name === "string" ? fields.name.slice(0, 16) : "",
       token: typeof fields.token === "string" && fields.token ? fields.token : newToken(),
       room: typeof fields.room === "string" ? fields.room : "",
+      muted: fields.muted === true,
     };
   } catch {
     // Private browsing, disabled storage, corrupt value: play as a stranger

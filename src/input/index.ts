@@ -84,6 +84,8 @@ export class InputManager {
   private addPlayerRequested = false;
   /** Set for one poll when the "drop a local player" key is pressed. */
   private dropPlayerRequested = false;
+  /** Set for one poll when the mute key is pressed. */
+  private muteRequested = false;
 
   constructor() {
     window.addEventListener("keydown", (e) => {
@@ -95,6 +97,10 @@ export class InputManager {
         if (e.shiftKey) this.dropPlayerRequested = true;
         else this.addPlayerRequested = true;
       }
+      // Sound is a preference of the person at the keyboard, so it is a key
+      // rather than a menu item: the pause menu's actions go to the *world*,
+      // and muting one browser is nobody else's business.
+      if (e.code === "KeyM" && !e.repeat) this.muteRequested = true;
       this.keys.add(e.code);
       this.pressedSincePoll.add(e.code);
       if (SWALLOWED.has(e.code)) e.preventDefault();
@@ -110,6 +116,13 @@ export class InputManager {
   consumeDropPlayerRequest(): boolean {
     const requested = this.dropPlayerRequested;
     this.dropPlayerRequested = false;
+    return requested;
+  }
+
+  /** True once per press of the mute key. */
+  consumeMuteRequest(): boolean {
+    const requested = this.muteRequested;
+    this.muteRequested = false;
     return requested;
   }
 

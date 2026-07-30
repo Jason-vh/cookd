@@ -23,6 +23,7 @@ bun test         # just the tests
 | `src/render/anim.test.ts` | The animation maths, which is why it lives in a file with no three.js in it. The chop cycle's three segments, and that easing is frame-rate independent. |
 | `src/render/camera.test.ts` | Framing: following the local chefs, staying inside the kitchen, any aspect ratio. |
 | `src/input/input.test.ts` | Gamepad seating, including that a pad which is merely plugged in takes no seat. |
+| `src/audio/cues.test.ts` | What the kitchen sounds like, with no browser near it — which is the whole reason [the decision half of the audio layer is pure](sound.md). That a burn is one sound rather than one a frame, that a rush is one door chime rather than three, that your own hands click and the chef beside you does not, and that a world whose ids start over is not silenced forever. |
 | `src/data/validate.test.ts` | That the content the game ships is coherent. |
 | `docs/docs.test.ts` | That these documents still describe this codebase. |
 

@@ -1,6 +1,7 @@
 import "./ui/style.css";
 import { LEVEL } from "./data/level";
 import { InputManager } from "./input";
+import { KitchenAudio } from "./audio";
 import { View } from "./render/view";
 import { Hud } from "./ui/hud";
 import { PauseMenu } from "./ui/menu";
@@ -38,6 +39,7 @@ const forceLocal = params.has("local");
 
 let game: Game = new LocalGame(null, 1);
 let view = new View(canvas, game.world, LEVEL.biome);
+const audio = new KitchenAudio(identity.muted);
 
 function socketUrl(): string {
   // `?server=ws://host/ws` points the client at a different server. Used for
@@ -66,6 +68,8 @@ function useGame(next: Game): void {
   const changed = next.level.id !== game.level.id;
   game.dispose();
   game = next;
+  // A different world: what the last one was in the middle of is not news.
+  audio.reset();
   if (changed) {
     view.dispose();
     view = new View(canvas, game.world, game.level.biome);
@@ -127,9 +131,15 @@ const join = new JoinScreen(document.querySelector<HTMLElement>("#join")!, {
   room: roomFromUrl,
   offline: forceLocal,
   onPlayLocal: () => {
+    // The click that starts the game is the gesture the audio hardware needs;
+    // there is no earlier one, and without it the first sound is swallowed.
+    audio.unlock();
     useGame(new LocalGame(null, 1));
   },
-  onPlayOnline: (room, name) => goOnline(room, name),
+  onPlayOnline: (room, name) => {
+    audio.unlock();
+    goOnline(room, name);
+  },
 });
 
 if (forceLocal) join.hide();
@@ -217,6 +227,13 @@ function frame(now: number): void {
     return;
   }
 
+  if (input.consumeMuteRequest()) {
+    const muted = audio.toggleMute();
+    saveIdentity({ ...identity, muted });
+    identity.muted = muted;
+    hud.notify(muted ? "Sound off" : "Sound on");
+  }
+
   input.bindGamepads(game.localIds, () => game.addLocalPlayer(identity.name));
   input.releaseGamepads(game.localIds);
   if (input.consumeAddPlayerRequest()) game.addLocalPlayer(identity.name);
@@ -244,6 +261,9 @@ function frame(now: number): void {
   };
 
   game.update(elapsed, poll);
+  // Heard every frame, even the ones that are not drawn: a kitchen in an
+  // unfocused window is still a kitchen you want to hear burn.
+  audio.sync(game.world, game.localIds);
   if (shouldRender(now)) view.render(game.world, game.alpha, game.localIds);
   hud.update(game.world, {
     status: game.status,

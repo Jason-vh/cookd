@@ -5,8 +5,8 @@ import { join } from "node:path";
 /**
  * The one rule in `docs/architecture.md`, checked.
  *
- * > `src/sim` is pure. It must never import from `src/render`, `src/ui` or
- * > `src/input`, and must never touch the DOM.
+ * > `src/sim` is pure. It must never import from `src/render`, `src/ui`,
+ * > `src/input` or `src/audio`, and must never touch the DOM.
  *
  * It has held for the life of the project on care alone, which is not nothing —
  * but it is the load-bearing rule of the whole codebase and it was resting on
@@ -47,11 +47,11 @@ async function importsOf(file: string): Promise<string[]> {
 }
 
 describe("the simulation is pure", () => {
-  test("imports nothing from render, ui or input", async () => {
+  test("imports nothing from render, ui, input or audio", async () => {
     const offenders: string[] = [];
     for (const file of await sources("src/sim")) {
       for (const target of await importsOf(file)) {
-        if (/(^|\/)(render|ui|input)\//.test(target)) offenders.push(`${file} -> ${target}`);
+        if (/(^|\/)(render|ui|input|audio)\//.test(target)) offenders.push(`${file} -> ${target}`);
       }
     }
     expect(offenders).toEqual([]);
@@ -72,6 +72,9 @@ describe("the simulation is pure", () => {
   });
 });
 
+/** Everything that observes the world: it may read it, and may never write it. */
+const OBSERVERS = ["src/render", "src/ui", "src/audio"];
+
 describe("the render layer reads what is true, not what happens", () => {
   test("imports no simulation system", async () => {
     // `sim/systems/*` are the tick functions. A query that the renderer needs
@@ -79,9 +82,11 @@ describe("the render layer reads what is true, not what happens", () => {
     // note at the top of that file for why sharing the query is right and
     // copying it into a view-model would not be.
     const offenders: string[] = [];
-    for (const file of [...(await sources("src/render")), ...(await sources("src/ui"))]) {
-      for (const target of await importsOf(file)) {
-        if (target.includes("sim/systems")) offenders.push(`${file} -> ${target}`);
+    for (const dir of OBSERVERS) {
+      for (const file of await sources(dir)) {
+        for (const target of await importsOf(file)) {
+          if (target.includes("sim/systems")) offenders.push(`${file} -> ${target}`);
+        }
       }
     }
     expect(offenders).toEqual([]);
@@ -91,10 +96,12 @@ describe("the render layer reads what is true, not what happens", () => {
     // The renderer mirrors the simulation. A `world.x =` in here is a rule
     // being implemented twice, which is how the two come to disagree.
     const offenders: string[] = [];
-    for (const file of [...(await sources("src/render")), ...(await sources("src/ui"))]) {
-      const text = await readFile(join(ROOT, file), "utf8");
-      for (const [line] of text.matchAll(/^\s*world\.\w+(\.\w+)*\s*(=[^=]|\+\+|--|\+=|-=)/gm)) {
-        offenders.push(`${file}: ${line.trim()}`);
+    for (const dir of OBSERVERS) {
+      for (const file of await sources(dir)) {
+        const text = await readFile(join(ROOT, file), "utf8");
+        for (const [line] of text.matchAll(/^\s*world\.\w+(\.\w+)*\s*(=[^=]|\+\+|--|\+=|-=)/gm)) {
+          offenders.push(`${file}: ${line.trim()}`);
+        }
       }
     }
     expect(offenders).toEqual([]);
