@@ -162,6 +162,20 @@ export function kitchenWarnings(world: World): string[] {
     }
   }
 
+  const stranded = unreachableAppliances(world);
+  if (stranded.length > 0) {
+    // Naming them turns a mystery into a shopping list, the same way the menu
+    // warnings do. Past a few names it stops being a list of mistakes and
+    // starts being one: a chef shut in a cupboard cannot reach their own
+    // kitchen, and the fault is the wall they are behind, not the sink.
+    const labels = [...new Set(stranded.map((appliance) => applianceDef(appliance.kind).label))];
+    warnings.push(
+      labels.length > 3
+        ? `${stranded.length} appliances can't be walked up to`
+        : `Can't be walked up to: ${labels.join(", ")}`,
+    );
+  }
+
   const menu = unlockedRecipes(world);
   if (countKind(world, "plates") === 0) {
     warnings.push("No plate stack — nothing can be served");
@@ -184,6 +198,43 @@ export function kitchenWarnings(world: World): string[] {
   }
 
   return warnings;
+}
+
+/**
+ * Appliances no chef can walk up to. Used by the build phase to warn.
+ *
+ * The other half of the same question `unreachableTables` asks, from the other
+ * side of the pass: that one starts at the door and looks for chairs, this one
+ * starts at the chefs and looks for anything they have to face. A kitchen can
+ * fail either way round, and a counter wall built across the room fails both.
+ *
+ * Origin is **where the chefs are standing**, not a spawn point: by the time
+ * this is asked they have spent a morning walking around, and the spawn tile is
+ * a fact about the level rather than about the room as it is now. With nobody
+ * in it there is no answer to give, so an empty kitchen reports nothing.
+ *
+ * A held appliance is skipped — its tile is only where it would go home to.
+ */
+export function unreachableAppliances(world: World): Appliance[] {
+  if (world.players.length === 0) return [];
+
+  const reachable = new Set<number>();
+  for (const player of world.players) {
+    const x = Math.floor(player.pos.x);
+    const y = Math.floor(player.pos.y);
+    if (reachable.has(tileIndex(world, x, y))) continue; // already covered
+    for (const index of reachableFrom(world, { x, y })) reachable.add(index);
+  }
+
+  const stranded: Appliance[] = [];
+  for (const appliance of world.appliances.values()) {
+    if (appliance.heldBy !== null) continue;
+    const sides = seatsAround(world, appliance.tile);
+    if (!sides.some((side) => reachable.has(tileIndex(world, side.x, side.y)))) {
+      stranded.push(appliance);
+    }
+  }
+  return stranded;
 }
 
 /** Tables a customer cannot actually reach. Used by the build phase to warn. */

@@ -54,13 +54,16 @@ Bigger:
 
 - **Delta frames and interest management.** Only send what changed, and only to
   players who can see it. Neither is needed at one kitchen per room.
-- **Kitchen validation in build mode, part two.** The *content* half is now done
-  (`kitchenWarnings`): a kitchen that cannot make a dish on its own menu says so
-  at day open, derived from the recipes rather than from a list of appliances.
-  What is left is the **reachability** half — can a chef still get to the pass,
-  the crates, the oven — which uses the same flood fill the dining room already
-  does and is not written yet. It should stay a warning: see the note on
-  `ESSENTIAL` for why refusing the sale is the wrong instrument.
+- **Kitchen validation in build mode is done**, both halves. The *content* half
+  (`kitchenWarnings`) says at day open when a dish on the room's own menu cannot
+  be made here, derived from the recipes rather than from a list of appliances.
+  The **reachability** half (`unreachableAppliances`) runs the dining room's
+  flood fill from the chefs instead of the door, so an oven walled in behind a
+  run of counters is named the same way a stranded table is — and pulses under
+  the same red ring. Both stayed warnings: see the note on `ESSENTIAL` for why
+  refusing the sale is the wrong instrument. What is *not* checked is anything
+  about how far things are from each other: a kitchen may be terribly laid out,
+  and that is the game.
 - **Procedural kitchens** and a run-based meta layer à la PlateUp.
 
 ## The build phase

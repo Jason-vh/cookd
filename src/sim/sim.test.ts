@@ -3,7 +3,14 @@ import { CUSTOMER_KINDS, customerKind } from "../data/customers";
 import { LEVEL } from "../data/level";
 import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
 import { DT, endDay, restartDay, step } from "./step";
-import { canPlace, customerSpeed, kitchenWarnings, mealLeft, unreachableTables } from "./queries";
+import {
+  canPlace,
+  customerSpeed,
+  kitchenWarnings,
+  mealLeft,
+  unreachableAppliances,
+  unreachableTables,
+} from "./queries";
 import { isDirty, specKey } from "./items";
 import { plateCount, platesInWorld } from "./plates";
 import type { Appliance, ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
@@ -933,6 +940,33 @@ describe("what the kitchen says is wrong with it", () => {
     const messy = makeWorld();
     sellOff(messy, ["bin"]);
     expect(kitchenWarnings(messy)).toEqual(["No bin — a ruined dish has nowhere to go"]);
+  });
+
+  test("an appliance no chef can walk up to is named", () => {
+    // The other half of the walled-off dining room, from the kitchen's side: a
+    // bin boxed into its corner is a bin that may as well have been sold.
+    const world = makeWorld();
+    expect(unreachableAppliances(world)).toHaveLength(0);
+
+    spawnAppliance(world, "counter", { x: BIN[0], y: BIN[1] + 1 });
+    expect(unreachableAppliances(world).map((appliance) => appliance.kind)).toEqual(["bin"]);
+    expect(kitchenWarnings(world)).toContain("Can't be walked up to: Bin");
+
+    // Nobody in the room, no answer to give: reachability is measured from the
+    // chefs, and a kitchen with none of them is not a kitchen with a problem.
+    world.players = [];
+    expect(unreachableAppliances(world)).toHaveLength(0);
+  });
+
+  test("a chef who has walled themselves in has one problem, not eight", () => {
+    // Seal the whole back run behind a wall of counters. Naming five appliances
+    // would describe the symptoms of a single wall, so past a few it counts
+    // instead — the same rule as "nothing on the menu can be made here".
+    const world = makeWorld();
+    for (let x = PLATES[0]; x <= BIN[0]; x++) spawnAppliance(world, "counter", { x, y: 4 });
+
+    expect(unreachableAppliances(world)).toHaveLength(5);
+    expect(kitchenWarnings(world)).toContain("5 appliances can't be walked up to");
   });
 
   test("a burnt dish costs a plate for the day, and not one minute longer", () => {

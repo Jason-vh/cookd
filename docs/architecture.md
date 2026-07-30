@@ -64,9 +64,9 @@ src/
   identity.ts             what this *browser* remembers: your name, your seat count
   render/                 mirrors the simulation; never writes to it
     view.ts               composition root: renderer, lighting, camera, kitchen shell
-    appliance-views.ts    appliance meshes, dials, moving parts, placement ghosts
+    appliance-views.ts    appliance meshes, dials, moving parts, ghosts, stranded rings
     people-views.ts       chef and customer rigs, walk cycle, working and eating poses
-    table-views.ts        order bubbles, tips, unreachable-table warnings
+    table-views.ts        order bubbles and the tips left behind
     item-views.ts         food on counters and in hands, and plates emptying
     highlight-views.ts    the square in front of a chef, and the build-phase yes/no
     anim.ts               the animation maths, with no three.js in it

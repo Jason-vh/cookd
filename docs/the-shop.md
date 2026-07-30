@@ -132,6 +132,18 @@ build-phase mistake that silently ends the run, so it is said out loud rather
 than prevented.* The stall added a dozen more ways to reach the same place, and
 they are all that same sentence.
 
+That sentence now has a twin from the other side of the pass. The same flood
+fill run from **the chefs** rather than from the door answers "can anybody
+actually walk up to this", so an oven boxed in by a run of counters is named —
+`Can't be walked up to: Oven` — and pulses under the same red ring a stranded
+table does. Past three names it becomes a count instead: a chef who has walled
+*themselves* in has one problem, not eight, and listing their whole kitchen
+would bury the wall they are standing behind.
+
+Measured from where the chefs are standing, not from a spawn point: by day open
+they have spent a morning walking around, and the spawn tile is a fact about the
+level rather than about the room as it is now. An empty room is asked nothing.
+
 The menu warnings are the ones that earn their place. Customers order from what
 the **day** has unlocked, not from what the kitchen can cook — so a room that
 sold its oven takes pizza orders it can never fill and watches them walk out

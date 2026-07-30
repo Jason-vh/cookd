@@ -4,7 +4,7 @@ import { RECIPE_BY_ID } from "../data/recipes";
 import type { Appliance, Offer, Recipe, World } from "../sim/types";
 import { playerById } from "../sim/world";
 import { deliveryLabel, missingFor } from "../sim/cards";
-import { canPlace, targetTile } from "../sim/queries";
+import { canPlace, targetTile, unreachableAppliances, unreachableTables } from "../sim/queries";
 import { offerLabel, offerPrice } from "../sim/shop";
 import { chopLift, ease, workPhase } from "./anim";
 import { Dial } from "./dial";
@@ -12,6 +12,7 @@ import { disposeSubtree } from "./dispose";
 import { setGhost, setGhostOpacity } from "./ghost";
 import { buildAppliance, type ApplianceParts } from "./appliance-meshes";
 import { buildIngredientSample, buildItemModel } from "./models";
+import { buildHighlight } from "./overlay-meshes";
 import { PALETTE } from "./palette";
 import { makeCardLabel, makeLabel } from "./sprites";
 
@@ -53,12 +54,18 @@ type Visual = ApplianceParts & {
   armed: number;
   /** A refused purchase, flashing the price red. 1..0. */
   refused: number;
+  /** Ring shown when nobody can walk to this. Built the first time it is needed. */
+  warning?: THREE.Mesh;
   /** Placement ghost: eased position, fade, and the pop when it lands. */
   ghost: { alpha: number; x: number; z: number; pop: number; held: boolean };
 };
 
 export class ApplianceViews {
   private readonly visuals = new Map<number, Visual>();
+
+  /** Appliances nobody can walk to, and the layout that answer was computed for. */
+  private stranded = new Set<number>();
+  private strandedFor = -1;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -104,6 +111,8 @@ export class ApplianceViews {
       this.visuals.delete(id);
     }
 
+    this.syncStranded(world);
+
     for (const appliance of world.appliances.values()) {
       let visual = this.visuals.get(appliance.id);
       if (!visual) {
@@ -112,6 +121,7 @@ export class ApplianceViews {
       }
 
       this.place(world, appliance, visual, dt, time);
+      this.syncWarning(appliance, visual, time);
 
       // Labels are off by default and turned on for one frame by whoever is
       // pointing at this appliance — see `showLabel`.
@@ -123,6 +133,62 @@ export class ApplianceViews {
       if (appliance.kind === "stall") this.syncStall(world, appliance, visual, dt);
       if (appliance.kind === "cards") this.syncCards(world, appliance, visual, dt, time);
     }
+  }
+
+  /**
+   * Everything nobody can walk to: tables the door cannot reach, and appliances
+   * the chefs cannot.
+   *
+   * Two questions with one answer on screen, deliberately. A player looking at
+   * a pulsing ring is being told "this will not work tomorrow", and which side
+   * of the pass the wall is on is the log line's business, not the room's.
+   *
+   * Keyed on `layoutVersion`, so the two flood fills run when an appliance
+   * moves rather than once a frame — and they run *the instant* it moves, which
+   * is exactly when the answer can change.
+   */
+  private syncStranded(world: World): void {
+    if (world.phase !== "build") {
+      if (this.stranded.size > 0) this.stranded.clear();
+      this.strandedFor = -1;
+      return;
+    }
+    if (world.layoutVersion === this.strandedFor) return;
+    this.strandedFor = world.layoutVersion;
+    this.stranded = new Set(
+      [...unreachableTables(world), ...unreachableAppliances(world)].map(
+        (appliance) => appliance.id,
+      ),
+    );
+  }
+
+  /**
+   * The ring over an appliance nobody can reach.
+   *
+   * Built lazily: it is the rarest thing in the kitchen, and a mesh per
+   * appliance standing invisible forever is a cost every healthy room would pay
+   * for a mistake most never make. Once built it stays — whoever walled it in
+   * is about to walk over and unwall it.
+   */
+  private syncWarning(appliance: Appliance, visual: Visual, time: number): void {
+    const show = appliance.heldBy === null && this.stranded.has(appliance.id);
+    if (!show) {
+      if (visual.warning) visual.warning.visible = false;
+      return;
+    }
+    if (!visual.warning) {
+      // Same red as a burning pan: this needs you. Above the top rather than on
+      // the floor, where the appliance's own footprint hides most of the ring —
+      // a poor showing for the one marker that means "this will not work
+      // tomorrow".
+      const ring = buildHighlight(PALETTE.progressBurn);
+      ring.position.y = applianceDef(appliance.kind).height + 0.14;
+      ring.scale.setScalar(1.15);
+      visual.root.add(ring);
+      visual.warning = ring;
+    }
+    visual.warning.visible = true;
+    ringMaterial(visual.warning).opacity = 0.62 + Math.sin(time * 5) * 0.3;
   }
 
   /**
@@ -507,6 +573,14 @@ function goodsModel(offer: Offer): THREE.Object3D {
   }).root;
   sample.scale.setScalar(0.34);
   return sample;
+}
+
+/** The warning ring's own material, narrowed rather than asserted. */
+function ringMaterial(ring: THREE.Mesh): THREE.MeshBasicMaterial {
+  if (Array.isArray(ring.material) || !(ring.material instanceof THREE.MeshBasicMaterial)) {
+    throw new Error("highlight lost its material");
+  }
+  return ring.material;
 }
 
 /** Prep and cooking feel different, so their gauges look different. */

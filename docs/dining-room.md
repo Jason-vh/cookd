@@ -233,10 +233,17 @@ steering, no avoidance. Two things make that enough:
   the first version simply does not have it. Gentle "excuse me" soft-collision
   can come later, if the room ever feels too empty without it.
 
-The same flood fill answers the build phase's question: **can the door reach
-every table?** A player *will* wall off the dining room in their first week. The
-rule is not to prevent it — stranded tables pulse red under a warning ring, the
-log says so when the day opens, and nobody is ever seated at one.
+The same flood fill answers the build phase's two questions: **can the door
+reach every table**, and **can the chefs walk up to everything else**. A player
+*will* wall off the dining room in their first week, and the week after that
+they will box the sink into a corner. The rule is not to prevent either —
+whatever is stranded pulses red under a warning ring, the log says so when the
+day opens, and nobody is ever seated at a table nobody can walk to.
+
+One fill, two origins: `unreachableTables` starts at the door and looks for
+chairs, `unreachableAppliances` starts at the chefs and looks for anything they
+have to face. Sharing the fill is what keeps the warning and the rule from ever
+disagreeing about what "reachable" means.
 
 ## The closing beat
 
