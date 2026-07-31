@@ -11,6 +11,8 @@
  * wait for.
  */
 
+import { defaultBindings, parseBindings, type KeyBindings } from "./input/bindings";
+
 const KEY = "cookd.identity";
 
 export type Identity = {
@@ -34,6 +36,12 @@ export type Identity = {
    * on everybody else's screen would be a strange thing for a mute button to do.
    */
   muted: boolean;
+  /**
+   * What the keys do. Per-browser for the same reason as `muted`: it is the
+   * keyboard in front of *you*, and a room-mate in another country remapping
+   * their `use` key has nothing to do with yours.
+   */
+  keys: KeyBindings;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -44,14 +52,21 @@ function newToken(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const FALLBACK: Identity = { name: "", token: "", room: "", level: "", muted: false };
+const FALLBACK: Identity = {
+  name: "",
+  token: "",
+  room: "",
+  level: "",
+  muted: false,
+  keys: defaultBindings(),
+};
 
 export function loadIdentity(): Identity {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...FALLBACK, token: newToken() };
+    if (!raw) return fresh();
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed)) return { ...FALLBACK, token: newToken() };
+    if (!isRecord(parsed)) return fresh();
     // Field by field, because this is another machine's data as far as we are
     // concerned: it was written by a version of the game we may not be.
     const fields = parsed;
@@ -61,14 +76,20 @@ export function loadIdentity(): Identity {
       room: typeof fields.room === "string" ? fields.room : "",
       level: typeof fields.level === "string" ? fields.level : "",
       muted: fields.muted === true,
+      keys: parseBindings(fields.keys),
     };
   } catch {
     // Private browsing, disabled storage, corrupt value: play as a stranger
     // rather than refusing to start.
     // Private browsing or disabled storage: a token that lasts as long as the
     // tab still lets a reconnect inside that tab reclaim its chef.
-    return { ...FALLBACK, token: newToken() };
+    return fresh();
   }
+}
+
+/** A brand new identity, with its own copy of the default keys. */
+function fresh(): Identity {
+  return { ...FALLBACK, token: newToken(), keys: defaultBindings() };
 }
 
 export function saveIdentity(identity: Identity): void {

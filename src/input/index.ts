@@ -1,6 +1,18 @@
 import { emptyInput } from "../sim/world";
 import { screenToWorld } from "../orientation";
 import type { Inputs, PlayerInput } from "../sim/types";
+import {
+  GLOBAL_ACTIONS,
+  boundKeys,
+  byGlobalAction,
+  byPlayerAction,
+  chordOf,
+  defaultBindings,
+  type Chord,
+  type GlobalAction,
+  type KeyBindings,
+  type PlayerAction,
+} from "./bindings";
 
 /**
  * Input layer. Produces one PlayerInput per player slot per tick.
@@ -13,6 +25,9 @@ import type { Inputs, PlayerInput } from "../sim/types";
  * in screen space and turned into world space here, before anything is
  * quantised or sent. Doing it at the edge keeps the sim ignorant of the camera
  * and keeps lockstep intact — what goes on the wire is still a plain vector.
+ *
+ * *Which* key does what is not decided here either — see `bindings.ts`. This
+ * layer holds compiled bindings and asks them questions.
  *
  * Device assignment:
  *   - keyboard scheme 0 always drives player 0 (so you can always play solo);
@@ -30,45 +45,28 @@ export type MenuNav = {
   back: boolean;
 };
 
-type KeyScheme = {
-  up: string[];
-  down: string[];
-  left: string[];
-  right: string[];
-  grab: string[];
-  use: string[];
-  start: string[];
-  menu: string[];
+/** Bindings with every key pre-parsed, so a frame is not parsing strings. */
+type Compiled = {
+  players: Record<PlayerAction, Chord[]>[];
+  global: Record<GlobalAction, Chord[]>;
+  bound: Set<string>;
 };
 
-const KEY_SCHEMES: KeyScheme[] = [
-  {
-    up: ["KeyW"],
-    down: ["KeyS"],
-    left: ["KeyA"],
-    right: ["KeyD"],
-    grab: ["Space", "KeyE"],
-    use: ["KeyF", "ShiftLeft"],
-    start: ["Enter"],
-    menu: ["Escape"],
-  },
-  {
-    up: ["ArrowUp"],
-    down: ["ArrowDown"],
-    left: ["ArrowLeft"],
-    right: ["ArrowRight"],
-    grab: ["Comma", "Numpad0"],
-    use: ["Period", "NumpadDecimal"],
-    start: ["Enter"],
-    menu: ["Escape"],
-  },
-];
+function compile(bindings: KeyBindings): Compiled {
+  return {
+    players: bindings.players.map((scheme) =>
+      byPlayerAction((action) => scheme[action].map(chordOf)),
+    ),
+    global: byGlobalAction((action) => bindings.global[action].map(chordOf)),
+    bound: boundKeys(bindings),
+  };
+}
 
 // Standard gamepad mapping. Start opens the pause menu; the north face button
 // (Y / Triangle) confirms "open for business", so the two can never conflict.
-// Standard gamepad mapping. `back` (B / Circle) doubles as an alternate USE
-// during play and as "close the menu" while it is open — the two contexts are
-// mutually exclusive, so they cannot conflict.
+// `back` (B / Circle) doubles as an alternate USE during play and as "close the
+// menu" while it is open — the two contexts are mutually exclusive, so they
+// cannot conflict.
 // The shoulders turn the kitchen, which is the one control that is about the
 // *view* rather than about the chef — so it sits where a camera control sits on
 // every other pad.
@@ -76,6 +74,8 @@ const BUTTON = { grab: 0, use: 2, start: 3, menu: 9, back: 1, turnL: 4, turnR: 5
 const STICK_DEADZONE = 0.22;
 
 export class InputManager {
+  private bindings: KeyBindings;
+  private compiled: Compiled;
   private keys = new Set<string>();
   /**
    * Keys that saw a keydown since the last poll. A press-and-release that
@@ -104,34 +104,37 @@ export class InputManager {
   private rotateRequested = 0;
   /** Shoulder buttons already held, so a held bumper turns the room once. */
   private readonly padTurning = new Set<string>();
+  /** The rebinding UI, waiting for one keypress. See `capture`. */
+  private capturing: ((event: KeyboardEvent) => void) | null = null;
 
-  constructor() {
+  constructor(bindings: KeyBindings = defaultBindings()) {
+    this.bindings = bindings;
+    this.compiled = compile(bindings);
+
     window.addEventListener("keydown", (e) => {
       // Typing your name is not playing: without this, the join screen's `P`
       // added a chef, and `Space` was swallowed before it reached the field.
       if (isTyping(e.target)) return;
-      if (e.code === "KeyP" && !e.repeat) {
-        // Shift+P drops the last one. Adding a player needed an undo: a stray
-        // press, or a controller claiming a seat you did not mean to fill,
-        // otherwise left a chef standing in the kitchen with no way to remove
-        // it short of everyone reloading.
-        if (e.shiftKey) this.dropPlayerRequested = true;
-        else this.addPlayerRequested = true;
+
+      // A key being *chosen* is not a key being pressed. Rebinding takes the
+      // whole event and nothing else sees it, so binding `Esc` to something
+      // cannot also close the menu you are binding it in.
+      if (this.capturing) {
+        const capture = this.capturing;
+        this.capturing = null;
+        e.preventDefault();
+        if (!e.repeat) capture(e);
+        return;
       }
-      // Sound is a preference of the person at the keyboard, so it is a key
-      // rather than a menu item: the pause menu's actions go to the *world*,
-      // and muting one browser is nobody else's business.
-      if (e.code === "KeyM" && !e.repeat) this.muteRequested = true;
-      // Which way the kitchen turns. The obvious keys for this are `Q`/`E`,
-      // and `E` is a grab — a camera control that sometimes throws your dinner
-      // on the floor is not a camera control. The brackets are a pair, they
-      // point the way they turn, and nothing else in the game wants them.
-      if (e.code === "BracketLeft" && !e.repeat) this.rotateRequested -= 1;
-      if (e.code === "BracketRight" && !e.repeat) this.rotateRequested += 1;
+
+      if (!e.repeat) this.fireGlobals(e);
       this.keys.add(e.code);
       this.pressedForPlay.add(e.code);
       this.pressedForMenu.add(e.code);
-      if (SWALLOWED.has(e.code)) e.preventDefault();
+      // Keys the game uses are keys the game takes: `Space` scrolls a page and
+      // `Enter` clicks whatever the browser thinks is focused. Only the bound
+      // ones, so a key nobody mapped still belongs to the browser.
+      if (this.compiled.bound.has(e.code)) e.preventDefault();
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     window.addEventListener("blur", () => {
@@ -139,6 +142,79 @@ export class InputManager {
       this.pressedForPlay.clear();
       this.pressedForMenu.clear();
     });
+  }
+
+  /**
+   * The one-shot, edge-triggered controls: they add and remove players, turn
+   * the room and mute the game.
+   *
+   * Matched on the keydown itself rather than against held state, because a
+   * modifier is part of a *tap*: `Shift`+`P` must remove a player without also
+   * reading as the plain `P` that adds one.
+   */
+  private fireGlobals(e: KeyboardEvent): void {
+    for (const action of GLOBAL_ACTIONS) {
+      if (!this.compiled.global[action].some((c) => c.code === e.code && c.shift === e.shiftKey)) {
+        continue;
+      }
+      switch (action) {
+        // Adding a player needed an undo: a stray press, or a controller
+        // claiming a seat you did not mean to fill, otherwise left a chef
+        // standing in the kitchen with no way to remove it short of everyone
+        // reloading.
+        case "addPlayer":
+          this.addPlayerRequested = true;
+          break;
+        case "dropPlayer":
+          this.dropPlayerRequested = true;
+          break;
+        // Sound is a preference of the person at the keyboard, so it is a key
+        // rather than a menu item: the pause menu's actions go to the *world*,
+        // and muting one browser is nobody else's business.
+        case "mute":
+          this.muteRequested = true;
+          break;
+        case "turnLeft":
+          this.rotateRequested -= 1;
+          break;
+        case "turnRight":
+          this.rotateRequested += 1;
+          break;
+      }
+      e.preventDefault();
+    }
+  }
+
+  /** The keys as they stand. */
+  get keyBindings(): KeyBindings {
+    return this.bindings;
+  }
+
+  /** Change what the keys do, from now on. */
+  setBindings(bindings: KeyBindings): void {
+    this.bindings = bindings;
+    this.compiled = compile(bindings);
+    // Anything held under the old bindings is no longer held under the new
+    // ones: a chef should not keep walking because the key that moved them has
+    // just become something else.
+    this.keys.clear();
+    this.pressedForPlay.clear();
+    this.pressedForMenu.clear();
+  }
+
+  /**
+   * Hand the next keypress to `handler` instead of to the game.
+   *
+   * This is how a key is *chosen* rather than pressed. It lives here because
+   * this class owns the only keydown listener in the game — a second one in the
+   * rebinding UI would see keys this one swallows, in an order neither of them
+   * controls. Returns a function that cancels the wait.
+   */
+  capture(handler: (event: KeyboardEvent) => void): () => void {
+    this.capturing = handler;
+    return () => {
+      if (this.capturing === handler) this.capturing = null;
+    };
   }
 
   /** True once per press of the "add a keyboard player" key. */
@@ -256,16 +332,15 @@ export class InputManager {
    */
   pollMenu(): MenuNav {
     const nav: MenuNav = { up: false, down: false, confirm: false, menu: false, back: false };
-    const down = (codes: string[]): boolean =>
-      codes.some((k) => this.keys.has(k) || this.pressedForMenu.has(k));
+    const down = (chords: Chord[]): boolean => this.held(chords, this.pressedForMenu);
 
-    for (const scheme of KEY_SCHEMES) {
+    for (const scheme of this.compiled.players) {
       if (down(scheme.up)) nav.up = true;
       if (down(scheme.down)) nav.down = true;
       if (down(scheme.grab) || down(scheme.start)) nav.confirm = true;
       if (down(scheme.menu)) nav.menu = true;
     }
-    if (down(["Backspace"])) nav.back = true;
+    if (down([{ code: "Backspace", shift: false }])) nav.back = true;
     this.pressedForMenu.clear();
 
     for (const pad of navigator.getGamepads?.() ?? []) {
@@ -295,7 +370,7 @@ export class InputManager {
     for (let i = 0; i < local.length; i++) {
       const id = local[i]!;
       const input = emptyInput();
-      const scheme = KEY_SCHEMES[i];
+      const scheme = this.compiled.players[i];
       if (scheme) this.applyKeys(input, scheme);
       this.inputs[id] = input;
     }
@@ -320,9 +395,23 @@ export class InputManager {
     return this.inputs;
   }
 
-  private applyKeys(input: PlayerInput, scheme: KeyScheme): void {
-    const down = (codes: string[]): boolean =>
-      codes.some((k) => this.keys.has(k) || this.pressedForPlay.has(k));
+  /**
+   * Is any of these keys down?
+   *
+   * A chord asking for `Shift` needs `Shift`; one that does not, does not care —
+   * you are holding `Shift` to prep and still expect `W` to walk. Which is also
+   * why `fireGlobals` matches the other way: held controls overlap by nature,
+   * taps do not.
+   */
+  private held(chords: Chord[], pressed: Set<string>): boolean {
+    const shift = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+    return chords.some(
+      (c) => (!c.shift || shift) && (this.keys.has(c.code) || pressed.has(c.code)),
+    );
+  }
+
+  private applyKeys(input: PlayerInput, scheme: Record<PlayerAction, Chord[]>): void {
+    const down = (chords: Chord[]): boolean => this.held(chords, this.pressedForPlay);
     if (down(scheme.up)) input.move.y -= 1;
     if (down(scheme.down)) input.move.y += 1;
     if (down(scheme.left)) input.move.x -= 1;
@@ -388,13 +477,3 @@ function clampMove(input: PlayerInput): void {
   input.move.x = Math.round(input.move.x * 1000) / 1000;
   input.move.y = Math.round(input.move.y * 1000) / 1000;
 }
-
-const SWALLOWED = new Set([
-  "Escape",
-  "Space",
-  "ArrowUp",
-  "ArrowDown",
-  "ArrowLeft",
-  "ArrowRight",
-  "Enter",
-]);

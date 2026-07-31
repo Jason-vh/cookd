@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { CAMERA_YAW } from "../orientation";
 import { InputManager } from "./index";
+import { bindKey, clearKeys, defaultBindings } from "./bindings";
 
 /**
  * The input layer normally needs a browser, but the gamepad-to-player binding
@@ -52,12 +53,12 @@ function stubWindow(): void {
   });
 }
 
-function fire(type: string, code: string): void {
+function fire(type: string, code: string, shiftKey = false): void {
   const event: FakeKey = {
     code,
     target: null,
     repeat: false,
-    shiftKey: false,
+    shiftKey,
     preventDefault: (): void => {},
   };
   for (const handler of listeners.get(type) ?? []) handler(event);
@@ -218,6 +219,127 @@ describe("turning the kitchen", () => {
     expect(input.consumeRotateRequest()).toBe(0);
     held.buttons[5] = { pressed: true };
     expect(input.consumeRotateRequest()).toBe(1);
+  });
+});
+
+describe("remapped keys", () => {
+  beforeEach(() => {
+    stubWindow();
+    setPads([]);
+  });
+
+  test("a rebound key drives the chef, and the old one stops", () => {
+    const input = new InputManager(
+      bindKey(defaultBindings(), { scheme: 0, action: "grab" }, "KeyQ"),
+    );
+
+    fire("keydown", "KeyQ");
+    expect(input.poll([0])[0]!.grab).toBe(true);
+
+    fire("keyup", "KeyQ");
+    tap("Space");
+    expect(input.poll([0])[0]!.grab).toBe(false);
+  });
+
+  test("changing the keys mid-game does not leave one stuck down", () => {
+    const input = new InputManager();
+    fire("keydown", "KeyW");
+    input.setBindings(bindKey(defaultBindings(), { scheme: 0, action: "up" }, "KeyI"));
+
+    // `W` is still physically down, but it is not a control any more, and the
+    // keyup for it will name a key nothing is watching.
+    expect(input.poll([0])[0]!.move).toEqual({ x: 0, y: 0 });
+  });
+
+  test("an unbound action simply never fires", () => {
+    const input = new InputManager(clearKeys(defaultBindings(), { scheme: 0, action: "menu" }));
+    tap("Escape");
+
+    expect(input.poll([0])[0]!.menu).toBe(false);
+  });
+
+  test("a remapped global key turns the kitchen", () => {
+    const input = new InputManager(
+      bindKey(defaultBindings(), { scheme: "global", action: "turnRight" }, "KeyR"),
+    );
+
+    tap("KeyR");
+    expect(input.consumeRotateRequest()).toBe(1);
+    tap("BracketRight");
+    expect(input.consumeRotateRequest()).toBe(0);
+  });
+
+  /**
+   * `Shift`+`P` removes a player and plain `P` adds one, so a modifier here is
+   * part of the tap rather than something to be ignored. Held controls are the
+   * other way round — see the movement test below.
+   */
+  test("a shift chord is not its own plain key", () => {
+    const input = new InputManager();
+
+    fire("keydown", "KeyP", true);
+    expect(input.consumeDropPlayerRequest()).toBe(true);
+    expect(input.consumeAddPlayerRequest()).toBe(false);
+
+    fire("keydown", "KeyP");
+    expect(input.consumeAddPlayerRequest()).toBe(true);
+    expect(input.consumeDropPlayerRequest()).toBe(false);
+  });
+
+  test("holding shift to prep does not stop you walking", () => {
+    const input = new InputManager();
+    fire("keydown", "ShiftLeft");
+    fire("keydown", "KeyW", true);
+    const first = input.poll([0])[0]!;
+
+    expect(first.use).toBe(true);
+    expect(Math.hypot(first.move.x, first.move.y)).toBeCloseTo(1, 2);
+  });
+});
+
+describe("choosing a key", () => {
+  beforeEach(() => {
+    stubWindow();
+    setPads([]);
+  });
+
+  test("a captured press goes to the rebinder and nowhere else", () => {
+    const input = new InputManager();
+    let captured = "";
+    input.capture((event) => {
+      captured = event.code;
+    });
+
+    fire("keydown", "Space");
+    expect(captured).toBe("Space");
+    // Not a grab, not a menu confirm: it was a key being chosen.
+    expect(input.poll([0])[0]!.grab).toBe(false);
+    expect(input.pollMenu().confirm).toBe(false);
+  });
+
+  test("capture is one press, then the keys are the game's again", () => {
+    const input = new InputManager();
+    let presses = 0;
+    input.capture(() => {
+      presses++;
+    });
+
+    tap("Space");
+    tap("Space");
+
+    expect(presses).toBe(1);
+    expect(input.poll([0])[0]!.grab).toBe(true);
+  });
+
+  test("a cancelled capture does not swallow the next key", () => {
+    const input = new InputManager();
+    const cancel = input.capture(() => {
+      throw new Error("cancelled captures do not fire");
+    });
+    cancel();
+
+    tap("Space");
+    expect(input.poll([0])[0]!.grab).toBe(true);
   });
 });
 

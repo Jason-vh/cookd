@@ -59,6 +59,7 @@ src/
     snapshots.ts          the received timeline, on the server's clock, and how far behind to read it
   input/
     index.ts            keyboard + Gamepad API -> Inputs (keyed by player id), turned to face the screen
+    bindings.ts         which key does what: defaults, rebinding, and parsing what was stored
     latch.ts            a control that must be released before it counts again
   audio/                the kitchen, heard: an observer like the renderer
     cues.ts             pure: the world -> the sounds it is making this frame
@@ -66,7 +67,7 @@ src/
     synth.ts            the only WebAudio in the program: a voice -> a noise
     index.ts            what the shell calls once a frame
   save.ts                 the saved-kitchen format, its parser and its migrations
-  identity.ts             what this *browser* remembers: your name, your seat count
+  identity.ts             what this *browser* remembers: your name, your seat count, your keys
   orientation.ts          which corner the camera looks from, and therefore which way "up" is
   render/                 mirrors the simulation; never writes to it
     view.ts               composition root: renderer, lighting, camera, kitchen shell
@@ -103,6 +104,7 @@ src/
     hud.ts                DOM HUD (stats, event log, build banner — no order list)
     menu.ts               the pause menu
     menu-controller.ts    the menu's dealings with the controls, and the latches
+    controls.ts           the controls table, generated from the bindings and editable
     join.ts               the join screen: start a kitchen, or join one by code
     style.css
   main.ts                 the shell: input in, pixels out; owns no rules

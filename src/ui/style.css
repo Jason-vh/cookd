@@ -232,6 +232,11 @@ body {
 
 #menu .card {
   min-width: 340px;
+  /* The controls table made this a tall card. It only exists while the game is
+     paused, so it may have the pointer and scroll if the screen is short. */
+  max-height: 88vh;
+  overflow-y: auto;
+  pointer-events: auto;
   background: var(--panel-solid);
   border: 1px solid var(--border);
   border-radius: 20px;
@@ -468,15 +473,72 @@ body {
 
 .controls-row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr 96px 96px 96px;
   align-items: center;
   gap: 8px;
   font-size: 12px;
 }
 
+/* The card ignores the pointer so clicks reach the kitchen behind it; the one
+   thing in there you can actually click has to ask for it back. */
+.controls button {
+  pointer-events: auto;
+}
+
+/* A key cap is a button that looks like a key, because it is both. */
+.key-cap,
+.pad-cap {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8e6e1;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pad-cap {
+  color: #8d8f9c;
+  font-weight: 400;
+}
+
+.key-cap {
+  cursor: pointer;
+  border-color: #343846;
+}
+
+.key-cap:hover {
+  border-color: #4e8a66;
+  filter: brightness(1.15);
+}
+
+/* Waiting for a key. It has to read as "the game is listening", not as a label. */
+.key-cap.capturing {
+  background: #3f6f52;
+  border-color: #4e8a66;
+  animation: help-fade 0.7s ease-in-out infinite alternate;
+}
+
 .controls-row span {
   color: #8d8f9c;
   letter-spacing: 0.04em;
+}
+
+.controls-head {
+  margin-top: 6px;
+}
+
+.controls-head span {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6f717d;
 }
 
 .controls-head i {
@@ -494,6 +556,31 @@ body {
   font-size: 12px;
   line-height: 1.6;
   color: #8d8f9c;
+}
+
+.controls-footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.controls-reset {
+  flex: none;
+  margin-top: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #343846;
+  background: #22252f;
+  color: #8d8f9c;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.controls-reset:hover {
+  color: #e8e6e1;
+  filter: brightness(1.12);
 }
 
 /* The quiet line under the day-closed card: present if you need it, easy to

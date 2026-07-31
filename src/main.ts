@@ -6,6 +6,8 @@ import { View } from "./render/view";
 import { Hud } from "./ui/hud";
 import { PauseMenu } from "./ui/menu";
 import { MenuController } from "./ui/menu-controller";
+import { ControlsPanel } from "./ui/controls";
+import { promptKey } from "./input/bindings";
 import { JoinScreen } from "./ui/join";
 import { loadIdentity, saveIdentity } from "./identity";
 import { rotateCamera } from "./orientation";
@@ -27,9 +29,29 @@ import type { Inputs } from "./sim/types";
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const hud = new Hud(document.querySelector<HTMLElement>("#hud")!);
 const menu = new PauseMenu(document.querySelector<HTMLElement>("#menu")!);
-const input = new InputManager();
 
 const identity = loadIdentity();
+const input = new InputManager(identity.keys);
+
+/**
+ * The controls table, which is also where the keys are changed. Bound to the
+ * input layer and to storage here, because those are the two things that have
+ * to agree with it and neither belongs in a DOM widget.
+ */
+const controls = new ControlsPanel(menu.controlsRoot, {
+  bindings: identity.keys,
+  capture: (handler) => input.capture(handler),
+  onChange: (keys) => {
+    identity.keys = keys;
+    input.setBindings(keys);
+    hud.setStartKey(promptKey(keys, "start"));
+    saveIdentity(identity);
+  },
+});
+hud.setStartKey(promptKey(identity.keys, "start"));
+// A rebind left half-finished when the menu closed would otherwise eat the
+// next key pressed in the kitchen.
+menu.onHide = () => controls.stopCapturing();
 const params = new URLSearchParams(location.search);
 /** `cookd.example/#KITCHEN` — a shareable link *is* the room. */
 const roomFromUrl = location.hash

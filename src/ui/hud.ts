@@ -49,6 +49,8 @@ export class Hud {
    * next morning's card comes back on its own.
    */
   private dismissed = 0;
+  /** What to call the key that opens the next day — the player may have moved it. */
+  private startKey = "Enter";
 
   constructor(root: HTMLElement) {
     root.innerHTML = `
@@ -110,6 +112,12 @@ export class Hud {
    * Who you're playing with, and how far away they are. Shown only online —
    * offline there is nothing to say and a permanent "local" badge is noise.
    */
+  /** The keys changed: say the new one rather than the one this was written with. */
+  setStartKey(label: string): void {
+    this.startKey = label;
+    this.setBanner("start-key", label);
+  }
+
   private syncConnection(connection?: Connection): void {
     if (!this.connectionNode) return;
     if (!connection || connection.status === "local") {
@@ -249,9 +257,10 @@ export class Hud {
 
     const keys = document.createElement("p");
     keys.className = "banner-keys";
-    for (const key of ["Enter", "Y"]) {
+    for (const key of [this.startKey, "Y"]) {
       const span = document.createElement("span");
       span.textContent = key;
+      if (key === this.startKey) span.dataset.banner = "start-key";
       keys.append(span, " ");
     }
     keys.append("or the pause menu");

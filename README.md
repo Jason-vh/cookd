@@ -58,6 +58,13 @@ installs the hooks.
 | Remove a local player | — | `Shift`+`P` | — |
 | Sound on / off | — | `M` | — |
 
+**Every one of those keys can be changed.** The controls table in the pause menu
+is the game's own binding list rather than a copy of it: click a key, press the
+one you want, and it is yours (`Esc` cancels, `Backspace` clears, and holding
+`Shift` binds the pair — which is where `Shift`+`P` comes from). Bindings live
+in this browser next to your name, so they are yours rather than the room's, and
+a key can only ever do one job. The gamepad layout is fixed.
+
 **Press any button to join.** The first pad picks up player 1; any further pad
 creates a new chef when *it* is used (up to 4). A pad that is merely plugged in
 does not take a seat — [there is a reason for that](docs/lessons.md).

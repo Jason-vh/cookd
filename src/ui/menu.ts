@@ -15,31 +15,21 @@ export type MenuAction = "resume" | "startDay" | "endDay" | "restartDay" | "rese
 type MenuItem = { action: MenuAction; label: string; hint?: string };
 
 /**
- * The controls, and the only place they appear.
+ * The controls live here and nowhere else.
  *
  * They used to sit permanently on the playfield, which is clutter for the
  * ninety-nine percent of the time you already know them. The menu is where you
- * go when you *don't* know something, so that is where they live — and it costs
- * nothing to be thorough here, including the two things that are otherwise
- * impossible to discover: adding a local player, and opening the next day.
+ * go when you *don't* know something, so that is where they live — and now that
+ * they can be changed, where you go to change them. The table itself is
+ * `ControlsPanel`, mounted into this element: it is generated from the
+ * bindings, which is the only way it can be trusted to be true.
  */
-const CONTROLS = `
-  <div class="controls">
-    <div class="controls-row controls-head"><span></span><i>Player 1</i><i>Player 2</i><i>Gamepad</i></div>
-    <div class="controls-row"><span>Move</span><b>W A S D</b><b>&larr; &uarr; &darr; &rarr;</b><b>Stick</b></div>
-    <div class="controls-row"><span>Grab / place / serve</span><b>Space</b><b>,</b><b>A</b></div>
-    <div class="controls-row"><span>Hold to prep</span><b>F</b><b>.</b><b>X</b></div>
-    <div class="controls-row"><span>Open the next day</span><b>Enter</b><b>Enter</b><b>Y</b></div>
-    <div class="controls-row"><span>This menu</span><b>Esc</b><b>Esc</b><b>Start</b></div>
-    <p class="controls-note">
-      Sharing a screen? <b class="key">P</b> adds a player,
-      <b class="key">Shift</b>+<b class="key">P</b> removes one,
-      and a controller joins by pressing any button.
-    </p>
-  </div>
-`;
 
 export class PauseMenu {
+  /** Where the controls table is mounted. See `ui/controls.ts`. */
+  readonly controlsRoot: HTMLElement;
+  /** Run when the menu closes, so the controls table can drop a half-made rebind. */
+  onHide: (() => void) | null = null;
   private root: HTMLElement;
   private list: HTMLElement;
   private title: HTMLElement;
@@ -57,9 +47,10 @@ export class PauseMenu {
       <div class="card">
         <h1 data-title>Paused</h1>
         <ul data-list></ul>
-        ${CONTROLS}
+        <div class="controls" data-controls></div>
       </div>
     `;
+    this.controlsRoot = root.querySelector("[data-controls]")!;
     this.title = root.querySelector("[data-title]")!;
     this.list = root.querySelector("[data-list]")!;
   }
@@ -76,6 +67,7 @@ export class PauseMenu {
   }
 
   hide(): void {
+    this.onHide?.();
     this.open = false;
     this.armed = null;
     this.root.classList.remove("show");
