@@ -3,7 +3,7 @@ import { applianceDef } from "../data/appliances";
 import { ingredient } from "../data/ingredients";
 import type { Appliance } from "../sim/types";
 import { buildIngredientSample, buildProduceHeap } from "./models";
-import { PALETTE, type SurfaceName } from "./palette";
+import { PALETTE, shade, type SurfaceName } from "./palette";
 import {
   cabinetFace,
   CORNERS,
@@ -580,55 +580,81 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number, nudg
       rail.position.y = h + 0.02;
       group.add(rail);
 
-      const vat = mesh(roundedBox(0.64, 0.26, 0.64, 0.03), PALETTE.ovenGlass, "metal");
-      vat.position.y = h - 0.11;
+      const vat = mesh(roundedBox(0.64, 0.3, 0.64, 0.03), PALETTE.ovenGlass, "metal");
+      vat.position.y = h - 0.14;
       group.add(vat);
 
-      const oil = mesh(roundedBox(0.6, 0.06, 0.6, 0.02), PALETTE.oil, "ceramic");
+      // Filled nearly to the deck. Sunk to the bottom of the vat, the oil was a
+      // glint at the bottom of a dark slot, and hot fat you can see is the one
+      // thing that says "fryer" from across a kitchen.
+      const oil = mesh(roundedBox(0.62, 0.06, 0.62, 0.02), PALETTE.oil, "ceramic");
       // Own material instance so the oil can glow into the bloom pass.
       const glow = standardMaterial(oil).clone();
       glow.emissive.setHex(PALETTE.oil);
-      glow.emissiveIntensity = 0.4;
+      // Brighter at rest than it was on the lid: down in a well it catches far
+      // less of the sun, and what it cannot catch it has to make.
+      glow.emissiveIntensity = 0.55;
       oil.material = glow;
-      oil.position.y = h - 0.02;
+      oil.position.y = h;
       group.add(oil);
       parts.oil = oil;
       parts.oilGlow = glow;
-      // A real basket sitting in the oil, rather than the bare stick at 0.4
-      // radians that stood in for one. Open mesh, a rim, and a handle that
-      // reaches out over the corner where a chef would take hold of it.
+
+      // A control plate and its dial: the one body left in the room with no
+      // cupboard doors still needs something on its face.
+      for (const [x, z] of SIDES) {
+        const plate = mesh(
+          roundedBox(0.66, 0.15, 0.04, 0.02),
+          shade(PALETTE.fryerBody, 0.84),
+          "enamel",
+        );
+        plate.position.set(x * 0.465, h - 0.22, z * 0.465);
+        plate.rotation.y = facing(x, z);
+        group.add(plate);
+
+        const knob = mesh(roundedCylinder(0.036, 0.035, 0.012, 14), PALETTE.brass, "metal");
+        knob.position.set(x * 0.475, h - 0.22, z * 0.475);
+        knob.rotation.z = z === 0 ? Math.PI / 2 : 0;
+        knob.rotation.x = z === 0 ? 0 : Math.PI / 2;
+        group.add(knob);
+      }
+
+      // A basket standing in one corner of the vat rather than filling it. The
+      // first one was nearly as wide as the mouth, which turned the appliance
+      // whose whole point is a pool of glowing oil back into a lid with a
+      // saucepan on it.
       const basket = new THREE.Group();
-      basket.position.set(0.04, h - 0.02, 0.04);
+      basket.position.set(0.15, h - 0.05, 0.15);
       const bowl = shellMesh(
         lathe("fryer-basket", [
           [0, 0],
-          [0.16, 0],
-          [0.21, 0.06],
-          [0.23, 0.16],
+          [0.1, 0],
+          [0.14, 0.04],
+          [0.155, 0.14],
         ]),
-        PALETTE.steelDark,
+        PALETTE.steel,
         "metal",
       );
       basket.add(bowl);
-      const lip = rim(0.23, 0.016, PALETTE.steel);
-      lip.position.y = 0.16;
+      const lip = rim(0.155, 0.014, PALETTE.steelDark);
+      lip.position.y = 0.14;
       basket.add(lip);
       const arm = mesh(
         sweep(
           "fryer-basket-arm",
           [
-            [0.16, 0.14, 0.16],
-            [0.3, 0.24, 0.3],
-            [0.42, 0.26, 0.42],
+            [0.1, 0.12, 0.1],
+            [0.22, 0.24, 0.22],
+            [0.32, 0.27, 0.32],
           ],
-          0.018,
+          0.016,
         ),
         PALETTE.steel,
         "metal",
       );
       basket.add(arm);
-      const hold = grip(0.16, 0.03, PALETTE.crateTrim);
-      hold.position.set(0.47, 0.26, 0.47);
+      const hold = grip(0.14, 0.026, PALETTE.crateTrim);
+      hold.position.set(0.36, 0.27, 0.36);
       hold.rotation.y = -Math.PI / 4;
       basket.add(hold);
       group.add(basket);

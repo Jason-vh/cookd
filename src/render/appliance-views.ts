@@ -461,14 +461,14 @@ export class ApplianceViews {
     if (visual.oil && visual.oilGlow) {
       const frying = appliance.motion === "fry";
       const boil = Math.sin(phase) * 0.5 + Math.sin(phase * 2.7) * 0.5;
-      // The oil lies down in the vat, a few centimetres below the deck.
-      visual.oil.position.y = height - 0.02 + (frying ? boil * 0.012 : 0);
+      // The oil lies in the vat, filled nearly to the deck.
+      visual.oil.position.y = height + (frying ? boil * 0.012 : 0);
       visual.oil.scale.y = frying ? 1 + boil * 0.35 : 1;
-      visual.oilGlow.emissiveIntensity = frying ? 0.7 + boil * 0.5 : 0.4;
+      visual.oilGlow.emissiveIntensity = frying ? 0.85 + boil * 0.5 : 0.55;
       // The basket sits *in* the oil, so what the boil moves is how high it
       // rides and how much it rolls — not the lean of a stick in mid-air.
       if (visual.basket) {
-        visual.basket.position.y = height - 0.02 + (frying ? boil * 0.018 : 0);
+        visual.basket.position.y = height - 0.05 + (frying ? boil * 0.018 : 0);
         visual.basket.rotation.z = frying ? Math.sin(phase * 0.7) * 0.05 : 0;
       }
     }
