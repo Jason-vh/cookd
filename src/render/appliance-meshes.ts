@@ -4,9 +4,21 @@ import { ingredient } from "../data/ingredients";
 import type { Appliance } from "../sim/types";
 import { buildIngredientSample, buildProduceHeap } from "./models";
 import { PALETTE, type SurfaceName } from "./palette";
-import { CORNERS, dHandle, facing, grip, plinth, rim, SIDES, TOE_KICK } from "./parts";
+import {
+  CORNERS,
+  dHandle,
+  deck,
+  facing,
+  grip,
+  plinth,
+  rim,
+  roundedRect,
+  SIDES,
+  TOE_KICK,
+} from "./parts";
 import {
   cylinder,
+  extruded,
   lathe,
   mesh,
   roundedBox,
@@ -135,8 +147,12 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
     if (stand > 0) root.add(plinth(w, stand));
 
     if (look.top) {
-      const slab = mesh(roundedBox(w * 0.9, 0.08, w * 0.9, 0.03), look.top[0], look.top[1]);
-      slab.position.y = h + 0.01;
+      // Wider than the body it sits on, not narrower. A worktop *overhangs* its
+      // cabinet by an inch or two, and that lip is what casts the line of shadow
+      // that separates the two; a top tucked inside the body reads as a lid.
+      // Its upper face stays at h + 0.05, where items are placed.
+      const slab = mesh(roundedBox(w + 0.04, 0.06, w + 0.04, 0.025), look.top[0], look.top[1]);
+      slab.position.y = h + 0.02;
       root.add(slab);
     }
     addDetails(parts, appliance, h);
@@ -457,16 +473,21 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // what it is has failed at the only job it has.
   sign: { body: [PALETTE.signBoard, "wood"] },
   counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"] },
-  board: { body: [PALETTE.wood, "wood"], top: [PALETTE.boardTop, "wood"], label: "Chop" },
+  // Worktop like the counter's, with a block let into it — see `addDetails`.
+  // A chopping station is a counter you have put a board on, and a whole top in
+  // board colours is a claim that the counter *is* the board.
+  board: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"], label: "Chop" },
   // An upgrade has to be tellable from its plain twin across the kitchen, so
   // each one changes *material* rather than shape: a steel top where the wood
   // was, dark enamel and brass where the oven is grey.
   steel_board: {
     body: [PALETTE.wood, "wood"],
-    top: [PALETTE.steel, "metal"],
+    top: [PALETTE.woodTop, "wood"],
     label: "Chop (fast)",
   },
-  fryer: { body: [PALETTE.fryerBody, "enamel"], top: [PALETTE.ceramic, "enamel"], label: "Fryer" },
+  // No slab: a fryer's deck is a frame around a vat, and it is built with a
+  // hole in it by `addDetails`.
+  fryer: { body: [PALETTE.fryerBody, "enamel"], label: "Fryer" },
   oven: { body: [PALETTE.ovenBody, "enamel"], top: [PALETTE.ovenGlass, "enamel"], label: "Oven" },
   bell_oven: {
     body: [PALETTE.ovenBodyPro, "enamel"],
@@ -518,20 +539,34 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
         (parts.glass ??= []).push(glass);
 
         const handle = dHandle(0.58, 0.07);
-        handle.position.set(x * 0.49, h * 0.5 + 0.26, z * 0.49);
+        // Just above the door, where a door's handle is. It used to float 9cm
+        // clear of the top of the glass, bolted to nothing.
+        handle.position.set(x * 0.49, h * 0.5 + 0.24, z * 0.49);
         handle.rotation.y = facing(x, z);
         group.add(handle);
       }
       break;
     }
     case "fryer": {
+      // The deck is a frame with the vat's mouth cut out of it, and the oil sits
+      // down inside rather than as a slab laid on the lid. A fryer is a hole
+      // full of hot fat; drawing it as a surface was drawing the one appliance
+      // that is defined by its recess as though it had none.
+      const rail = deck(0.98, 0.66, PALETTE.ceramic);
+      rail.position.y = h + 0.02;
+      group.add(rail);
+
+      const vat = mesh(roundedBox(0.64, 0.26, 0.64, 0.03), PALETTE.ovenGlass, "metal");
+      vat.position.y = h - 0.11;
+      group.add(vat);
+
       const oil = mesh(roundedBox(0.6, 0.06, 0.6, 0.02), PALETTE.oil, "ceramic");
       // Own material instance so the oil can glow into the bloom pass.
       const glow = standardMaterial(oil).clone();
       glow.emissive.setHex(PALETTE.oil);
       glow.emissiveIntensity = 0.4;
       oil.material = glow;
-      oil.position.y = h + 0.05;
+      oil.position.y = h - 0.02;
       group.add(oil);
       parts.oil = oil;
       parts.oilGlow = glow;
@@ -539,7 +574,7 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
       // radians that stood in for one. Open mesh, a rim, and a handle that
       // reaches out over the corner where a chef would take hold of it.
       const basket = new THREE.Group();
-      basket.position.set(0.06, h + 0.06, 0.06);
+      basket.position.set(0.04, h - 0.02, 0.04);
       const bowl = shellMesh(
         lathe("fryer-basket", [
           [0, 0],
@@ -578,6 +613,29 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
     }
     case "steel_board":
     case "board": {
+      // The block itself, let into the worktop and standing a few millimetres
+      // proud of it, with a hand hole at one end. Steel where the upgrade is
+      // steel: an upgrade changes material, never shape.
+      const steel = appliance.kind === "steel_board";
+      const block = mesh(
+        extruded(
+          "chopping-block",
+          (shape) => {
+            roundedRect(shape, 0.62, 0.46, 0.05);
+            const hole = new THREE.Path();
+            hole.absarc(0.23, 0, 0.032, 0, Math.PI * 2, true);
+            shape.holes.push(hole);
+          },
+          0.05,
+          0.012,
+        ),
+        steel ? PALETTE.steel : PALETTE.boardTop,
+        steel ? "metal" : "wood",
+      );
+      block.rotation.x = -Math.PI / 2;
+      block.position.y = h + 0.03;
+      group.add(block);
+
       // A little knife resting on the board reads instantly as "chop here".
       // It hangs off a pivot at the handle so it can be swung when chopping.
       const knife = new THREE.Group();
@@ -605,18 +663,18 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
       break;
     }
     case "sink": {
-      // A basin sunk into the top, a rim around it, and a tap at the back. The
-      // recess is what stops the sink reading as another counter: the one place
-      // in the kitchen where the surface goes *down*.
-      const basin = mesh(roundedBox(0.66, 0.14, 0.66, 0.05), PALETTE.sinkBasin, "metal");
-      basin.position.y = h - 0.06;
+      // A basin hanging under a hole in the deck, not a bowl balanced on top of
+      // it. The recess is what stops the sink reading as another counter: the
+      // one place in the kitchen where the surface goes *down*.
+      const basin = mesh(roundedBox(0.68, 0.24, 0.68, 0.04), PALETTE.sinkBasin, "metal");
+      basin.position.y = h - 0.1;
       group.add(basin);
 
-      const surround = mesh(roundedBox(0.82, 0.06, 0.82, 0.03), PALETTE.steel, "metal");
-      surround.position.y = h + 0.01;
+      const surround = deck(0.98, 0.7, PALETTE.steel, "metal");
+      surround.position.y = h + 0.02;
       group.add(surround);
 
-      const water = mesh(roundedBox(0.62, 0.03, 0.62, 0.02), PALETTE.suds, "ceramic");
+      const water = mesh(roundedBox(0.64, 0.03, 0.64, 0.02), PALETTE.suds, "ceramic");
       water.position.y = h - 0.01;
       group.add(water);
       parts.water = water;

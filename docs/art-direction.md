@@ -193,6 +193,24 @@ The lesson generalises: **a new primitive unlocks a class of objects, a new
 model unlocks one.** When something is hard to build, check whether the kit is
 missing a word before writing forty lines of parts.
 
+## Proportion, measured
+
+Most of what reads as "low fidelity" is proportion, not detail — and proportion
+is checkable, so it was checked rather than argued about.
+
+- **Worktop heights are right.** A chef is 1.27 units tall to the top of the
+  toque and a worktop is 0.62, which is 49%. A 90cm counter against a 175cm
+  person is 51%. Nothing to do, and worth writing down so nobody spends an
+  afternoon rediscovering it.
+- **A worktop overhangs its cabinet.** Ours was 10% *narrower* than the body,
+  which is the proportion of a lid. It is now 2cm wider on each side, and that
+  lip casts the line of shadow that separates top from body.
+- **Things defined by a recess must have one.** A sink was a bowl sitting on a
+  slab and a fryer was a pool of oil lying on a lid — the one shape neither
+  object has. Both are now a pierced deck with a well hanging under it.
+- **A handle is bolted to something.** The oven's floated 9cm clear of the top
+  of its own door.
+
 ## Gotchas discovered the hard way
 
 The ones that are about *rendering*. The rest — worlds sharing arrays,

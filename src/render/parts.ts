@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { PALETTE, type SurfaceName } from "./palette";
-import { capsule, mesh, roundedBox, roundedCylinder, sweep, torus } from "./primitives";
+import { capsule, extruded, mesh, roundedBox, roundedCylinder, sweep, torus } from "./primitives";
 
 /**
  * Parts more than one thing in the kitchen is made of.
@@ -89,6 +89,42 @@ export function dHandle(
 }
 
 /**
+ * A deck with a hole in it: the top of anything defined by its recess.
+ *
+ * A sink and a fryer are the same object twice — a worktop with a mouth cut in
+ * it and a well hanging underneath — and both used to be drawn as a solid slab
+ * with a basin *sitting on* it, which is the one shape neither of them has. The
+ * frame is a single pierced extrusion, so the bevel runs round the mouth as it
+ * runs round the outside, and the eye reads a real edge going down.
+ *
+ * Sized like a worktop: it overhangs the body by the same 2cm.
+ */
+export function deck(
+  width: number,
+  mouth: number,
+  color: number,
+  surface: SurfaceName = "enamel",
+): THREE.Mesh {
+  const face = mesh(
+    extruded(
+      `deck:${width},${mouth}`,
+      (shape) => {
+        roundedRect(shape, width, width, 0.05);
+        const hole = new THREE.Path();
+        roundedRect(hole, mouth, mouth, 0.05);
+        shape.holes.push(hole);
+      },
+      0.06,
+      0.014,
+    ),
+    color,
+    surface,
+  );
+  face.rotation.x = -Math.PI / 2;
+  return face;
+}
+
+/**
  * How high a body sits above the floor it stands on.
  *
  * Nothing in the kitchen used to stand on anything: every appliance was a box
@@ -128,6 +164,28 @@ export function plinth(width: number, height = TOE_KICK): THREE.Object3D {
     group.add(foot);
   }
   return group;
+}
+
+/**
+ * A rounded rectangle, drawn into a shape or a hole, centred on the origin.
+ *
+ * The outline most flat things in a kitchen actually have — boards, trays,
+ * hatch frames, the deck of a fryer — and the one `extruded` needs to be given,
+ * because a `Shape` has no rounded-rect of its own.
+ */
+export function roundedRect(path: THREE.Path, width: number, depth: number, radius: number): void {
+  const r = Math.min(radius, Math.min(width, depth) / 2);
+  const x = width / 2 - r;
+  const z = depth / 2 - r;
+  path.moveTo(-x, -depth / 2);
+  path.lineTo(x, -depth / 2);
+  path.absarc(x, -z, r, -Math.PI / 2, 0, false);
+  path.lineTo(width / 2, z);
+  path.absarc(x, z, r, 0, Math.PI / 2, false);
+  path.lineTo(-x, depth / 2);
+  path.absarc(-x, z, r, Math.PI / 2, Math.PI, false);
+  path.lineTo(-width / 2, -z);
+  path.absarc(-x, -z, r, Math.PI, Math.PI * 1.5, false);
 }
 
 /** The four corners of a square, for legs, feet and stiles. */
