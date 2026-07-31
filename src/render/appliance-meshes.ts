@@ -220,7 +220,7 @@ function buildStall(parts: ApplianceParts, h: number): void {
   counter.position.y = h / 2;
   group.add(counter);
 
-  const top = mesh(roundedBox(1.02, 0.08, 1.02, 0.03), PALETTE.stallCounter, "wood");
+  const top = mesh(roundedBox(1.02, 0.08, 1.02, 0.03), PALETTE.woodTop, "wood");
   top.position.y = h + 0.02;
   group.add(top);
 
@@ -281,12 +281,12 @@ function buildCardStand(parts: ApplianceParts, h: number): void {
   // Two splayed legs and a crossbar: an easel reads as "something is displayed
   // here" from any angle, which a plinth does not.
   for (const x of [-0.26, 0.26]) {
-    const leg = mesh(cylinder(0.032, 0.038, h * 1.1), PALETTE.cardEasel, "wood");
+    const leg = mesh(cylinder(0.032, 0.038, h * 1.1), PALETTE.woodDark, "wood");
     leg.position.set(x, (h * 1.1) / 2, 0.06);
     leg.rotation.z = x > 0 ? -0.12 : 0.12;
     group.add(leg);
   }
-  const rail = mesh(roundedBox(0.62, 0.05, 0.09, 0.02), PALETTE.cardEasel, "wood");
+  const rail = mesh(roundedBox(0.62, 0.05, 0.09, 0.02), PALETTE.woodDark, "wood");
   rail.position.set(0, h * 0.62, 0.02);
   group.add(rail);
 
@@ -341,7 +341,7 @@ export type SignFace = keyof typeof SIGN_FACES;
 function buildSign(parts: ApplianceParts, h: number): void {
   const group = parts.root;
 
-  const post = mesh(roundedBox(0.12, h, 0.12, 0.04), PALETTE.signBoard, "wood");
+  const post = mesh(roundedBox(0.12, h, 0.12, 0.04), PALETTE.woodDark, "wood");
   post.position.y = h / 2;
   group.add(post);
 
@@ -356,7 +356,7 @@ function buildSign(parts: ApplianceParts, h: number): void {
   group.add(board);
   parts.board = board;
 
-  const frame = mesh(roundedBox(0.74, 0.56, 0.05, 0.03), PALETTE.signBoard, "wood");
+  const frame = mesh(roundedBox(0.74, 0.56, 0.05, 0.03), PALETTE.woodDark, "wood");
   board.add(frame);
 
   // One material per face, both repainted together: the two faces exist so the
@@ -442,7 +442,7 @@ function buildTable(group: THREE.Group, h: number, nudge: Jitter): void {
     chair.add(back);
 
     for (const [lx, lz] of CORNERS) {
-      const leg = mesh(roundedCylinder(0.018, h * 0.62, 0.008, 10), PALETTE.crateTrim, "wood");
+      const leg = mesh(roundedCylinder(0.018, h * 0.62, 0.008, 10), PALETTE.woodDark, "wood");
       leg.position.set(lx * 0.1, 0, lz * 0.1);
       chair.add(leg);
     }
@@ -486,10 +486,10 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // Built by `buildStall`, and labelled with a price rather than a name.
   stall: { body: [PALETTE.stallBody, "wood"] },
   // Built by `buildCardStand`, and labelled with whatever is on the card.
-  cards: { body: [PALETTE.cardEasel, "wood"] },
+  cards: { body: [PALETTE.woodDark, "wood"] },
   // Built by `buildSign`. No contextual label: a sign that needs a label to say
   // what it is has failed at the only job it has.
-  sign: { body: [PALETTE.signBoard, "wood"] },
+  sign: { body: [PALETTE.woodDark, "wood"] },
   counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"], cabinet: true },
   // Worktop like the counter's, with a block let into it — see `addDetails`.
   // A chopping station is a counter you have put a board on, and a whole top in
@@ -519,7 +519,7 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
     label: "Bell oven",
   },
   // Built by `buildCrate`, which is slats and gaps rather than a box with a top.
-  crate: { body: [PALETTE.crate, "wood"] },
+  crate: { body: [PALETTE.wood, "wood"] },
   // No top slab and no decorative crockery: what the stack is holding is drawn
   // by `item-views.ts`, because it is now a real, countable pile. An empty
   // plate stack has to *look* empty — that is the moment the whole feature
@@ -653,7 +653,7 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number, nudg
         "metal",
       );
       basket.add(arm);
-      const hold = grip(0.14, 0.026, PALETTE.crateTrim);
+      const hold = grip(0.14, 0.026, PALETTE.woodDark);
       hold.position.set(0.36, 0.27, 0.36);
       hold.rotation.y = -Math.PI / 4;
       basket.add(hold);
@@ -698,7 +698,7 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number, nudg
       blade.position.set(0.3, 0, 0.06);
       knife.add(blade);
 
-      const handle = mesh(roundedBox(0.14, 0.035, 0.05, 0.015), PALETTE.crateTrim, "wood");
+      const handle = mesh(roundedBox(0.14, 0.035, 0.05, 0.015), PALETTE.woodDark, "wood");
       handle.position.set(0.05, 0, 0.02);
       knife.add(handle);
 
@@ -785,22 +785,24 @@ function buildCrate(parts: ApplianceParts, h: number, nudge: Jitter): void {
 
   // Runners, so the crate stands on the tile rather than growing out of it.
   for (const z of [-0.28, 0.28]) {
-    const runner = mesh(roundedBox(0.84, 0.06, 0.14, 0.02), PALETTE.crateTrim, "wood");
+    const runner = mesh(roundedBox(0.84, 0.06, 0.14, 0.02), PALETTE.woodDark, "wood");
     runner.position.set(0, 0.03, z);
     group.add(runner);
   }
 
-  const floor = mesh(roundedBox(0.88, 0.06, 0.88, 0.02), PALETTE.crateTop, "wood");
+  // A step lighter than the frame it sits in: the tonal ladder the crate used
+  // to get from three brown palette entries now comes from one.
+  const floor = mesh(roundedBox(0.88, 0.06, 0.88, 0.02), shade(PALETTE.woodDark, 1.14), "wood");
   floor.position.y = 0.09;
   group.add(floor);
 
   const bedY = h * 0.84;
-  const inner = mesh(roundedBox(0.8, bedY - 0.09, 0.8, 0.02), PALETTE.crateInner, "wood");
+  const inner = mesh(roundedBox(0.8, bedY - 0.09, 0.8, 0.02), PALETTE.woodShadow, "wood");
   inner.position.y = (bedY + 0.09) / 2;
   group.add(inner);
 
   for (const [x, z] of CORNERS) {
-    const stile = mesh(roundedBox(0.13, h, 0.13, 0.035), PALETTE.crateTrim, "wood");
+    const stile = mesh(roundedBox(0.13, h, 0.13, 0.035), PALETTE.woodDark, "wood");
     stile.position.set(x * 0.4, h / 2, z * 0.4);
     group.add(stile);
   }
@@ -810,7 +812,7 @@ function buildCrate(parts: ApplianceParts, h: number, nudge: Jitter): void {
   let slats = 0;
   for (const t of [0.22, 0.5, 0.78]) {
     for (const [x, z] of SIDES) {
-      const slat = mesh(roundedBox(0.84, h * 0.17, 0.055, 0.02), PALETTE.crate, "wood");
+      const slat = mesh(roundedBox(0.84, h * 0.17, 0.055, 0.02), PALETTE.wood, "wood");
       // Nailed on by hand: each board sits a fraction off its neighbours, which
       // is most of the difference between a crate and a lattice.
       const index = slats++;
@@ -823,7 +825,7 @@ function buildCrate(parts: ApplianceParts, h: number, nudge: Jitter): void {
   // A rail round the mouth: it caps the stiles and gives the top edge the one
   // continuous line the slats never make.
   for (const [x, z] of SIDES) {
-    const rail = mesh(roundedBox(0.96, 0.08, 0.11, 0.03), PALETTE.crateTop, "wood");
+    const rail = mesh(roundedBox(0.96, 0.08, 0.11, 0.03), shade(PALETTE.woodDark, 1.14), "wood");
     rail.position.set(x * 0.42, h - 0.04, z * 0.42);
     rail.rotation.y = facing(x, z);
     group.add(rail);

@@ -28,8 +28,36 @@ export const PALETTE = {
   wallTrim: 0xc3b69c,
 
   // --- appliances ---
+  /**
+   * One timber, in four lights.
+   *
+   * There were nine browns: `wood`, `woodTop`, `boardTop`, `crate`, `crateTop`,
+   * `crateTrim`, `crateInner`, `cardEasel` and `signBoard`. Four of them were
+   * within a few percent of each other, and side by side in the model gallery
+   * the kitchen looked like five pieces of furniture bought second-hand rather
+   * than one room. Nobody chose that; it is what a palette does when every new
+   * object brings its own colour rather than asking what it is made of.
+   *
+   * So the question a builder answers is not "which brown" but **which part**:
+   * a face that catches the light, the body of the thing, the frame around it,
+   * or the inside of it. Anything between two of these is `shade()` of one of
+   * them, not a tenth entry.
+   *
+   * The crate is the same timber as the counters now. It has to be: what tells
+   * them apart is that one is slatted and open and the other has cupboard doors
+   * on it, and if that is not doing the work then colour was covering for a
+   * silhouette that had not been drawn.
+   */
   wood: 0xb08d63,
   woodTop: 0xc8a880,
+  woodDark: 0x7a5c3c,
+  woodShadow: 0x4f3b25,
+  /**
+   * End-grain butcher block: the one wood that is *not* from that family.
+   *
+   * It has a job the family cannot do — it sits on a worktop and has to be
+   * legible against it — so it is paler than any of them on purpose.
+   */
   boardTop: 0xdcc59d,
   steel: 0xb8b2a6,
   steelDark: 0x6f6a61,
@@ -51,17 +79,11 @@ export const PALETTE = {
   // legible as "the good one" from across the kitchen without changing shape.
   ovenBodyPro: 0x3f4550,
   fryerBody: 0xa96b55,
-  crate: 0x9c7a52,
-  crateTop: 0x87683f,
-  crateTrim: 0x765a37,
-  /** Behind the slats: dark enough that the gaps read as a shadowed inside. */
-  crateInner: 0x4f3b25,
   // The market stall: painted timber and a striped canvas awning. Warmer and
   // more saturated than anything inside the kitchen, because it is *not* the
   // kitchen — it should read as somewhere you go out to, from across the patio.
   stallBody: 0x9c5f4a,
   stallPost: 0x7a4636,
-  stallCounter: 0xd8bd93,
   awning: 0xd8705c,
   awningStripe: 0xf1ece0,
   /** Shutters, drawn while the stall is closed for service. */
@@ -71,12 +93,10 @@ export const PALETTE = {
   // out here that is not for sale.
   cardFace: 0xf4ead6,
   cardEdge: 0xd9c49a,
-  cardEasel: 0x8a6a45,
   // The sign hanging in the door. Painted board on a brass hook, and the two
   // faces of the day: a green that means come in, and a red that means not yet.
   // Saturated on purpose — it is the one thing in the room whose whole job is to
   // be read from the other side of it.
-  signBoard: 0x6b4a30,
   signHook: 0xc9a86b,
   signOpen: 0x4e8a5c,
   signClosed: 0xa8483f,

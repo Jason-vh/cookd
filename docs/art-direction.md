@@ -39,6 +39,16 @@ Supporting decisions:
   more, so readability comes from the kitchen being muted enough that food,
   which is only mildly saturated itself, is still comfortably the warmest and
   brightest thing on screen.
+- **One material, not one colour per object.** The palette had nine browns,
+  four of them within a few percent of each other, because every new object had
+  brought its own. Side by side in the gallery the kitchen looked like five
+  pieces of second-hand furniture rather than one room. There is now one timber
+  in four lights — `wood`, `woodTop`, `woodDark`, `woodShadow` — plus butcher
+  block, which is paler than all of them because it has to read *against* a
+  worktop. A builder picks a **part**, not a brown; anything in between is
+  `shade()` of one of them. The crate is the same timber as the counters, and if
+  that were a problem it would mean colour was covering for a silhouette nobody
+  had drawn.
 - **The top face is what identifies an appliance.** At this camera angle you see
   a lot of it: the oven is a cream enamel range with a charcoal hotplate, the
   fryer terracotta with a golden basin. Body colour alone is not enough.

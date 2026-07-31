@@ -242,11 +242,7 @@ export function cabinetFace(
  * A grip: the part of a handle a hand actually closes around, drawn as the
  * thicker, softer thing it is. Lies along `x`.
  */
-export function grip(
-  length: number,
-  radius = 0.035,
-  color: number = PALETTE.crateTrim,
-): THREE.Mesh {
+export function grip(length: number, radius = 0.035, color: number = PALETTE.woodDark): THREE.Mesh {
   const bar = mesh(capsule(radius, length), color, "wood");
   bar.rotation.z = Math.PI / 2;
   return bar;
