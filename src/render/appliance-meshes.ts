@@ -328,10 +328,10 @@ export type SignFace = keyof typeof SIGN_FACES;
  * The sign on the wall by the door: a bracket, and a board swinging off it.
  *
  * **Both faces say the same thing**, which is not how a real shop sign works
- * and is the right call here: the camera turns to any of four corners, so half
- * the time a player would be reading the back of the board and being told the
- * opposite of the truth. The turn is the animation; the state is on both sides
- * of it.
+ * and is the right call here: the camera turns to any of four corners, and from
+ * the two behind this wall you are looking at the back of the board. A player
+ * being told the opposite of the truth by the back of a sign is worse than a
+ * sign that is legible from everywhere and slightly impossible.
  *
  * It used to stand on a post in the middle of its tile and spin to face the
  * camera. Both halves of that were wrong: a lamp post is not what a shop sign
@@ -349,34 +349,26 @@ export type SignFace = keyof typeof SIGN_FACES;
 function buildSign(parts: ApplianceParts, h: number): void {
   const group = parts.root;
 
-  // Two hooks, just proud of the wall face, and the board hanging off them.
+  // Two hooks, sitting on the board's top edge rather than through it.
   for (const x of [-0.26, 0.26]) {
     const hook = mesh(torus(0.03, 0.01), PALETTE.signHook, "metal");
-    hook.position.set(x, h - 0.14, -0.36);
+    hook.position.set(x, h - 0.13, -0.36);
     group.add(hook);
   }
 
-  // Where the board hangs, and then the board itself — two groups, because
-  // turning it over lifts it off the wall as well as rotating it, and animating
-  // both on one node would mean `appliance-views.ts` knowing where the wall is.
-  const hanger = new THREE.Group();
-  hanger.position.set(0, h - 0.44, -0.36);
-  group.add(hanger);
-
+  // Its own group, so `appliance-views.ts` can pop it without touching the
+  // hooks it hangs from.
   const board = new THREE.Group();
-  hanger.add(board);
+  board.position.set(0, h - 0.44, -0.36);
+  group.add(board);
   parts.board = board;
 
   const frame = mesh(roundedBox(0.74, 0.56, 0.05, 0.03), PALETTE.woodDark, "wood");
   board.add(frame);
 
   // One material per face, both repainted together: the two faces exist so the
-  // board has thickness, not so they can disagree.
-  //
-  // The back is turned about **x**, not about y, because that is the axis the
-  // board is turned over on — a back face mirrored the other way would come up
-  // upside down halfway through the flip, which is the one frame of the
-  // animation a player is actually looking at.
+  // board has thickness, not so they can disagree. The back is turned about y,
+  // so the word on it reads the right way up from the corners that see it.
   const faces: THREE.MeshStandardMaterial[] = [];
   for (const z of [0.031, -0.031]) {
     const face = new THREE.Mesh(
@@ -384,7 +376,7 @@ function buildSign(parts: ApplianceParts, h: number): void {
       new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 }),
     );
     face.position.z = z;
-    face.rotation.x = z > 0 ? 0 : Math.PI;
+    face.rotation.y = z > 0 ? 0 : Math.PI;
     board.add(face);
     faces.push(face.material);
   }
@@ -396,8 +388,8 @@ function buildSign(parts: ApplianceParts, h: number): void {
  * Repaint both faces of a sign.
  *
  * The word is baked into the texture rather than hung in front of the board as
- * a sprite: a sprite always faces the camera, and a sign that turns has to be
- * able to show you its back.
+ * a sprite: a sprite always faces the camera, and a sign screwed to a wall has
+ * to be able to show you its back.
  */
 export function paintSign(faces: THREE.MeshStandardMaterial[], face: SignFace): void {
   const { text, color } = SIGN_FACES[face];

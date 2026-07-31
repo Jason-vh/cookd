@@ -59,9 +59,9 @@ type Visual = ApplianceParts & {
   cardKey: string;
   /** How far the card is lifted while somebody is considering it, 0..1. */
   armed: number;
-  /** Which way the sign is showing, and how far through turning it is. */
+  /** What the sign says, and the pop as it changes. 1..0. */
   signFace: SignFace;
-  signTurn: number;
+  signPop: number;
   /** A refused purchase, flashing the price red. 1..0. */
   refused: number;
   /** Ring shown when nobody can walk to this. Built the first time it is needed. */
@@ -266,7 +266,7 @@ export class ApplianceViews {
     }
   }
 
-  /** Turn the sign over when the restaurant does. See `signFaceOf`. */
+  /** Repaint the sign when the restaurant opens or closes. See `signFaceOf`. */
   private syncSign(world: World, appliance: Appliance, visual: Visual, dt: number): void {
     // Faces into the room off the wall it is bolted to, and stays there. It used
     // to turn to face the camera like the card stand does — but a card stand is
@@ -276,34 +276,30 @@ export class ApplianceViews {
     const face = inward(world.room, appliance.tile);
     visual.root.rotation.y = Math.atan2(face.x, face.y);
 
+    // Repainted where it hangs, on the frame it changes.
+    //
+    // It used to turn over, and every version of that looked wrong once the
+    // sign was on a wall rather than swinging in a doorway: rotating it about
+    // its middle is a board passing through the masonry, lifting it clear first
+    // is a sign taking itself off its hooks, and squashing its width reads as
+    // the thing *inverting* rather than turning. All three were animating the
+    // mechanism instead of the news.
+    //
+    // The news is the colour: a green board where a red one was, which the eye
+    // catches across a room without being asked to. It gets the pop the chefs
+    // get when what they are holding changes — the same idiom, so a state change
+    // in the kitchen always reads the same way.
     const showing = signFaceOf(world);
     if (showing !== visual.signFace) {
       visual.signFace = showing;
-      visual.signTurn = 1;
+      visual.signPop = 1;
+      if (visual.boardFaces) paintSign(visual.boardFaces, showing);
     }
-    if (visual.signTurn <= 0) return;
+    if (visual.signPop <= 0) return;
 
-    const before = visual.signTurn;
-    visual.signTurn = Math.max(0, before - dt * 2.4);
-    // Repainted as it passes the halfway point, where the board is edge-on and
-    // the swap cannot be seen. A sign whose face changes in full view is a
-    // sticker being replaced, not a sign being turned.
-    if (before > 0.5 && visual.signTurn <= 0.5 && visual.boardFaces) {
-      paintSign(visual.boardFaces, showing);
-    }
-    // Turned end over end, and lifted off the wall while it turns — which is
-    // both what a person does to a sign on two hooks, and the only way a board
-    // this size can rotate 6cm from a wall without half of it passing through
-    // the masonry. The lift peaks exactly where the board is edge-on and is zero
-    // at both ends, so it is back on its hooks the moment it stops.
-    //
-    // Squashing its width was the first attempt and it read as the sign
-    // *inverting* rather than turning: a flat thing narrowing to a line and
-    // widening again is a scale, and the eye knows it.
-    if (visual.board) {
-      visual.board.rotation.x = visual.signTurn * Math.PI;
-      visual.board.position.z = Math.sin(visual.signTurn * Math.PI) * 0.3;
-    }
+    visual.signPop = Math.max(0, visual.signPop - dt * 4);
+    const pop = visual.signPop * visual.signPop;
+    visual.board?.scale.set(1 + 0.12 * pop, 1 + 0.12 * pop, 1);
   }
 
   /** Put a recipe on the card: its dish, and everything the card promises. */
@@ -372,7 +368,7 @@ export class ApplianceViews {
       armed: 0,
       refused: 0,
       signFace,
-      signTurn: 0,
+      signPop: 0,
       ghost: { alpha: 0, x: 0, z: 0, pop: 0, held: false },
     };
   }
