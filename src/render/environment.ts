@@ -3,7 +3,7 @@ import { isMesh } from "./nodes";
 import { scatter, type PropSpace } from "./scatter";
 import { mulberry32 } from "../sim/random";
 import type { Biome, PropKind } from "../data/biomes";
-import type { Vec2 } from "../sim/types";
+import type { Rect, Vec2 } from "../sim/types";
 import { PALETTE } from "./palette";
 import { box, cylinder, mesh, roundedBox, sphere, tonedMesh } from "./primitives";
 import { mergeStatic } from "./merge";
@@ -26,9 +26,21 @@ import { mergeStatic } from "./merge";
  */
 
 export type EnvironmentBounds = {
-  /** Kitchen footprint in tiles. */
+  /** The whole grid in tiles, scenery included. */
   width: number;
   height: number;
+  /** The building, which is what the scenery is arranged around. */
+  room: Rect;
+  /**
+   * Every paved rectangle, straight off the level.
+   *
+   * The slabs and the walkable tiles are one list rather than two that agree:
+   * paving is where the game lets people walk, so it is also exactly where the
+   * ground is paved and where no tree may grow.
+   */
+  paving: readonly Rect[];
+  /** Where customers step onto the paving — the path is drawn leading to it. */
+  approach: Vec2;
   /**
    * The drive-through lane, if this kitchen has one: both ends, in tiles.
    *
@@ -52,10 +64,10 @@ export function createEnvironment(
   // collapsed into a handful of draw calls before it reaches the scene.
   const scenery = new THREE.Group();
   addGround(scenery, biome, cx, cz, groundY);
-  addPatio(scenery, biome, bounds, cx, cz, groundY);
+  addPatio(scenery, biome, bounds, groundY);
   if (biome.path) addPath(scenery, biome, bounds, groundY);
   if (bounds.lane) addLane(scenery, bounds.lane);
-  addScatter(scenery, biome, bounds, cx, cz, groundY);
+  addScatter(scenery, biome, bounds, groundY);
   scene.add(...mergeStatic(scenery));
 }
 
@@ -82,32 +94,52 @@ function addGround(
   scene.add(ground);
 }
 
-/** The raised paved platform the kitchen is built on. */
+/**
+ * The raised paved platforms: the one the kitchen is built on, and everywhere
+ * else the level says people may walk.
+ *
+ * One slab per paved rectangle. Where two of them meet — a path leaving the
+ * patio, a square at the end of it — their aprons overlap and read as one
+ * surface, which is what they are. Each is laid a hair lower than the last so
+ * that overlap is a fraction of a millimetre of step rather than two coplanar
+ * faces fighting over which one the camera can see.
+ */
 function addPatio(
   scene: THREE.Object3D,
   biome: Biome,
   bounds: EnvironmentBounds,
-  cx: number,
-  cz: number,
   groundY: number,
 ): void {
   const over = biome.patio.overhang;
-  const w = bounds.width + over * 2;
-  const d = bounds.height + over * 2;
   const thickness = biome.patio.lift + 0.3;
 
-  const slab = mesh(roundedBox(w, thickness, d, 0.14), biome.patio.edge, "stone");
-  slab.position.set(cx, groundY + thickness / 2 - 0.3, cz);
-  scene.add(slab);
+  bounds.paving.forEach((area, index) => {
+    const w = area.width + over * 2;
+    const d = area.height + over * 2;
+    const cx = area.x + area.width / 2;
+    const cz = area.y + area.height / 2;
+    const drop = index * 0.004;
 
-  // A trim course just under the lip reads as coping stones and stops the
-  // patio from looking like one extruded block.
-  const trim = mesh(roundedBox(w + 0.12, 0.1, d + 0.12, 0.04), biome.patio.trim, "stone");
-  trim.position.set(cx, -0.06, cz);
-  scene.add(trim);
+    const slab = mesh(roundedBox(w, thickness, d, 0.14), biome.patio.edge, "stone");
+    slab.position.set(cx, groundY + thickness / 2 - 0.3 - drop, cz);
+    scene.add(slab);
+
+    // A trim course just under the lip reads as coping stones and stops the
+    // paving from looking like one extruded block. Buried where two slabs meet,
+    // which is why a junction does not grow a kerb across the middle of it.
+    const trim = mesh(roundedBox(w + 0.12, 0.1, d + 0.12, 0.04), biome.patio.trim, "stone");
+    trim.position.set(cx, -0.06 - drop, cz);
+    scene.add(trim);
+  });
 }
 
-/** Paving slabs leading away from the serving side — where customers arrive. */
+/**
+ * Paving slabs leading away from the serving side — where customers arrive.
+ *
+ * Laid from the tile they step onto rather than from the middle of the grid's
+ * west edge, which is the same place only while the grid is the building and
+ * nothing else. The walk on and the slabs drawn under it are one fact.
+ */
 function addPath(
   scene: THREE.Object3D,
   biome: Biome,
@@ -119,9 +151,9 @@ function addPath(
   for (let i = 0; i < path.count; i++) {
     const slab = mesh(roundedBox(0.9, 0.09, 0.8, 0.05), path.color, "stone");
     slab.position.set(
-      -1.4 - i * 1.25,
+      bounds.approach.x - 0.9 - i * 1.25,
       groundY + 0.05,
-      bounds.height / 2 + (random() - 0.5) * 1.6 + i * 0.35,
+      bounds.approach.y + 0.5 + (random() - 0.5) * 1.6 + i * 0.35,
     );
     slab.rotation.y = (random() - 0.5) * 0.5;
     scene.add(slab);
@@ -399,16 +431,24 @@ function addScatter(
   scene: THREE.Object3D,
   biome: Biome,
   bounds: EnvironmentBounds,
-  cx: number,
-  cz: number,
   groundY: number,
 ): void {
   const random = mulberry32(0x5eed);
-  // Keep props off the patio and out of the immediate approach to it.
-  const halfW = bounds.width / 2 + biome.patio.overhang;
-  const halfD = bounds.height / 2 + biome.patio.overhang;
+  // Scattered around the *building*, which is the thing the place is arranged
+  // about — not around the grid, whose centre wanders off the moment a level
+  // reserves ground for somewhere to walk to.
+  const cx = bounds.room.x + bounds.room.width / 2;
+  const cz = bounds.room.y + bounds.room.height / 2;
+  // Off the paving, wherever the level laid it, plus each prop's own clearance.
+  const over = biome.patio.overhang;
+  const keepOut = bounds.paving.map((area) => ({
+    minX: area.x - over - cx,
+    maxX: area.x + area.width + over - cx,
+    minZ: area.y - over - cz,
+    maxZ: area.y + area.height + over - cz,
+  }));
 
-  for (const { entry, x, z } of scatter(biome.scatter, PROPS, halfW, halfD, random)) {
+  for (const { entry, x, z } of scatter(biome.scatter, PROPS, keepOut, random)) {
     const spec = PROPS[entry.kind];
     const prop = spec.build(biome, random);
     prop.position.set(cx + x, groundY, cz + z);

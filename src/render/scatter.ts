@@ -29,6 +29,16 @@ export type PropSpace = {
 
 export type Placement = { entry: ScatterEntry; x: number; z: number };
 
+/**
+ * Ground the scenery may not stand on, relative to the kitchen's centre.
+ *
+ * A list of rectangles rather than one half-width and half-depth, because
+ * "paved" stopped being a single rectangle round the building the day the
+ * market moved down a path. The keep-out list and the paving the renderer lays
+ * are the same rectangles, so a tree cannot grow in the market square.
+ */
+export type KeepOut = { minX: number; maxX: number; minZ: number; maxZ: number };
+
 type Placed = { x: number; z: number; radius: number };
 
 /** Give up on a spot after this many tries and move on. */
@@ -44,8 +54,7 @@ const ATTEMPTS = 40;
 export function scatter(
   entries: readonly ScatterEntry[],
   space: Record<PropKind, PropSpace>,
-  halfWidth: number,
-  halfDepth: number,
+  keepOut: readonly KeepOut[],
   random: () => number,
 ): Placement[] {
   const placed: Placed[] = [];
@@ -56,7 +65,7 @@ export function scatter(
   for (const entry of order) {
     const { radius, clearance } = space[entry.kind];
     for (let i = 0; i < entry.count; i++) {
-      const spot = findSpot(random, entry, radius, clearance, halfWidth, halfDepth, placed);
+      const spot = findSpot(random, entry, radius, clearance, keepOut, placed);
       if (!spot) continue;
       placed.push({ x: spot.x, z: spot.z, radius });
       out.push({ entry, x: spot.x, z: spot.z });
@@ -67,15 +76,14 @@ export function scatter(
 
 /**
  * Rejection sampling: anywhere in the ring this entry allows, but never on the
- * patio and never overlapping a prop that is already there.
+ * paving and never overlapping a prop that is already there.
  */
 function findSpot(
   random: () => number,
   entry: ScatterEntry,
   radius: number,
   clearance: number,
-  halfWidth: number,
-  halfDepth: number,
+  keepOut: readonly KeepOut[],
   placed: readonly Placed[],
 ): { x: number; z: number } | null {
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
@@ -84,11 +92,20 @@ function findSpot(
     const x = Math.cos(angle) * distance;
     const z = Math.sin(angle) * distance;
 
-    if (Math.abs(x) < halfWidth + clearance && Math.abs(z) < halfDepth + clearance) continue;
+    if (keepOut.some((area) => inside(x, z, clearance, area))) continue;
     if (placed.some((other) => overlaps(x, z, radius, other))) continue;
     return { x, z };
   }
   return null;
+}
+
+function inside(x: number, z: number, clearance: number, area: KeepOut): boolean {
+  return (
+    x > area.minX - clearance &&
+    x < area.maxX + clearance &&
+    z > area.minZ - clearance &&
+    z < area.maxZ + clearance
+  );
 }
 
 function overlaps(x: number, z: number, radius: number, other: Placed): boolean {

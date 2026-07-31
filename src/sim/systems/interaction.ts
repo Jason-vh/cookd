@@ -433,7 +433,7 @@ function buildGrab(world: World, player: Player): void {
     useStall(world, player, faced);
     return;
   }
-  // The card stand, for the same reason and on the same terms: immovable, so
+  // The recipe board on the caravan's flank, on the same terms: immovable, so
   // every rule below would refuse it silently.
   if (faced?.kind === "cards") {
     useCardStand(world, player, faced);
@@ -508,7 +508,7 @@ function buildGrab(world: World, player: Player): void {
  * account of who spent it is the log.
  */
 function useStall(world: World, player: Player, slot: Appliance): void {
-  if (world.phase !== "build") return; // shuttered; the morning is the decision
+  if (world.phase !== "build") return; // the hatch is down; the morning is the decision
 
   const carried = player.carriedAppliance;
   if (carried !== null) {

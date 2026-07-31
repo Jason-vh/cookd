@@ -1,9 +1,10 @@
 import * as THREE from "three";
 import type { EffectCue, Rect, Seam, World } from "../sim/types";
 import { applianceAtTile, playerById } from "../sim/world";
-import { dayProgress } from "../sim/queries";
+import { approachTile, dayProgress } from "../sim/queries";
 import { hatchOf } from "../sim/lane";
-import { edgeSeam, horizontalWall, verticalWall } from "../sim/walls";
+import { edgeSeam, horizontalWall, mountSeam, verticalWall } from "../sim/walls";
+import { applianceDef } from "../data/appliances";
 import { biome as lookupBiome } from "../data/biomes";
 import { cameraYaw } from "../orientation";
 import { lerp } from "./anim";
@@ -41,14 +42,6 @@ import { createPost, postEnabled, type Post } from "./post";
  *
  * Art direction lives in `palette.ts` (colour) and `meshes.ts` (form).
  */
-/**
- * Which of the four corners a yaw is looking from, as a value that can be
- * compared. Only which side of each axis the camera is on matters.
- */
-function corner(yaw: number): string {
-  return `${Math.sin(yaw) > 0 ? "+" : "-"}${Math.cos(yaw) > 0 ? "+" : "-"}`;
-}
-
 export class View {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.OrthographicCamera;
@@ -72,9 +65,6 @@ export class View {
   /** Reused every frame so following allocates nothing. */
   private readonly followTargets: FollowTarget[] = [];
   private readonly shell: THREE.Object3D[] = [];
-  /** Rebuilt when the camera crosses to another corner. See `buildWalls`. */
-  private readonly walls: THREE.Object3D[] = [];
-  private wallCorner = "";
   private readonly onResize = (): void => this.resize();
 
   constructor(canvas: HTMLCanvasElement, world: World, biomeId: string) {
@@ -114,8 +104,10 @@ export class View {
     this.daylight = new Daylight(this.renderer, this.scene, biome, {
       width: world.width,
       height: world.height,
-      cx: world.width / 2,
-      cz: world.height / 2,
+      // Aimed at the building, not at the middle of the grid: a level whose
+      // grid runs on past its paving has not moved its kitchen.
+      cx: world.room.x + world.room.width / 2,
+      cz: world.room.y + world.room.height / 2,
     });
     // The shadow map is spent on the ground the camera is actually showing,
     // which is about half the kitchen. The rig rewrites those corners in place.
@@ -123,6 +115,9 @@ export class View {
     createEnvironment(this.scene, biome, {
       width: world.width,
       height: world.height,
+      room: world.room,
+      paving: world.paving,
+      approach: approachTile(world),
       lane: world.lane,
     });
     this.buildKitchenShell(world);
@@ -134,11 +129,10 @@ export class View {
   // --- scene setup -----------------------------------------------------------
 
   /**
-   * The kitchen itself: its tiled floor and its walls.
+   * The kitchen itself: its tiled floor and its walls, baked once.
    *
-   * The floor never moves, so it is baked once. The walls are rebuilt whenever
-   * the camera crosses to a new corner — see `buildWalls` for why they cannot
-   * simply be baked with it.
+   * Neither moves and neither depends on where the camera is standing, which
+   * was not true while half the walls were full height — see `addWalls`.
    */
   private buildKitchenShell(world: World): void {
     const shell = new THREE.Group();
@@ -163,65 +157,56 @@ export class View {
     floor.receiveShadow = true;
     shell.add(floor);
 
+    this.addWalls(shell, world);
+
     const baked = mergeStatic(shell);
     this.shell.push(...baked);
     this.scene.add(...baked);
-    this.buildWalls(world);
   }
 
   /**
-   * The walls, with the two edges nearest the camera cut down to a lip.
+   * The walls, and every one of them is a **lip**.
    *
-   * Full-height near walls would stand between the camera and the kitchen, so
-   * which two are near is not decoration — it is whether you can see the room
-   * at all. That used to be a fact about the *building* alone (the south and
-   * east runs, because that is where the camera stood); now the camera turns,
-   * so it is a fact about the building **and** where we are looking from, and
-   * the walls are rebuilt when that answer changes.
+   * It used to be the two edges nearest the camera, because a full-height wall
+   * standing between the camera and the kitchen is the difference between
+   * seeing the room and not — and the other two were left tall so the building
+   * still read as a building. Turning the camera made that a fact about the
+   * building *and* where you were looking from, so the walls were rebuilt on
+   * every quarter turn.
    *
-   * Rebuilt rather than toggled because they are baked into one merged mesh per
-   * material, which is what keeps a hundred wall segments off the draw call
-   * budget. It happens on a keypress, four times around, and never during play.
+   * Cutting all four costs the tall far wall and buys three things:
+   *
+   * - **Nothing outside is hidden.** The morning's delivery stands on the
+   *   paving, and from two corners in four a tall wall stood in front of it.
+   *   The same was true of anything else out there — a chef walking round the
+   *   building, a customer on the path.
+   * - **The walls stop depending on the camera**, so they are baked once with
+   *   the floor instead of being rebuilt (and re-merged) every quarter turn.
+   * - **A wall is a wall from every angle.** The old rule made the room look
+   *   different depending on where you stood, which is exactly the objection
+   *   that kept an interior divider full height; with one height everywhere,
+   *   that objection has nothing left to be about.
+   *
+   * The exception is a seam something *hangs* on. A sign screwed to a lip and a
+   * poster pasted on one would both be floating in mid-air, so those pieces
+   * stay full height and read as what they are: the bit of wall the thing is
+   * on.
    */
-  private buildWalls(world: World): void {
-    for (const part of this.walls) disposeSubtree(part);
-    this.walls.length = 0;
-
-    const yaw = this.rig.facing;
-    this.wallCorner = corner(yaw);
-
+  private addWalls(group: THREE.Object3D, world: World): void {
     const room = world.room;
-    // The near edges are the ones whose outside faces the camera: with the
-    // camera at +x/+z those are the east and south lines of the shell, and each
-    // quarter turn hands the lip to the next two runs. Only the shell gets it:
-    // an interior wall cut to a lip would be a divider you could see over from
-    // one side of the room and not the other.
-    const nearX = Math.sin(yaw) > 0 ? room.x + room.width : room.x;
-    const nearY = Math.cos(yaw) > 0 ? room.y + room.height : room.y;
-
-    // ...with one exception: the seam a sign hangs on is never cut. A sign is
-    // screwed to a wall, and a wall that is only there from two of the four
-    // corners is a sign hanging in mid-air from the other two. One tile of
-    // full-height masonry is a far cheaper price than that, and it reads as
-    // what it is — the piece of wall the sign is on.
     const mounted = new Set<string>();
     for (const appliance of world.appliances.values()) {
-      if (appliance.kind !== "sign") continue;
-      const seam = edgeSeam(room, appliance.tile);
+      if (!applianceDef(appliance.kind).mounted) continue;
+      const seam = mountSeam(room, appliance.tile);
       mounted.add(`${seam.axis},${seam.x},${seam.y}`);
     }
-    const height = (
-      axis: "vertical" | "horizontal",
-      x: number,
-      y: number,
-      near: boolean,
-    ): number => (near && !mounted.has(`${axis},${x},${y}`) ? 0.26 : 1.1);
+    const height = (axis: "vertical" | "horizontal", x: number, y: number): number =>
+      mounted.has(`${axis},${x},${y}`) ? 1.1 : 0.26;
 
-    const group = new THREE.Group();
     for (let y = 0; y < world.height; y++) {
       for (let x = 0; x <= world.width; x++) {
         if (!verticalWall(world, x, y)) continue;
-        const wall = buildWall(height("vertical", x, y, x === nearX), "vertical");
+        const wall = buildWall(height("vertical", x, y), "vertical");
         wall.position.set(x, 0, y + 0.5);
         group.add(wall);
       }
@@ -229,7 +214,7 @@ export class View {
     for (let y = 0; y <= world.height; y++) {
       for (let x = 0; x < world.width; x++) {
         if (!horizontalWall(world, x, y)) continue;
-        const wall = buildWall(height("horizontal", x, y, y === nearY), "horizontal");
+        const wall = buildWall(height("horizontal", x, y), "horizontal");
         wall.position.set(x + 0.5, 0, y);
         group.add(wall);
       }
@@ -238,16 +223,14 @@ export class View {
     // The gaps in the shell. A frame around one is what stops it reading as a
     // hole somebody forgot to wall up — and a drive-through's hatch is a hole
     // in exactly the same sense, framed differently so that it reads as one.
+    // Both stand full height on purpose: a doorway is the one part of a lipped
+    // wall that has to say *here*, from across the park.
     group.add(frameGap(edgeSeam(world.room, world.door), buildDoorway()));
     const hatch = hatchOf(world);
     if (hatch) {
       const seam = edgeSeam(world.room, hatch.tile);
       group.add(frameGap(seam, buildServingHatch(outward(world.room, seam))));
     }
-
-    const baked = mergeStatic(group);
-    this.walls.push(...baked);
-    this.scene.add(...baked);
   }
 
   resize(): void {
@@ -287,9 +270,6 @@ export class View {
     // have to turn with it — see `orientation.ts`.
     this.rig.setYaw(cameraYaw());
     this.rig.update(this.followPoints(world, alpha, localIds), dt);
-    // Halfway through the turn, so the lip changes hands while the wall it is
-    // leaving is edge-on and hardest to catch doing it.
-    if (corner(this.rig.facing) !== this.wallCorner) this.buildWalls(world);
 
     // After the camera, which decides where the shadow map is spent; before the
     // post chain, whose grade is part of what the hour means.
@@ -440,9 +420,8 @@ export class View {
     this.items.dispose();
     this.highlights.dispose();
     this.popups.dispose();
-    for (const part of [...this.shell, ...this.walls]) disposeSubtree(part);
+    for (const part of this.shell) disposeSubtree(part);
     this.shell.length = 0;
-    this.walls.length = 0;
     this.daylight.dispose();
     this.post?.dispose();
     this.renderer.dispose();

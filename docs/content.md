@@ -348,10 +348,12 @@ tile, became things a level cannot ship with.
 ### The rest of the map
 
 The dining room is the western half of the **same grid** — one rectangle, one
-collision system, no new concepts. So is the **patio ring** around the outside:
-walkable, never placeable, and where the market stall stands. Walkable is paved
-and paved is walkable, so there is one map rather than a floor plan and a
-backdrop that agree by coincidence — see [the shop](the-shop.md#the-patio-ring).
+collision system, no new concepts. So is the **paving** the level lists,
+walkable and never placeable, which is the apron round the building and where
+the morning's delivery stands. Walkable is paved and paved is walkable, so there
+is one map rather than a floor plan and a backdrop that agree by coincidence —
+and "nothing may be built on the paving" is what makes the goods out there
+legible as goods, see [the shop](the-shop.md#there-is-no-shop).
 
 **The level is a starting point, not an endpoint.** It has one board, two
 tables, four plates — and no fryer, no oven, and two crates, because a kitchen

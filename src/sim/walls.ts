@@ -80,6 +80,42 @@ export function inward(room: Rect, tile: Vec2): Vec2 {
   return { x: 0, y: seam.y === tile.y ? 1 : -1 };
 }
 
+/**
+ * Which way a tile standing *outside* the shell faces, away from the building.
+ *
+ * `inward`'s mirror, for the things hung on the outside of the same walls: the
+ * recipe posters beside the door. It cannot be `inward` with the sign flipped,
+ * because these tiles are not in the room at all and `edgeSeam` answers for
+ * tiles that are. Which wall a poster is on is a fact about the building, so it
+ * is asked of the building rather than of the camera.
+ */
+export function outward(room: Rect, tile: Vec2): Vec2 {
+  if (tile.x === room.x - 1) return { x: -1, y: 0 };
+  if (tile.x === room.x + room.width) return { x: 1, y: 0 };
+  if (tile.y === room.y - 1) return { x: 0, y: -1 };
+  return { x: 0, y: 1 };
+}
+
+/**
+ * The line of shell that something mounted on this tile hangs on.
+ *
+ * Answers for both faces of the same wall: the sign is bolted to the inside of
+ * it and the recipe posters are pasted on the outside, and the renderer has to
+ * know which seam to leave standing at full height for either of them — a wall
+ * cut down to a lip is a poster floating in mid-air from two of the four camera
+ * corners.
+ */
+export function mountSeam(room: Rect, tile: Vec2): Seam {
+  const inside =
+    tile.x >= room.x &&
+    tile.y >= room.y &&
+    tile.x < room.x + room.width &&
+    tile.y < room.y + room.height;
+  if (inside) return edgeSeam(room, tile);
+  const face = outward(room, tile);
+  return edgeSeam(room, { x: tile.x - face.x, y: tile.y - face.y });
+}
+
 /** Take a seam out of the shell, so the two tiles either side of it meet. */
 export function openSeam(world: World, seam: Seam): void {
   if (seam.axis === "vertical") setVerticalWall(world, seam.x, seam.y, false);

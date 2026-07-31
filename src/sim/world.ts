@@ -64,10 +64,16 @@ export function applianceAtTile(world: World, x: number, y: number): Appliance |
 /**
  * Is this square occupied?
  *
- * Only appliances occupy squares. Walls used to as well, and the difference is
- * the whole of the change that put them on the seams between tiles: a wall is
- * not something a tile *is*, so it cannot be answered for one. Whether a wall
- * stands in the way is a question about a **step** — see `sim/walls.ts`.
+ * Two things fill a square: something standing on it, and the ground itself
+ * being scenery. The grass between the patio and the market is as solid as an
+ * oven and for a plainer reason — it is not floor, and the level never said it
+ * was. Everything in bounds used to be somewhere to stand, back when the grid
+ * was the building plus its apron and nothing else.
+ *
+ * Walls used to occupy squares as well, and the difference is the whole of the
+ * change that put them on the seams between tiles: a wall is not something a
+ * tile *is*, so it cannot be answered for one. Whether a wall stands in the way
+ * is a question about a **step** — see `sim/walls.ts`.
  *
  * And not even every appliance: one that hangs on the wall is standing on the
  * wall's line rather than on the square, so the square is floor. Owning a tile
@@ -75,6 +81,7 @@ export function applianceAtTile(world: World, x: number, y: number): Appliance |
  */
 export function isSolid(world: World, x: number, y: number): boolean {
   if (!inBounds(world, x, y)) return true;
+  if (!world.tiles[tileIndex(world, x, y)]?.walkable) return true;
   const appliance = applianceAtTile(world, x, y);
   return appliance !== null && !applianceDef(appliance.kind).mounted;
 }
@@ -152,12 +159,16 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     seed,
     width,
     height,
-    // Patio until the room says otherwise: walkable, and nothing may be built
-    // on it. The ring is what makes "outside" a place rather than a painted
-    // backdrop — the tiles collision allows and the paving a player can see are
-    // the same thing.
-    tiles: Array.from({ length: width * height }, () => ({ door: false, placeable: false })),
+    // Scenery until the level says otherwise. What is paved is a place — the
+    // tiles collision allows and the slabs a player can see are the same list
+    // — and what is not is the park it stands in.
+    tiles: Array.from({ length: width * height }, () => ({
+      door: false,
+      walkable: false,
+      placeable: false,
+    })),
     room: { ...level.room },
+    paving: level.paving.map((area) => ({ ...area })),
     walls: createWalls(width, height),
     applianceAt: Array.from({ length: width * height }, () => 0),
     appliances: new Map(),
@@ -222,9 +233,20 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
  * makes its own hole the same way, as it is placed.
  */
 function buildRoom(world: World, level: LevelDef): void {
+  // Paving first, floor over the top of it: a paved rectangle is allowed to
+  // cover the building it wraps (the beach's deck does), and the floor inside
+  // the walls is the more specific fact about those squares.
+  for (const area of level.paving) {
+    for (let y = area.y; y < area.y + area.height; y++) {
+      for (let x = area.x; x < area.x + area.width; x++) {
+        if (!inBounds(world, x, y)) continue;
+        world.tiles[tileIndex(world, x, y)] = { door: false, walkable: true, placeable: false };
+      }
+    }
+  }
   for (let y = level.room.y; y < level.room.y + level.room.height; y++) {
     for (let x = level.room.x; x < level.room.x + level.room.width; x++) {
-      world.tiles[tileIndex(world, x, y)] = { door: false, placeable: true };
+      world.tiles[tileIndex(world, x, y)] = { door: false, walkable: true, placeable: true };
     }
   }
   for (const line of wallRuns(level)) {
@@ -234,7 +256,11 @@ function buildRoom(world: World, level: LevelDef): void {
     }
   }
   openSeam(world, edgeSeam(level.room, level.door));
-  world.tiles[tileIndex(world, level.door.x, level.door.y)] = { door: true, placeable: true };
+  world.tiles[tileIndex(world, level.door.x, level.door.y)] = {
+    door: true,
+    walkable: true,
+    placeable: true,
+  };
 }
 
 /**

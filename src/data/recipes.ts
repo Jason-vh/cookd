@@ -75,7 +75,7 @@ export const COMBINES: Combine[] = [
  * `tier` is the difficulty curve, said out loud. It used to be `unlockDay` —
  * and before that, the *position in this array* — so sorting these rows by
  * reward silently changed what day one looks like. Now the day number decides
- * nothing at all: the card stand offers by tier (see `TIER_WEIGHT`), a room
+ * nothing at all: the posters offer by tier (see `TIER_WEIGHT`), a room
  * picks, and what a kitchen can cook is the record of its own choices.
  *
  * `prereq` keeps a dish that builds on another dish's output from being

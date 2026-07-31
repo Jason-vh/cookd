@@ -6,11 +6,11 @@ import type { Player, World } from "../types";
  *
  * Opening a day used to be a keypress with nothing in the room behind it: the
  * one verb in the game that was not a chef doing something to an object. The
- * stall taught the lesson — *a shop is a place, not a menu* — and this is the
+ * caravan taught the lesson — *a shop is a place, not a menu* — and this is the
  * same lesson applied to the day itself. Face the sign, press `Grab`, and the
  * restaurant is open. There is nothing else to know.
  *
- * **Zero new verbs**, exactly like the stall and the card stand: one immovable
+ * **Zero new verbs**, exactly like the caravan's hatch and its boards: one immovable
  * piece of level furniture that answers a grab on its own terms, routed to
  * from both halves of `interaction.ts` before any other rule can refuse it.
  *
@@ -18,7 +18,7 @@ import type { Player, World } from "../types";
  * button. In the morning it says CLOSED and turning it opens the day; during
  * service it says OPEN and turning it calls last orders. One object, two
  * directions, and the state of the restaurant legible from across the room —
- * the same grammar as the stall's shutters.
+ * the same grammar as the caravan's hatch.
  */
 export function useSign(world: World, player: Player): void {
   // A guess does not get to open the restaurant. The online client runs its own

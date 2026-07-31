@@ -32,9 +32,8 @@ be abstract are now physical, and each of them paid for itself:
 
    They walk it on **real tiles**. The approach used to be a straight line drawn
    from off-grid to the door, which was fine while outside was painted scenery;
-   the [patio ring](the-shop.md#the-patio-ring) made it a place, with a market
-   stall standing on some of it, so the walk in is now the same flood fill
-   everything else uses.
+   the [paving](the-shop.md#there-is-no-shop) made it a place, so the walk in is
+   now the same flood fill everything else uses.
 
 ## The lifecycle
 

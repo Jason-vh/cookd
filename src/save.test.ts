@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "./data/level";
 import { platesInWorld } from "./sim/plates";
+import { restockStall } from "./sim/shop";
 import { createWorld } from "./sim/world";
 import { BACKFILL_RECIPES } from "./data/progression";
 import { Host } from "./game/host";
@@ -38,6 +39,10 @@ describe("round trip", () => {
     const before = world();
     before.money = 137;
     before.day = 4;
+    // The delivery outside is a function of the seed and the day, not something
+    // a save carries, so a world moved to day 4 by hand has to be given day
+    // four's morning — `restore` gives the other one its own.
+    restockStall(before);
     // Anything the *player* moved has to come back where they left it. The
     // level's own crates are the movable thing every kitchen still ships with
     // now that the heat arrives on a card.

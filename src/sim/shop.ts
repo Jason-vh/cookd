@@ -3,21 +3,23 @@ import { PLATE_PRICE, PLATE_WEIGHT, SCARCE_BELOW, SELLBACK, STOCK_WEIGHT } from 
 import { unlockedIngredients, unlockedKinds } from "./cards";
 import { ingredient } from "../data/ingredients";
 import { mulberry32 } from "./random";
-import type { Appliance, Offer, World } from "./types";
-import { touchLayout } from "./world";
+import type { Appliance, Offer, Vec2, World } from "./types";
+import { inward } from "./walls";
+import { applianceAtTile, inBounds, tileIndex, touchLayout } from "./world";
 
 /**
- * The market stall: what it is holding, what that costs, and what a sale pays.
+ * The shop: what is for sale, what it costs, and what a sale pays.
  *
- * The stall is a *place*, not a menu — three tiles on the patio outside the
- * door, faced and grabbed exactly like anything else in the kitchen. So there
- * is nothing here about interaction; `systems/interaction.ts` owns that, and
- * this file owns only the questions it has to ask. What is in slot two? What is
- * it worth? May this be sold?
+ * It is a *place*, not a menu — three squares of paving outside the door with
+ * the morning's delivery standing on them, faced and grabbed exactly like
+ * anything else in the kitchen. So there is nothing here about interaction;
+ * `systems/interaction.ts` owns that, and this file owns only the questions it
+ * has to ask. What is on square two? What is it worth? May this be sold?
  *
- * ## The stock is derived, not stored
+ * ## The delivery is derived, not stored
  *
- * Slots are rolled from `(seed, day)` through their **own** generator, not from
+ * Where it lands and what is on it are both rolled from `(seed, day)` through
+ * their **own** generator, not from
  * `random(world)`. The world's stream is consumed by play — arrivals, chairs —
  * so it has diverged between two rooms on the same seed by the end of the first
  * minute. Anything that must look the same on every client and is not sent over
@@ -28,7 +30,18 @@ import { touchLayout } from "./world";
  * rides the layout message like everything else about where things are, and a
  * slot emptying is a layout change like an oven moving.
  *
- * ## The stall stocks for *this* restaurant
+ * ## It lands somewhere different every morning
+ *
+ * A delivery that appeared on the same three squares every day would be three
+ * squares the game had reserved, which is the shop-as-furniture problem coming
+ * back in through the floor. So the squares themselves move: near the door,
+ * never on the way in, and never twice in the same arrangement.
+ *
+ * The level still lists three of them, because a level says what a kitchen has
+ * — it is only where they stand on the first morning, and the roll takes over
+ * from there.
+ *
+ * ## The delivery is for *this* restaurant
  *
  * What is on offer follows the room's own menu, not the library: crates hold
  * ingredients its recipes start from, and an appliance kind nothing on the menu
@@ -41,7 +54,7 @@ import { touchLayout } from "./world";
  * edited them would be a shop whose tuning depended on who had been playing.
  */
 
-/** The stall slots, in a stable order: the level's `$` tiles, top to bottom. */
+/** The squares things are sold from, in a stable order: top to bottom. */
 export function stallSlots(world: World): Appliance[] {
   const slots: Appliance[] = [];
   for (const appliance of world.appliances.values()) {
@@ -95,13 +108,18 @@ export function countKind(world: World, kind: ApplianceKind): number {
 // --- the morning roll ---------------------------------------------------------
 
 /**
- * Restock every slot for `world.day`.
+ * Stand this morning's delivery on the paving, and fill it.
  *
  * Called once a morning, and once when a world is built or restored — the roll
  * is a pure function of the seed and the day, so doing it again is doing it
  * identically. Anything a player took yesterday is simply gone; there is no
- * buy-back of a specific unit, and a slot they emptied comes back with
- * something new in it.
+ * buy-back of a specific unit, and a square they emptied comes back somewhere
+ * else with something new on it.
+ *
+ * Where it lands is drawn first and from the same stream, because it is the
+ * same event: one delivery, one roll. Two streams would be two things to keep
+ * in step for no gain, and drawing in a fixed order is what keeps every client
+ * agreeing about a morning nobody sent them.
  */
 export function restockStall(world: World): void {
   const slots = stallSlots(world);
@@ -110,6 +128,7 @@ export function restockStall(world: World): void {
   // A stream of its own, from two numbers that cannot drift. `| 0` keeps the
   // seed in the same 32-bit shape `mulberry32` is written for.
   const random = mulberry32((world.seed * 0x9e37 + world.day * 0x85eb) | 0);
+  landDelivery(world, slots, random);
 
   // One slot is promised to something the kitchen is short of, so a morning is
   // never three duds. Which slot is itself rolled, or the guarantee would
@@ -129,6 +148,62 @@ export function restockStall(world: World): void {
   // change like an oven moving. Without this the server never re-sends it: a
   // client keeps drawing yesterday's slot and buys today's thing out of it.
   touchLayout(world);
+}
+
+/** How far from the door a delivery may be dropped, in squares. */
+const DELIVERY_REACH = 4;
+
+/**
+ * Move the squares to this morning's spots: paving near the door, never on the
+ * way in.
+ *
+ * "Never on the way in" is a filter rather than a check afterwards, and that is
+ * deliberate: the row a customer walks up to the door along is the one place a
+ * crate can seal a restaurant shut, and a rule that *cannot* choose it beats a
+ * rule that notices it has and rolls again. Everything else is fair game,
+ * including round the corner of the building.
+ *
+ * Candidates are gathered in grid order so that the same seed picks the same
+ * squares on every client, in a room nobody has sent them.
+ */
+function landDelivery(world: World, slots: Appliance[], random: () => number): void {
+  const walkIn = inward(world.room, world.door);
+  const moving = new Set(slots.map((slot) => slot.id));
+  const spots: Vec2[] = [];
+  for (let y = world.door.y - DELIVERY_REACH; y <= world.door.y + DELIVERY_REACH; y++) {
+    for (let x = world.door.x - DELIVERY_REACH; x <= world.door.x + DELIVERY_REACH; x++) {
+      if (!inBounds(world, x, y)) continue;
+      const tile = world.tiles[tileIndex(world, x, y)];
+      // Paving only: walkable, and not somewhere a kitchen may build. That is
+      // the same pair of facts that makes the goods legible as goods.
+      if (!tile?.walkable || tile.placeable) continue;
+      // The way in, along the door's own line, stays clear both sides of it.
+      if (walkIn.x !== 0 ? y === world.door.y : x === world.door.x) continue;
+      // Anything already standing here — a poster on the wall, most often. The
+      // squares being moved do not count as standing anywhere: the candidates
+      // have to come out the same whatever yesterday's roll did with them, or
+      // two clients that reached today by different routes would disagree.
+      const here = applianceAtTile(world, x, y);
+      if (here && !moving.has(here.id)) continue;
+      spots.push({ x, y });
+    }
+  }
+  if (spots.length < slots.length) return; // nowhere to put it: leave it be
+
+  // Partial Fisher-Yates: one draw per square, and the draws happen whether or
+  // not they are used, so the stream advances by the same amount every morning.
+  for (const [index, slot] of slots.entries()) {
+    const pick = index + Math.floor(random() * (spots.length - index));
+    const spot = spots[pick]!;
+    spots[pick] = spots[index]!;
+    world.applianceAt[tileIndex(world, slot.tile.x, slot.tile.y)] = 0;
+    slot.tile = { x: spot.x, y: spot.y };
+  }
+  // Written after every square has moved, or one landing where another has not
+  // left yet would overwrite it and take the second off the grid.
+  for (const slot of slots) {
+    world.applianceAt[tileIndex(world, slot.tile.x, slot.tile.y)] = slot.id;
+  }
 }
 
 /**

@@ -107,7 +107,7 @@ Getting there took two rounds of work, on a bare kitchen with nobody in it:
 | Idle appliances omitted | **723** |
 
 Two things get it there. The **layout** — which appliances exist, where, what
-the stall is holding and what is on the [card stand](the-menu.md) — is ~70% of
+is for sale outside and what is on the [recipe posters](the-menu.md) — is ~70% of
 the bytes and changes a handful of times a day, so it rides its own message and
 is sent only when it changes. The room's **menu** rides it too, for the same
 reason: `unlocked` changes every third morning and never during service, and

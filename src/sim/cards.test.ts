@@ -5,18 +5,19 @@ import { LEVEL } from "../data/level";
 import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
 import { Host } from "../game/host";
 import { cardStands, isCardMorning, missingFor, restockCards, unlockedRecipes } from "./cards";
+import { seatsAround } from "./pathing";
 import { canPlace } from "./queries";
 import { beginDay, endDay } from "./day";
 import { step } from "./step";
-import type { Appliance, ApplianceKind, PlayerInput, World } from "./types";
+import type { Appliance, ApplianceKind, PlayerInput, Vec2, World } from "./types";
 import { createWorld, emptyInput } from "./world";
 
 /**
- * The card stand: how a kitchen's menu grows.
+ * The recipe boards: how a kitchen's menu grows.
  *
  * Driven the way a player drives it — stand in front of a card, press `Grab`,
- * press it again — because the whole claim of the stand is that it is the
- * stall's grammar applied to progression: **zero new verbs, one new place**. A
+ * press it again — because the whole claim of the board is that it is the
+ * hatch's grammar applied to progression: **zero new verbs, one new place**. A
  * test that called `unlockRecipe` directly would be testing a different feature
  * from the one that shipped.
  */
@@ -46,19 +47,25 @@ function press(world: World, button: "grab"): void {
   step(world, idle());
 }
 
-/** Stand on the tile east of `tile`, facing west at it. */
-function faceWest(world: World, tile: { x: number; y: number }): void {
+/**
+ * Stand on the paving beside a square, facing it.
+ *
+ * Any side will do — what stands there is an appliance with four sides, not a
+ * counter with a front — so this takes the first walkable neighbour, which is
+ * also a small guarantee that the delivery has landed somewhere reachable.
+ */
+function faceGoods(world: World, tile: Vec2): void {
+  const from = seatsAround(world, tile)[0]!;
   const player = world.players[0]!;
-  player.pos.x = tile.x + 1.5;
-  player.pos.y = tile.y + 0.5;
+  player.pos = { x: from.x + 0.5, y: from.y + 0.5 };
   player.prevPos = { ...player.pos };
-  player.facing = { x: -1, y: 0 };
+  player.facing = { x: tile.x - from.x, y: tile.y - from.y };
 }
 
 /** Face card `index` and press grab. */
 function useCard(world: World, index: number): Appliance {
   const stand = cardStands(world)[index]!;
-  faceWest(world, stand.tile);
+  faceGoods(world, stand.tile);
   press(world, "grab");
   return stand;
 }
@@ -114,7 +121,7 @@ describe("a kitchen starts with one dish", () => {
 });
 
 describe("the stand", () => {
-  test("stands on the patio, and nothing may be built there", () => {
+  test("hangs on the wall, and nothing may be built under it", () => {
     const world = morning();
     const stands = cardStands(world);
     expect(stands).toHaveLength(CARD_SLOTS);
@@ -337,9 +344,9 @@ describe("a card delivers what its dish needs", () => {
     // Never the door, never the patio: everything delivered is somewhere the
     // game is allowed to put things.
     for (const appliance of world.appliances.values()) {
-      // Level furniture is exempt by definition — the stall and the card stand
-      // are on the patio and the sign is in a wall, which is precisely what
-      // being immovable means. Asked as a property rather than as a list of
+      // Level furniture is exempt by definition — the shop's squares are out
+      // on the paving and signs and posters hang on walls, which is precisely
+      // what being immovable means. Asked as a property rather than as a list of
       // kinds, so the next piece of furniture does not have to edit this test.
       if (!applianceDef(appliance.kind).movable) continue;
       const tile = world.tiles[appliance.tile.y * world.width + appliance.tile.x];

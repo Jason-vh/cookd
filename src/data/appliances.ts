@@ -72,13 +72,17 @@ const PLAIN = { patience: 1, upgrades: null, mounted: false } as const;
 
 // prettier-ignore
 const DEFS = {
-  // The stall is a place, not an appliance: it stands where the level puts it,
-  // cannot be lifted, holds nothing and does its whole job through `Grab`.
-  stall: { ...PLAIN, stations: [], speed: 1, label: "Stall", color: 0x9c5f4a, height: 0.78, acceptsItems: false, movable: false, price: 0 },
-  // The card stand is the stall's twin in every structural way: level
-  // furniture, immovable, never saved, and it does its whole job through
+  // A square of paving with something for sale standing on it. There is no
+  // shop: what a player walks up to is the *goods*, drawn full size, and this
+  // is only the level saying where the morning's delivery lands. Immovable,
+  // holds nothing, and does its whole job through `Grab`.
+  stall: { ...PLAIN, stations: [], speed: 1, label: "Stall", color: 0x9c5f4a, height: 0.1, acceptsItems: false, movable: false, price: 0 },
+  // A poster on the outside wall, and the stall's twin in every structural way:
+  // level furniture, immovable, never saved, doing its whole job through
   // `Grab`. What it sells is days rather than money — see `sim/cards.ts`.
-  cards: { ...PLAIN, stations: [], speed: 1, label: "Recipe card", color: 0xd9c9a8, height: 0.62, acceptsItems: false, movable: false, price: 0 },
+  // Mounted, like the sign: it hangs on the wall rather than standing on the
+  // square, so the paving in front of it is still paving anybody may cross.
+  cards: { ...PLAIN, stations: [], speed: 1, label: "Recipe card", color: 0xd9c9a8, height: 1.1, acceptsItems: false, movable: false, mounted: true, price: 0 },
   // The sign in the door: the third piece of level furniture, and the one that
   // decides when the day happens. Opening used to be a keypress with no object
   // in the room behind it — see `sim/systems/sign.ts`.

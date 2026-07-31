@@ -3,7 +3,7 @@ import { applianceDef } from "../data/appliances";
 import { RECIPE_BY_ID } from "../data/recipes";
 import type { Appliance, Offer, Recipe, World } from "../sim/types";
 import { playerById } from "../sim/world";
-import { inward } from "../sim/walls";
+import { inward, outward } from "../sim/walls";
 import { deliveryLabel, missingFor } from "../sim/cards";
 import {
   canPlace,
@@ -18,7 +18,13 @@ import { setGlow } from "./glow";
 import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";
 import { setGhost, setGhostOpacity } from "./ghost";
-import { buildAppliance, paintSign, type ApplianceParts, type SignFace } from "./appliance-meshes";
+import {
+  buildAppliance,
+  paintSign,
+  PITCH_DECK,
+  type ApplianceParts,
+  type SignFace,
+} from "./appliance-meshes";
 import { buildIngredientSample, buildItemModel } from "./models";
 import { buildHighlight } from "./overlay-meshes";
 import { PALETTE } from "./palette";
@@ -43,6 +49,8 @@ type Visual = ApplianceParts & {
   dialFlash: number;
   /** How far the bin lid is still flipped open, 1..0. */
   binOpen: number;
+  /** How much of the delivery has arrived on this square, 0..1. See `syncStall`. */
+  presence: number;
   /**
    * What this stall slot is currently *showing*, as a string.
    *
@@ -78,9 +86,6 @@ export class ApplianceViews {
   private stranded = new Set<number>();
   private strandedFor = -1;
 
-  /** Reused by `viewingAngle`, which runs every frame. */
-  private readonly scratch = new THREE.Vector3();
-
   constructor(
     private readonly scene: THREE.Scene,
     private readonly camera: THREE.Camera,
@@ -89,18 +94,6 @@ export class ApplianceViews {
   /** The object an appliance is drawn as, for things that hang off it. */
   root(id: number): THREE.Object3D | undefined {
     return this.visuals.get(id)?.root;
-  }
-
-  /**
-   * Which way to turn something so its front faces the camera.
-   *
-   * Read off the camera itself rather than from `orientation.ts`, so a face
-   * swings round *with* the room while the view is easing between corners
-   * rather than snapping ahead of it.
-   */
-  private viewingAngle(): number {
-    const forward = this.scratch.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
-    return Math.atan2(-forward.x, -forward.z);
   }
 
   /** Show this appliance's contextual name for one frame. */
@@ -232,13 +225,12 @@ export class ApplianceViews {
   }
 
   /**
-   * Dress a card stand: the dish on the card, what the card says, and the lift
-   * that means somebody is about to choose it.
+   * Dress a recipe board: the dish on the card, what the card says, and the
+   * lift that means somebody is about to choose it.
    *
-   * The easel stands there either way — it is furniture on the apron, and an
-   * invisible thing to walk into would be worse than an empty one. What comes
-   * and goes is the card, which is the same grammar as the stall's shutters:
-   * whether there is a decision to make is legible from across the patio.
+   * The board is bolted to the caravan either way. What comes and goes is the
+   * paper on it, which is the same grammar as the hatch: whether there is a
+   * decision to make is legible from across the grass.
    */
   private syncCards(
     world: World,
@@ -247,11 +239,12 @@ export class ApplianceViews {
     dt: number,
     time: number,
   ): void {
-    // The easel turns to face whoever is looking at it. Everything else in the
-    // kitchen is a box and reads from any corner; this one has a *face*, and a
-    // recipe card showing its back to the camera is the one appliance a turned
-    // view could make unreadable.
-    visual.root.rotation.y = this.viewingAngle();
+    // Pasted flat on the outside of the shell, facing whoever walks up to it.
+    // The same rule the sign uses on the inside face of the same wall, and for
+    // the same reason: which wall a poster is on is a fact about the building,
+    // not about where the camera happens to be.
+    const face = outward(world.room, appliance.tile);
+    visual.root.rotation.y = Math.atan2(face.x, face.y);
 
     // Cards are a morning thing. A day opening takes them with it, and the
     // simulation agrees — `beginDay` clears them — but the phase is what the
@@ -268,13 +261,14 @@ export class ApplianceViews {
     }
     if (visual.card) visual.card.visible = recipe !== undefined;
 
-    // Armed: the card lifts off the easel and sways, so a second player across
-    // the patio can see a choice being made before it is made.
+    // Armed: the card lifts off the board and sways, so a second player across
+    // the pitch can see a choice being made before it is made. Lifted *within*
+    // its mount, which is what puts the board's own height and lean in the
+    // builder rather than half here and half there.
     const target = appliance.armedBy !== null && recipe ? 1 : 0;
     visual.armed += (target - visual.armed) * ease(12, dt);
     if (visual.card) {
-      const base = applianceDef(appliance.kind).height * 0.98;
-      visual.card.position.y = base + visual.armed * 0.26;
+      visual.card.position.set(0, visual.armed * 0.24, visual.armed * 0.1);
       visual.card.rotation.z = Math.sin(time * 3.4) * 0.05 * visual.armed;
       visual.card.scale.setScalar(1 + visual.armed * 0.08);
     }
@@ -355,7 +349,7 @@ export class ApplianceViews {
       recipe.steps.join(" \u2192 "),
       needs ? `needs: ${needs}` : "",
     ]);
-    label.position.y = applianceDef(appliance.kind).height + 1.5;
+    label.position.y = applianceDef(appliance.kind).height + 0.5;
     label.visible = false;
     visual.root.add(label);
     visual.label = label;
@@ -377,6 +371,9 @@ export class ApplianceViews {
       dialAlpha: 0,
       dialFlash: 0,
       binOpen: 0,
+      // Starts absent and arrives on the first frame of a morning, so a client
+      // joining mid-service does not watch three deliveries fly away.
+      presence: 0,
       offerKey: "",
       cardKey: "",
       armed: 0,
@@ -388,25 +385,72 @@ export class ApplianceViews {
   }
 
   /**
-   * Dress a stall slot: the goods on the counter, the price above them, and
-   * the shutters that say whether any of it is available.
+   * Stand this morning's delivery on its square, and price it.
    *
-   * The goods are a **real, shrunken instance of the appliance** rather than an
-   * icon, because the thing you are about to buy and the thing that will be
-   * standing in your kitchen ought to be recognisably the same object. It costs
-   * one `buildAppliance` per slot per morning.
+   * The goods are a **real, full-size instance of the appliance**, because the
+   * thing you are about to buy and the thing that will be standing in your
+   * kitchen are the same object and there is no reason to draw two of them. It
+   * costs one `buildAppliance` per square per morning.
+   *
+   * Everything vanishes when the day opens — the pallet with it — so the
+   * paving is bare all through service and there is no closed shop to draw. A
+   * delivery that has not been carried in by opening time was collected, which
+   * is both the truth about the simulation (the slots re-roll overnight) and
+   * the reason nothing out here needs a shutter.
    */
   private syncStall(world: World, appliance: Appliance, visual: Visual, dt: number): void {
     const open = world.phase === "build";
-    if (visual.shutter) visual.shutter.visible = !open;
 
-    // A slot that has handed something out today is empty, whatever it still
-    // remembers being worth — the same rule the simulation applies.
-    const offer = open && appliance.taken === null ? appliance.offer : null;
-    const key = offer ? offerKeyOf(offer) : "";
+    // The delivery is set down in the morning and collected when the day opens,
+    // and both are worth *seeing*: three things blinking into existence is the
+    // one move a diorama may not make, and it is also the only cue a player
+    // gets that the shop has closed. It drops the last half-metre and settles
+    // with the squash the chefs get when what they are holding changes, then
+    // lifts and stretches away again — one idiom, played backwards.
+    //
+    // **Arriving and leaving are not the same event, so they are not the same
+    // motion.** A delivery is set down square by square, so the rate carries a
+    // wobble seeded from the square's own id and the three land a beat apart.
+    // Opening the restaurant is one moment — the same keypress for all of them
+    // — so they go together, and briskly: a slow exit is the shop asking for
+    // attention at exactly the point the day is asking for it instead.
+    //
+    // Applied to the pallet group rather than the root, because `place()`
+    // writes the root's position every frame.
+    // Arriving is eased, because an ease *settles* — it is the right curve for
+    // something being put down. Leaving is **linear**, because an ease never
+    // actually arrives: the tail of it left a full-size pallet hanging at the
+    // top of its lift for the best part of a second, having visibly stopped
+    // moving, waiting for a number to get small enough to hide it.
+    if (open) {
+      visual.presence += (1 - visual.presence) * ease(7 + (appliance.id % 5) * 0.9, dt);
+    } else {
+      visual.presence = Math.max(0, visual.presence - dt * 3.6);
+    }
+
+    const pitch = visual.pitch;
+    if (pitch) {
+      const away = 1 - visual.presence;
+      // And it shrinks out over the last half of the trip, so the moment it
+      // stops moving is the moment it is gone rather than a cut a frame later.
+      const grow = Math.min(1, visual.presence * 2);
+      pitch.visible = visual.presence > 0.002;
+      pitch.position.y = away * away * 0.75;
+      pitch.scale.set(grow * (1 + 0.1 * away), grow * (1 - 0.16 * away), grow * (1 + 0.1 * away));
+    }
+
+    // A square that has handed something out today is empty, whatever it still
+    // remembers being worth — the same rule the simulation applies. Not gated
+    // on the phase, though: what is standing here has to *ride the pallet out*
+    // at opening rather than evaporating off it as it goes.
+    const offer = appliance.taken === null ? appliance.offer : null;
+    // The price is the half that is gated, because a label on a shop that has
+    // closed is a price nobody may pay. `open` is on the key so that closing
+    // rebuilds the label without rebuilding the goods.
+    const key = offer ? `${offerKeyOf(offer)}|${open}` : "";
     if (key !== visual.offerKey) {
       visual.offerKey = key;
-      this.restock(appliance, visual, offer);
+      this.restock(visual, offer, open);
     }
 
     // Red for as long as the refusal is worth noticing, then back to white.
@@ -416,13 +460,13 @@ export class ApplianceViews {
       const was = visual.refused;
       visual.refused = Math.max(0, visual.refused - dt * 1.6);
       if (was === 1 || (visual.refused === 0 && offer)) {
-        this.priceLabel(appliance, visual, offer, visual.refused > 0);
+        this.priceLabel(visual, offer, visual.refused > 0);
       }
     }
   }
 
-  /** Put this morning's goods on the counter, and their price over them. */
-  private restock(appliance: Appliance, visual: Visual, offer: Offer | null): void {
+  /** Stand this morning's goods on the square, and their price over them. */
+  private restock(visual: Visual, offer: Offer | null, sellable: boolean): void {
     const counter = visual.counter;
     if (counter) {
       // Detached first, then freed: `clear()` mutates the array being walked.
@@ -431,15 +475,10 @@ export class ApplianceViews {
       for (const child of old) disposeSubtree(child);
       if (offer) counter.add(goodsModel(offer));
     }
-    this.priceLabel(appliance, visual, offer, false);
+    this.priceLabel(visual, sellable ? offer : null, false);
   }
 
-  private priceLabel(
-    appliance: Appliance,
-    visual: Visual,
-    offer: Offer | null,
-    refused: boolean,
-  ): void {
+  private priceLabel(visual: Visual, offer: Offer | null, refused: boolean): void {
     if (visual.label) {
       visual.root.remove(visual.label);
       disposeSubtree(visual.label);
@@ -450,7 +489,11 @@ export class ApplianceViews {
       `${offerLabel(offer)}  $${offerPrice(offer)}`,
       refused ? PALETTE.progressBurn : 0xffffff,
     );
-    sprite.position.y = applianceDef(appliance.kind).height + 1.35;
+    // Over the goods rather than over the square, because the goods are what is
+    // standing here: a plate needs the label at plate height and an oven needs
+    // it a foot higher. This is the whole of the shop's signage — contextual,
+    // like every other appliance's name, and shown only to a chef facing it.
+    sprite.position.y = offerHeight(offer) + 0.98;
     sprite.visible = false;
     visual.root.add(sprite);
     visual.label = sprite;
@@ -653,15 +696,18 @@ function offerKeyOf(offer: Offer): string {
  * The goods, shrunk onto the counter.
  *
  * A whole appliance at a third scale, not a bespoke icon: a fryer on the stall
- * and a fryer in the kitchen are the same object seen twice, and building the
- * sample any other way is how the two drift into looking like different things.
+ * and a fryer in the kitchen are the same object, seen before and after buying
+ * it, and building it any other way is how the two drift into looking like
+ * different things. It is drawn at **very nearly full size** for the same
+ * reason: the shop is not a picture of an oven, it is an oven standing outside
+ * — see `GOODS_SCALE` for the fifth that comes off it and why.
  * Plates are the exception because a plate is not an appliance — it is stock,
  * and `models.ts` already knows how to draw one.
  */
 function goodsModel(offer: Offer): THREE.Object3D {
   if (offer.good === "plate") {
     const plate = buildIngredientSample("plate");
-    plate.scale.setScalar(0.85);
+    plate.scale.setScalar(0.85 * GOODS_SCALE);
     return plate;
   }
 
@@ -683,8 +729,24 @@ function goodsModel(offer: Offer): THREE.Object3D {
     heldBy: null,
     tip: 0,
   }).root;
-  sample.scale.setScalar(0.34);
+  sample.scale.setScalar(GOODS_SCALE);
   return sample;
+}
+
+/**
+ * A shade under full size.
+ *
+ * The goods are the same models that will stand in the kitchen — that is the
+ * whole idea — but a full-size oven on a pallet swallows the pallet, and the
+ * pallet is what says the thing was *delivered* rather than installed. A fifth
+ * off leaves the silhouette unmistakable and the timber visible underneath.
+ */
+const GOODS_SCALE = 0.8;
+
+/** How high the top of the goods is, pallet included, so the price sits over it. */
+function offerHeight(offer: Offer): number {
+  const model = offer.good === "plate" ? 0.12 : applianceDef(offer.kind).height;
+  return PITCH_DECK + model * GOODS_SCALE;
 }
 
 /** The warning ring's own material, narrowed rather than asserted. */

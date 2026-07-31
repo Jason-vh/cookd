@@ -3,10 +3,10 @@
 # The menu
 
 Every kitchen starts with **one dish**. On the morning of day 2, and every third
-morning after it, two recipe cards stand on the apron beside the market stall,
-and the room takes one. The card unlocks the dish *and delivers everything the
-kitchen lacks for it* — the fryer, the potato crate — free, onto the floor,
-before service.
+morning after it, two recipe posters go up on the outside wall either side of
+the door, and the room takes one. The card unlocks the dish *and delivers
+everything the kitchen lacks for it* — the fryer, the potato crate — free, onto
+the floor, before service.
 
 The one-sentence version: **the level is the starting point, the cards are the
 progression, the kitchen is the record of every choice** — and by day 10, no two
@@ -157,7 +157,7 @@ Schema 5 carries `unlocked` and `unlockedDay`.
 
 Next:
 
-- [the-shop.md](the-shop.md) — the other place on the apron, and the morning both stand in
+- [the-shop.md](the-shop.md) — the other thing waiting outside, and the morning both stand in
 - [content.md](content.md) — the recipes themselves, and what a dish is made of
 
 [Back to the README](../README.md).

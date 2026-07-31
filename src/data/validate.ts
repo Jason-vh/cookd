@@ -8,8 +8,9 @@ import { BIOMES, type DaylightKey } from "./biomes";
 import { LEVELS, runSeams, type LevelDef } from "./level";
 import type { Rect, Vec2, World } from "../sim/types";
 import { hatchOf, servingSpot } from "../sim/lane";
+import { reachableFrom, seatsAround } from "../sim/pathing";
 import { canReach } from "../sim/walls";
-import { createWorld, isSolid } from "../sim/world";
+import { createWorld, isSolid, tileIndex } from "../sim/world";
 import { BACKFILL_RECIPES, CARD_SLOTS, STARTING_RECIPES, TIER_WEIGHT } from "./progression";
 import { COMBINES, RAW_INGREDIENTS, RECIPES, RECIPE_NEEDS, TRANSFORMS } from "./recipes";
 
@@ -94,7 +95,7 @@ export function validateContent(): string[] {
     byDish.add(dish);
     if (recipe.steps.length === 0) problems.push(`${where}: no steps`);
     if (recipe.patience <= 0) problems.push(`${where}: patience must be positive`);
-    // A tier the card stand has no weight for would be offered at weight 1 by
+    // A tier the posters have no weight for would be offered at weight 1 by
     // the fallback, which is a silent tuning decision nobody made.
     if (!Object.hasOwn(TIER_WEIGHT, recipe.tier)) {
       problems.push(`${where}: tier ${recipe.tier} has no weight in TIER_WEIGHT`);
@@ -284,11 +285,24 @@ export function levelProblems(level: LevelDef): string[] {
   // building with pieces missing rather than an error.
   const { room, size } = level;
   if (room.width <= 0 || room.height <= 0) say("a room with no floor in it");
-  // A tile of paving outside the walls, at least: the stall stands on it, and a
-  // shop nobody can walk to is no shop.
+  // A tile of paving outside the walls, at least: everybody who comes in walks
+  // round the building to do it, and a shop nobody can walk to is no shop.
   if (room.x < 1 || room.y < 1) say("no patio between the building and the grid's edge");
   if (room.x + room.width + 1 > size.width || room.y + room.height + 1 > size.height) {
     say("no patio between the building and the grid's edge");
+  }
+  // Paving is what makes a square somewhere to stand, so paving off the grid is
+  // a place the game believes in and nobody can reach — and `createWorld`
+  // stamps tiles by index, so it would be written into somebody else's row.
+  const grid: Rect = { x: 0, y: 0, ...size };
+  for (const area of level.paving) {
+    if (area.width <= 0 || area.height <= 0) say("a paved area with no ground in it");
+    else if (
+      !within(grid, area.x, area.y) ||
+      !within(grid, area.x + area.width - 1, area.y + area.height - 1)
+    ) {
+      say(`paving off the grid at ${area.x},${area.y}`);
+    }
   }
   for (const line of level.walls) {
     if (line.from.x !== line.to.x && line.from.y !== line.to.y) say("a diagonal wall");
@@ -318,13 +332,25 @@ export function levelProblems(level: LevelDef): string[] {
     say("the door is not against the building's wall, so no customer can ever arrive");
   }
 
-  // And the sign hangs on that wall, so it needs one to hang on. Two things
-  // depend on it: `inward` decides which way the sign faces from the seam it
-  // stands against, and `buildWalls` leaves that seam at full height so the
-  // board is never screwed to a wall the camera has cut away.
+  // The same question from the other side of the masonry: a recipe poster is
+  // pasted on the *outside* of the shell, so its square is the paving directly
+  // against it. One tile further out and it is a poster floating in the park,
+  // which nothing would say out loud — `outward` would still answer, and it
+  // would answer wrongly.
+  const outsideShell = (tile: Vec2): boolean =>
+    (tile.x === room.x - 1 || tile.x === room.x + room.width) !==
+    (tile.y === room.y - 1 || tile.y === room.y + room.height);
+
+  // And the sign hangs on that wall from the inside, so it needs one to hang
+  // on. Two things depend on it: `inward` decides which way the sign faces from
+  // the seam it stands against, and `addWalls` leaves that seam at full
+  // height so the board is never screwed to a wall the camera has cut away.
   for (const placement of level.appliances) {
     if (placement.kind === "sign" && !againstShell(placement.at)) {
       say(`a sign at ${placement.at.x},${placement.at.y} with no wall to hang on`);
+    }
+    if (placement.kind === "cards" && !outsideShell(placement.at)) {
+      say(`a poster at ${placement.at.x},${placement.at.y} with no wall to hang on`);
     }
   }
 
@@ -339,7 +365,7 @@ export function levelProblems(level: LevelDef): string[] {
     seen.add(key);
     if (x < 0 || y < 0 || x >= size.width || y >= size.height) say(`${key} is off the grid`);
     // Movable things belong indoors. Immovable ones are furniture of the place
-    // — the stall on the patio, the sign in the wall — and place themselves.
+    // — the stall in the market, the sign in the wall — and place themselves.
     else if (APPLIANCES[placement.kind].movable && !within(room, x, y)) {
       say(`a ${placement.kind} outside the building at ${key}`);
     }
@@ -358,6 +384,24 @@ export function levelProblems(level: LevelDef): string[] {
   for (const spawn of level.spawns) {
     if (isSolid(world, spawn.x, spawn.y))
       say(`a chef spawns inside something at ${spawn.x},${spawn.y}`);
+  }
+
+  // Everything the level stands down has to be walked up to. The shop is why
+  // this is checked rather than assumed: the goods stand on squares of ordinary
+  // paving now, and a level is free to put one of those squares somewhere that
+  // has been walled off or boxed in by its own furniture. A delivery nobody can
+  // reach is money nobody can spend — in silence.
+  const reachable = reachableFrom(world, level.door);
+  for (const appliance of world.appliances.values()) {
+    const { x, y } = appliance.tile;
+    // Something on a wall is reached by standing under it, so the question for
+    // a poster is whether its own square can be got to.
+    const found = APPLIANCES[appliance.kind].mounted
+      ? reachable.has(tileIndex(world, x, y))
+      : seatsAround(world, appliance.tile).some((tile) =>
+          reachable.has(tileIndex(world, tile.x, tile.y)),
+        );
+    if (!found) say(`nobody can walk up to the ${appliance.kind} at ${x},${y}`);
   }
 
   // A kitchen serves people at tables or cars at a hatch, and which one it is
@@ -391,11 +435,11 @@ export function levelProblems(level: LevelDef): string[] {
   if (count("stall") !== STALL_SLOTS) {
     say(`${count("stall")} stall slots, expected ${STALL_SLOTS}`);
   }
-  // The card stand is the only way a menu grows, and `restockCards` fills
+  // The posters are the only way a menu grows, and `restockCards` fills
   // exactly the tiles the level puts down: a level with one stand would offer
   // no choice, which is the one thing it is for.
   if (count("cards") !== CARD_SLOTS) {
-    say(`${count("cards")} card stands, expected ${CARD_SLOTS}`);
+    say(`${count("cards")} recipe posters, expected ${CARD_SLOTS}`);
   }
   // The sign is the only way into service, so a kitchen without one can never
   // open — the most complete failure a level can ship. Exactly one: two signs

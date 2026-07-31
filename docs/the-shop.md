@@ -1,14 +1,14 @@
-<!-- The morning, the market stall, and what a day is worth. -->
+<!-- The morning, the delivery outside the door, and what a day is worth. -->
 
 # The shop
 
-A day begins in the **build phase**, and outside the door there is a **market
-stall**. The two are one feature: money had nowhere to go, so it meant nothing,
-and a build phase that arrived as the aftermath of a day was a place to tidy up
-rather than a place to decide.
+A day begins in the **build phase**, and standing on the paving outside there is
+a **delivery**: three things on pallets, for sale, drawn as themselves. The two are one feature:
+money had nowhere to go, so it meant nothing, and a build phase that arrived as
+the aftermath of a day was a place to tidy up rather than a place to decide.
 
-The one-sentence version: **zero new verbs, one new place.** `Grab` does
-everything, the stall is the entire interface, and demand following seats makes
+The one-sentence version: **zero new verbs, and zero new objects.** `Grab` does
+everything, the goods are the entire interface, and demand following seats makes
 every purchase a piece of self-chosen escalation.
 
 **Nothing is ever deducted.** There was a nightly rent here once, and it was
@@ -41,11 +41,11 @@ phase kind for "morning" would have been two states describing one thing.
 
 Opening the day used to be a keypress: `Start`, or a pause-menu item, watched
 for by the phase system. It was the only verb in the game that was not a chef
-doing something to an object — the stall's own lesson, *a shop is a place, not a
+doing something to an object — the shop's own lesson, *a shop is a place, not a
 menu*, applied to everything except the moment the restaurant opens.
 
 So it is a sign now, standing against the wall beside the door: level furniture
-like the stall and the card stand, immovable, never saved, answering a `Grab` on
+like the delivery outside, immovable, never saved, answering a `Grab` on
 its own terms before any other rule can refuse it. **Zero new verbs.** It used
 to hang *in* the wall, back when a wall was a solid square there was room to
 hang something in; walls are lines between squares now, so it stands on the
@@ -93,12 +93,12 @@ which the stats panel is already saying.
 Movement only settles the banner when there is no report left on it: a report is
 something to read, and reading it is not a reason to lose it.
 
-## The stall
+## The delivery
 
-The shop is a **place, not a menu**. Three slots stand on the west apron of the
-patio, beside the door: stocked each morning, shuttered during service. The
-shutters are not decoration — they are the answer to "can I buy something
-mid-rush", given from across the room without a message.
+The shop is a **place, not a menu** — and, as of the third attempt at it, not an
+object either. Three squares of paving outside the door, one thing standing on
+each of them, gone the moment the day opens. See
+[below](#there-is-no-shop) for why the shop is nothing at all.
 
 Everything it does, it does through `Grab`:
 
@@ -141,7 +141,7 @@ until the shop refuses to buy anything:
 
 That list used to justify itself as *"appliances a kitchen cannot run without,
 and cannot get back on its own"*. The second clause was true when it was written
-and **the stall made it false** — a kitchen can now buy back almost anything. A
+and **the shop made it false** — a kitchen can now buy back almost anything. A
 rationale that has quietly stopped applying is worse than none, because it is
 the sentence the next person reasons from.
 
@@ -180,7 +180,7 @@ invisible.
 It was one warning before the shop ("tables can't be reached from the door"), on
 an explicit principle: *a dining room nobody can walk into is the one
 build-phase mistake that silently ends the run, so it is said out loud rather
-than prevented.* The stall added a dozen more ways to reach the same place, and
+than prevented.* The shop added a dozen more ways to reach the same place, and
 they are all that same sentence.
 
 That sentence now has a twin from the other side of the pass. The same flood
@@ -212,8 +212,11 @@ than listing every dish as a separate symptom.
 ### Stock
 
 Rolled each morning from **the room's seed and the day**, through a generator of
-its own. Not from `random(world)`: that stream is consumed by arrivals and
-seating, so two rooms on the same seed have diverged within a minute of opening.
+its own — and so is where the delivery lands, from the same stream in a fixed
+order, because it is one event: one morning, one delivery, one roll.
+
+Not from `random(world)`: that stream is consumed by arrivals and seating, so
+two rooms on the same seed have diverged within a minute of opening.
 Anything that must look identical on every client and is not sent over the wire
 has to come from something that does not move.
 
@@ -222,7 +225,7 @@ the **layout** message, which is where it belongs: a slot changes three times a
 morning and not at all during service, exactly like a counter. What is left in
 the slots is not derivable — it depends on what somebody bought — so it is
 synced rather than recomputed. A shop that is half-derived and half-synced is a
-shop where "my friend sees a different stall" is one missed field away, and no
+shop where "my friend sees a different hatch" is one missed field away, and no
 local test catches that; [two Hosts on one seed](../src/sim/shop.test.ts) do.
 
 Weights live in `data/economy.ts` as `Record<ApplianceKind, number>`, so adding
@@ -230,7 +233,7 @@ an appliance is a build error naming the key. `0` means "not sold", and having
 to say so is the point — the alternative is a new kind that silently never
 appears in a shop.
 
-**The stall stocks for *this* restaurant.** Crates hold ingredients the room's
+**The delivery is for *this* restaurant.** Crates hold ingredients the room's
 own [unlocked recipes](the-menu.md) start from — tomatoes from the first
 morning, cheese only once something takes cheese — and an appliance kind no
 unlocked recipe can use is not offered at all. A fryer before fries exist is an
@@ -268,7 +271,7 @@ rather than being arranged, which is the only reason to trust it.
 
 ### Upgrades
 
-Everything the stall sold at first was another one of something: a second board
+Everything the shop sold at first was another one of something: a second board
 means two people can chop. An **upgrade** is the other kind of purchase — the
 same job done better by one person.
 
@@ -363,16 +366,16 @@ A table with a dirty plate on it is not free, which is the same rule seating
 already applies. Falling behind on bussing quietly slows the door; catching up
 opens it again.
 
-## The patio ring
+## There is no shop
 
-The stall needed somewhere to stand that was not the kitchen, and the answer was
-to make the paving real. The level grid now carries a **two-tile walkable ring**
-all round the building, matching the patio the renderer was already drawing.
+The shop needed somewhere to stand that was not the kitchen, and the answer was
+to make the paving real: a **two-tile walkable ring** all round the building,
+matching the patio the renderer was already drawing.
 
 **Walkable = paved.** What a player sees, what collision allows and what the
 simulation believes are one map rather than three that agree by coincidence —
-including the customers' walk up to the door, which now routes over the same
-tiles as everybody else's.
+including the customers' walk up to the door, which routes over the same tiles
+as everybody else's.
 
 - Patio tiles are `placeable: false`. `canPlace` asks the tile, not "is this
   outside", so the ring is refused by the same rule that refuses the paving —
@@ -384,12 +387,92 @@ tiles as everybody else's.
   worked from the paving behind it. A wall is a line now, and interaction keeps
   its one rule — face the tile you can reach.
 
-The ring shifted every coordinate in the kitchen by two, which no migration can
-honestly repair: a layout is relative to walls that have moved. So the level's
-**id changed**, and stale saves are dropped cleanly rather than loaded
-misaligned. That is what the id is for.
+That claim held for one shape only, and quietly: the grid *was* the building
+plus its ring, so "in bounds" and "somewhere to stand" were the same sentence
+and `isSolid` never had to ask. **Paving is data** now — `LevelDef.paving`, a
+list of rectangles — and everything reads that one list: tiles are walkable
+inside it and scenery outside it, the renderer lays one slab per rectangle, and
+the prop scatter keeps off exactly the same ground.
 
-That change also exposed a bug in the server: a save it *refused* used to make
+### Three attempts, and what was wrong with all of them
+
+The shop was a row of **market stalls** on the apron, then a **supply caravan**
+parked on the grass. Both were rebuilt carefully and both were wrong, and it
+took two goes to see that they were wrong in the same way, because the fault was
+in the thing they had in common rather than in either of them:
+
+> Both were **a structure that existed only because the game needed somewhere to
+> put a price.** Every other object outside the walls is something a restaurant
+> would have anyway. A market for one restaurant is a shop in a field; a caravan
+> parked forever at the same corner is furniture pretending to be a vehicle.
+> Restyling could not fix that, and each restyle made it bigger.
+
+So the third answer is to build nothing. **What stands outside is the goods.**
+Not a stall with an oven in it — an oven, the same mesh that would stand in
+your kitchen, on a pallet on the paving, at whatever angle it was put down at
+and a fifth off full size so the pallet under it still reads. You
+walk up to it and press `Grab`, and you are carrying it.
+
+Three things make that work, and not one of them is an object:
+
+- **The rule was already there.** Nothing may be placed on the paving, and never
+  could be — `canPlace` asks the tile. So *anything standing outside is not
+  yours yet*, always, with no exceptions to learn. That fact had been true and
+  silent since the ring was built; the shop is the first thing to say it out
+  loud, and it says it without a sign, a shutter or a price board.
+- **The price is already contextual.** Appliance labels appear only for the one
+  a chef is facing. A price is the same sentence with a number on the end, so
+  walking up to the oven is what tells you it costs $160 — and the world stays
+  free of floating text, which is the rule the whole diorama is built on.
+- **They stopped having to be in a row — or in the same place twice.** The row
+  existed because a stall is a structure and structures are straight. Three
+  independent objects can go wherever a delivery lands, so they are **rolled
+  each morning**: paving within a few squares of the door, never the row people
+  walk in along, each turned by its own `jitter` like everything else in the
+  game. The level still lists three squares, because a level says what a kitchen
+  has; where they stand is only true of the first morning.
+
+All the renderer draws is a **pallet** under each — about the least a delivery
+can stand on, and the one thing that says *this was dropped off* rather than
+*this is a display*. An empty one is how a square says the morning's delivery
+has already been carried inside, and a lone plate gets something to sit on
+instead of a bare slab. Everything vanishes at opening: the goods, the pallets,
+the lot.
+A delivery not taken in by the time you turn the sign was collected, which is
+both the truth about the simulation (the squares re-roll overnight) and the
+reason nothing out there needs a closed state at all. The shutters are gone.
+
+### The recipe posters
+
+The card stand was an easel standing a tile away from the stall, saying the same
+thing as it: *something about tomorrow is waiting out here*. It is now a poster
+pasted on the **outside of the kitchen wall**, one either side of the door.
+
+Posters are `mounted`, like the sign on the inside of the same masonry — they
+hang on a wall rather than standing on a square, so the paving under them is
+still paving anybody may walk across, and the level loses two obstacles it never
+wanted. `mountSeam` answers which line of shell a mounted thing is on from
+either face, so `addWalls` leaves that piece at full height and a poster is
+never stuck to a wall the camera has cut down to a lip.
+
+### What it cost
+
+Nothing, in the end — this version is **smaller than what it replaced.** The
+stall meshes, the caravan, its hatch animation, the run query that kept five
+slices agreeing, the easel and six palette entries all went; what replaced them
+is a pallet, a poster, and `goodsModel` with the scale taken out.
+
+Two things still had to be true, and one is new:
+
+- **A delivery nobody can reach is money nobody can spend.** `validate.ts` flood
+  fills from the door and insists every piece of furniture has a square beside
+  it somebody can stand on — a poster is asked about its own square instead,
+  since that is where you stand to read it.
+- **Nothing inside the building moved**, so the level ids are unchanged and
+  saves survive.
+
+An earlier id bump exposed a bug in the server, and it is worth keeping the
+note: a save it *refused* used to make
 the room permanently unwritable, whatever the reason. "Stale" and "unreadable"
 are different answers — a file we cannot parse is quarantined, a file for a
 level that no longer exists is simply replaced. Without the split, an id bump

@@ -806,8 +806,11 @@ function walk(customer: Customer, dt: number, speed = customerSpeed(customer)): 
  * is a stretch of walk that no tile can describe. Clamping the spawn point into
  * bounds names the first tile that *can* — the outer edge of the patio ring, on
  * the door's row — and the flood fill takes it from there.
+ *
+ * The render layer lays the biome's path slabs from here too, so the paving
+ * under the walk on and the walk itself cannot drift apart.
  */
-function approachTile(world: World): Vec2 {
+export function approachTile(world: World): Vec2 {
   return {
     x: Math.min(world.width - 1, Math.max(0, world.door.x - OFF_GRID)),
     y: Math.min(world.height - 1, Math.max(0, world.door.y)),

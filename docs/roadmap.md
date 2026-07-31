@@ -93,8 +93,9 @@ Bigger:
 ## The build phase
 
 The build phase is the **morning of the upcoming day**, and it is where the shop
-lives. [the-shop.md](the-shop.md) covers the stall, the end-of-day card and the
-patio ring they stand on; what follows is the part that predates all of it.
+lives. [the-shop.md](the-shop.md) covers the delivery outside the door, the
+end-of-day card and the paving both stand on; what follows is the part that
+predates all of it.
 
 A held appliance is drawn as a **ghost standing on the tile it would go to**,
 not carried on the chef's head. Balancing an oven on someone's hat is funny
@@ -123,7 +124,7 @@ rather than a property of one interaction.
 `canPlace()` lives in `sim/queries.ts` and is used by both the rule and the
 ghost, so the preview and the placement can never disagree. It asks the *tile*
 whether it is placeable rather than asking where the building ends, which is
-what keeps the patio ring out of the kitchen without the function growing a
+what keeps the paving out of the kitchen without the function growing a
 concept of "outside".
 
 ## Saving

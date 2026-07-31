@@ -14,12 +14,21 @@ import {
   unreachableTables,
 } from "./queries";
 import { isDirty, isPlate, makeItem, specKey } from "./items";
-import { seatsAround } from "./pathing";
+import { reachableFrom, seatsAround } from "./pathing";
 import { across, edgeSeam, wallBetween } from "./walls";
 import { LANE_QUEUE, laneCars, laneSpot } from "./lane";
 import { snapshot } from "../save";
 import { plateCount, platesInWorld } from "./plates";
-import type { Appliance, ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
+import type {
+  Appliance,
+  ApplianceKind,
+  Customer,
+  Item,
+  Player,
+  PlayerInput,
+  Vec2,
+  World,
+} from "./types";
 import { DOOR_QUEUE, DOOR_WAIT, eatTime } from "./systems/customers";
 import {
   addPlayer,
@@ -138,8 +147,12 @@ const PASS = [8, 5] as const;
 const TABLE = [3, 3] as const;
 /** The dining room's other table, for tests that need two people at once. */
 const TABLE2 = [3, 7] as const;
-/** The middle slot of the market stall, faced from the patio beside it. */
-const STALL = [0, 3] as const;
+/** One of the squares the morning's delivery stands on. Rolled, so it is asked
+ * for rather than written down — see `landDelivery`. */
+function stallTile(world: World): Vec2 {
+  const slot = [...world.appliances.values()].find((a) => a.kind === "stall")!;
+  return slot.tile;
+}
 /** The sign, standing against the wall beside the door, faced from the east. */
 const SIGN = [2, 4] as const;
 
@@ -1031,7 +1044,7 @@ describe("the sign by the door", () => {
   });
 
   test("it is furniture of the place: immovable, and never saved", () => {
-    // The same contract as the stall and the card stand. A sign a player could
+    // The same contract as the shop's squares and the posters. A sign a player could
     // pick up and sell is a kitchen that can lose the ability to open.
     const world = createWorld(LEVEL, 1);
     const sign = [...world.appliances.values()].find((a) => a.kind === "sign")!;
@@ -1269,33 +1282,52 @@ describe("walls between blocks", () => {
   });
 });
 
-describe("the patio ring", () => {
-  test("a chef can walk right round the building, and no further", () => {
+describe("the paving, and the ground beyond it", () => {
+  const walk = (world: World, dx: number, dy: number, ticks: number): void => {
+    const inputs = idle();
+    inputs[0]!.move = { x: dx, y: dy };
+    for (let i = 0; i < ticks; i++) step(world, inputs);
+  };
+
+  test("a chef can walk right round the building, and the grass stops them", () => {
     const world = makeWorld();
     const player = world.players[0]!;
     player.pos = { x: 0.5, y: 0.5 };
     player.prevPos = { ...player.pos };
 
     // East along the top of the ring, then south down its far side. Walls stop
-    // them going in; the edge of the world stops them going out.
-    const walk = (dx: number, dy: number, ticks: number): void => {
-      const inputs = idle();
-      inputs[0]!.move = { x: dx, y: dy };
-      for (let i = 0; i < ticks; i++) step(world, inputs);
-    };
-
-    walk(1, 0, 400);
+    // them going in, and the end of the paving stops them going out — which is
+    // no longer the same line as the edge of the grid, because the grid now
+    // carries whatever ground a level leaves unpaved as well.
+    walk(world, 1, 0, 400);
     expect(player.pos.x).toBeGreaterThan(world.width - 2);
     expect(player.pos.x).toBeLessThan(world.width);
     expect(player.pos.y).toBeCloseTo(0.5, 3); // never entered the building
 
-    walk(0, 1, 400);
-    expect(player.pos.y).toBeGreaterThan(world.height - 2);
-    expect(player.pos.y).toBeLessThan(world.height);
+    const apron = world.room.y + world.room.height + 2; // the ring's south edge
+    walk(world, 0, 1, 400);
+    expect(player.pos.y).toBeGreaterThan(apron - 1);
+    expect(player.pos.y).toBeLessThan(apron);
 
-    walk(-1, 0, 400);
+    walk(world, -1, 0, 400);
     expect(player.pos.x).toBeGreaterThan(0);
     expect(player.pos.x).toBeLessThan(2);
+  });
+
+  test("what is for sale stands on the paving, where nothing may be built", () => {
+    // There is no shop: the goods stand on the paving themselves, and the rule
+    // that makes that legible is the one the game already had — paving is
+    // walkable and unbuildable, so anything on it is not yours yet.
+    const world = makeWorld();
+    const at = stallTile(world);
+    const tile = world.tiles[at.y * world.width + at.x];
+    expect(tile?.walkable).toBe(true);
+    expect(tile?.placeable).toBe(false);
+
+    // And the delivery lands where somebody can get to it.
+    const reachable = reachableFrom(world, world.door);
+    const beside = seatsAround(world, at);
+    expect(beside.some((t) => reachable.has(t.y * world.width + t.x))).toBe(true);
   });
 
   test("nothing may be built on the paving, but the doorway is the player's business", () => {
@@ -1332,7 +1364,7 @@ describe("the patio ring", () => {
   test("a customer walks in over the paving, not through it", () => {
     // The approach used to be a straight line drawn from off-grid to the door,
     // which was fine while "outside" was painted scenery. It is tiles now, with
-    // a market stall standing on some of them, so the walk in is a real path
+    // things standing for sale on some of them, so the walk in is a real path
     // over the same map everybody else uses.
     const world = makeWorld();
     world.nextArrivalIn = 0;
@@ -1353,17 +1385,19 @@ describe("the patio ring", () => {
     ).toBe(true);
   });
 
-  test("the stall stands on the paving, and is not something you can pick up", () => {
+  test("a square of the shop is not something you can pick up", () => {
     const world = makeWorld();
-    const stall = applianceAtTile(world, STALL[0], STALL[1])!;
-    expect(stall.kind).toBe("stall");
-
-    // Immovable, so the build phase cannot lift it and cannot swap onto it.
+    // Immovable, so the build phase cannot lift the square out from under the
+    // goods standing on it, and cannot swap onto it either. Faced from a
+    // neighbour, since where the delivery landed this morning is a roll.
     endDay(world);
-    face(world.players[0]!, STALL[0], STALL[1], -1, 0);
+    const at = stallTile(world);
+    const stall = applianceAtTile(world, at.x, at.y)!;
+    const from = seatsAround(world, at)[0]!;
+    face(world.players[0]!, at.x, at.y, at.x - from.x, at.y - from.y);
     press(world, "grab");
     expect(world.players[0]!.carriedAppliance).toBeNull();
-    expect(applianceAtTile(world, STALL[0], STALL[1])).toBe(stall);
+    expect(applianceAtTile(world, at.x, at.y)).toBe(stall);
   });
 });
 

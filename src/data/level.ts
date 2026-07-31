@@ -14,10 +14,10 @@ import type { ApplianceKind, ItemSpec, Lane, Rect, Seam, Vec2 } from "../sim/typ
  * character counting was standing in for.
  *
  * One grid, one collision system: the dining room is simply the western half of
- * the same rectangle, and the **patio ring** around the outside is everything
- * the room and its walls do not cover. Walkable, never placeable, and where the
- * market stall stands — the walk around the building being the honest price of
- * using it.
+ * the same rectangle, and everything outside the walls is either **paving** or
+ * ground. The paving is stated rather than implied by the grid being exactly
+ * two tiles bigger than the building, which is what it used to be — a
+ * coincidence of dimensions rather than a fact anybody had written down.
  */
 
 /**
@@ -48,10 +48,23 @@ export type LevelDef = {
   name: string;
   /** Which biome from `data/biomes.ts` surrounds this kitchen. */
   biome: string;
-  /** The whole grid, patio included. */
+  /** The whole grid: the paving, and the ground around it things stand on. */
   size: { width: number; height: number };
   /** The building. Kitchen floor inside, walls on its edges, patio beyond. */
   room: Rect;
+  /**
+   * Paved ground outside the building: walkable, never placeable.
+   *
+   * **Walkable = paved**, and this is the one place it is written down. Every
+   * square a chef may stand on outside the walls is in one of these rectangles,
+   * and every slab the renderer lays is one of them, so the map a player sees
+   * and the map collision believes cannot come apart.
+   *
+   * A list rather than a ring, because a level's ground is its own business:
+   * anything a grid holds that is not in one of these rectangles is scenery,
+   * solid, and not somewhere anybody stands.
+   */
+  paving: Rect[];
   /**
    * The tile just inside the way in. The wall it stands against is the one with
    * the hole in it — see `doorSeam`.
@@ -96,6 +109,13 @@ export const wall = (x1: number, y1: number, x2: number, y2: number): WallRun =>
 export const at = (kind: ApplianceKind, x: number, y: number): Placement => ({
   kind,
   at: { x, y },
+});
+
+export const rect = (x: number, y: number, width: number, height: number): Rect => ({
+  x,
+  y,
+  width,
+  height,
 });
 
 /** `count` of a kind in a line, because a kitchen is mostly runs of things. */
@@ -167,6 +187,8 @@ export const PARK_KITCHEN: LevelDef = {
   // kitchen (x 8..19) | patio again (x 20..21).
   room: { x: 2, y: 2, width: 18, height: 7 },
   door: { x: 2, y: 5 },
+  // The apron, all the way to the edge of the grid.
+  paving: [rect(0, 0, 22, 11)],
   // The divider, stopping either side of the walk-through gap at row 4. What
   // fills the rest of it is two ordinary counters — see the pass, below.
   walls: [wall(8, 2, 8, 4), wall(8, 7, 8, 9)],
@@ -176,20 +198,24 @@ export const PARK_KITCHEN: LevelDef = {
   // the pass, and the walk back from the tables — is the build phase's problem,
   // and the point of it.
   //
-  // One board and two tables is a **deliberately thin** kitchen: the stall on
-  // the west apron is where the second of each comes from, and a shop nobody
+  // One board and two tables is a **deliberately thin** kitchen: the delivery
+  // outside the door is where the second of each comes from, and a shop nobody
   // needs to visit teaches nothing.
   //
   // **The level is a starting point, not an endpoint.** There is no fryer, no
   // oven, and no crate but tomato and lettuce, because a kitchen contains only
   // what its menu needs and the menu is one salad. Equipment enters this world
-  // through the card stand, which delivers whatever a new recipe wants — so by
+  // through the recipe posters, which deliver whatever a new recipe wants — so by
   // day ten no two rooms are the same restaurant.
   appliances: [
-    // The patio furniture, which belongs to the place rather than to anybody's
-    // build: the stall on the west apron, the card stand below it.
-    ...run("stall", 0, 2, 3, "y"),
-    ...run("cards", 0, 6, 2, "y"),
+    // Where the morning's delivery lands, and the posters beside the door.
+    // Grouped rather than lined up, and clear of the row customers walk in
+    // along — see the note on `stall` in `data/appliances.ts`.
+    at("stall", 1, 3),
+    at("stall", 0, 4),
+    at("stall", 0, 6),
+    at("cards", 1, 4),
+    at("cards", 1, 6),
     // The sign hangs on the wall beside the door, on the first tile inside it,
     // so opening the day is somebody walking to the door. It has to be against
     // the shell and not in a corner — that is the wall it is screwed to, and
@@ -239,12 +265,17 @@ export const BEACH_SHACK: LevelDef = {
   // galley (x 9..15) | patio again (x 16..17).
   room: { x: 2, y: 1, width: 14, height: 8 },
   door: { x: 2, y: 5 },
+  paving: [rect(0, 0, 18, 10)],
   // The divider, in four pieces: the gap at row 4, and the two rows the pass
   // counters stand against.
   walls: [wall(9, 1, 9, 2), wall(9, 3, 9, 4), wall(9, 5, 9, 6), wall(9, 7, 9, 9)],
   appliances: [
-    ...run("stall", 0, 2, 3, "y"),
-    ...run("cards", 0, 6, 2, "y"),
+    // The delivery, and the posters either side of the door.
+    at("stall", 1, 3),
+    at("stall", 0, 4),
+    at("stall", 0, 6),
+    at("cards", 1, 4),
+    at("cards", 1, 6),
     at("sign", 2, 4),
     // The galley: crates and bin along the top, wash-up along the bottom.
     crate("tomato", 10, 1),
@@ -306,20 +337,24 @@ export const HIGHWAY_STOP: LevelDef = {
   // than a quarter of an hour later.
   plates: 4,
   size: { width: 20, height: 10 },
-  // Patio (x 0..1) | the galley (x 2..17) | patio again (x 18..19), with the
-  // lane along the south apron at y = 8.
+  // Forecourt (x 0..1) | the galley (x 2..17) | forecourt again (x 18..19),
+  // with the lane along the south apron at y = 8.
   room: { x: 2, y: 2, width: 16, height: 6 },
   door: { x: 2, y: 4 },
+  paving: [rect(0, 0, 20, 10)],
   // No dividing wall: there is nothing to divide. The shell is the whole of it.
   walls: [],
   // Cars come off the road at the east end and pull away at the west, so the
   // lane runs *past* the building rather than into it. Nobody reverses.
   lane: { entry: { x: 19, y: 8 }, exit: { x: 0, y: 8 } },
   appliances: [
-    // The apron furniture, as every kitchen has it: the stall, the card stand,
-    // and the sign on the wall inside the door.
-    ...run("stall", 0, 2, 3, "y"),
-    ...run("cards", 0, 6, 2, "y"),
+    // The delivery and the posters, as every kitchen has them, and the sign on
+    // the wall inside the door.
+    at("stall", 1, 2),
+    at("stall", 0, 3),
+    at("stall", 0, 5),
+    at("cards", 1, 3),
+    at("cards", 1, 5),
     at("sign", 2, 5),
     // The back run: crates and prep at the west end, wash-up at the east.
     crate("tomato", 3, 2),

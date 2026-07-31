@@ -1,10 +1,10 @@
 /**
  * How a kitchen's menu grows: the cards, their cadence, and their weights.
  *
- * Deliberately not in `economy.ts`, whose subject is the *shop* — what a slot
- * holds and what a sale pays. The card stand looks like a shop
- * and is not one: nothing here has a price, and the only currency is the day
- * number. Two systems, two tables.
+ * Deliberately not in `economy.ts`, whose subject is the *shop* — what a square
+ * holds and what a sale pays. A recipe poster looks like a shop and is not one:
+ * nothing here has a price, and the only currency is the day number. Two
+ * systems, two tables.
  *
  * This is content: plain data, expect to iterate on every number in it.
  */
@@ -31,7 +31,7 @@ export const STARTING_RECIPES: string[] = ["salad"];
  */
 export const BACKFILL_RECIPES: string[] = ["salad", "fries", "pizza"];
 
-/** The morning the first card stand appears. */
+/** The morning the first recipe posters go up. */
 export const FIRST_CARD_DAY = 2;
 
 /** And every this-many mornings after it: 2, 5, 8, 11… */

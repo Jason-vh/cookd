@@ -75,6 +75,16 @@ Supporting decisions:
   of the rim, are what say "take from here" rather than "put down here".
   Text labels are **contextual** — only the appliance a chef is facing is named.
   A world full of floating text destroys the diorama illusion.
+- **The best object is no object.** The shop was three market stalls, then a
+  supply caravan, and both were structures built to hold a price tag. What is
+  there now is the **goods themselves**: the oven you are about to buy is an
+  oven standing on a pallet on the paving, drawn by the same builder that will
+  draw it in your kitchen — a fifth off full size, because at full size it
+  swallows the pallet it was delivered on. Nothing outside the walls is a thing the world does
+  not already contain, the objects are recognisable at a glance because they are
+  the objects, and they need no arrangement — three of them go where a delivery
+  lands rather than in the straight line a structure forced them into. All the
+  renderer adds is the pallet each one was dropped off on.
 - **Nothing is square to anything else.** The food was built with `wobble()`
   from the start and the furniture was not, so the ingredients looked handmade
   and the kitchen looked like CAD. Every appliance is now a little out of true —
@@ -255,6 +265,13 @@ The park deliberately includes **picnic tables**: they were set dressing and the
 seed of the dining room, back when there was not one. The beach has parasols for
 the same reason — a place should look like it knows what it is for.
 
+The same argument eventually deleted the shop. Three market booths lined up on
+the apron read as furniture that had been *spawned* there, and a caravan parked
+in the same spot read as a bigger one: neither could explain why it existed for
+one restaurant. The version that works has nothing to explain, because there is
+no shop — only the goods, standing outside on pallets, and a poster on the
+wall. See [the shop](the-shop.md#there-is-no-shop).
+
 ## Ingredient models
 
 `render/models.ts` holds a sculpted model for every ingredient and dish: a
@@ -415,12 +432,23 @@ live in [lessons.md](lessons.md).
   part of rotation a player can get wrong. Everything the art took for granted
   about one fixed angle had to follow it, and each of those is worth naming
   because each was invisible until the room moved: the walls nearest the camera
-  are a low lip so they do not occlude the kitchen, so they are rebuilt when the
-  camera crosses a corner (`View.buildWalls`); ovens wore glass doors on their
-  two visible sides and now wear one on each; the recipe card is the one
-  appliance with a readable *face*, so its easel turns to keep it towards you.
-  The sun does **not** turn — it is the same time of day from every corner, and
-  a shadow that swung round with the camera would say otherwise.
+  had to be cut to a low lip so they did not occlude the kitchen, which made
+  wall height a fact about the camera and meant rebuilding them on every
+  quarter turn; ovens wore glass doors on their two visible sides and now wear
+  one on each. The sun does **not** turn — it is the same time of day from every
+  corner, and a shadow that swung round with the camera would say otherwise.
+- **Every wall is a lip now, and the walls stopped moving.** Cutting only the
+  near two left the far two standing in front of everything *outside* the
+  building — the morning's delivery on the paving, a chef walking round it, a
+  customer on the path — from two corners in four. One height everywhere fixes
+  that, makes the room look the same from all four corners, and takes the
+  camera back out of `addWalls`, so the walls bake once with the floor instead
+  of being rebuilt and re-merged on every turn. What it costs is the tall far
+  wall that used to say "building"; what carries that now is the doorway frame,
+  which stays full height because a door is the one part of a lipped wall that
+  has to be findable from across the park. The other exception is a seam
+  something *hangs* on: a sign or a recipe poster on a lip would be floating, so
+  those pieces stand full height and read as the bit of wall the thing is on.
 
 ## Feedback: showing what the sim knows
 

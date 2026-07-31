@@ -79,18 +79,11 @@ export const PALETTE = {
   // legible as "the good one" from across the kitchen without changing shape.
   ovenBodyPro: 0x3f4550,
   fryerBody: 0xa96b55,
-  // The market stall: painted timber and a striped canvas awning. Warmer and
-  // more saturated than anything inside the kitchen, because it is *not* the
-  // kitchen — it should read as somewhere you go out to, from across the patio.
-  stallBody: 0x9c5f4a,
-  stallPost: 0x7a4636,
+  /** The canopy over a drive-through hatch: the one awning left in the game. */
   awning: 0xd8705c,
-  awningStripe: 0xf1ece0,
-  /** Shutters, drawn while the stall is closed for service. */
-  shutter: 0x6d5344,
-  // The recipe card stand, one apron along from the stall. Paper and pine:
-  // lighter than anything the stall is made of, because a card is the one thing
-  // out here that is not for sale.
+  // The recipe poster on the outside wall. Paper and pine, lighter than the
+  // wall behind it, because a card is the one thing out here that is not for
+  // sale.
   cardFace: 0xf4ead6,
   cardEdge: 0xd9c49a,
   // The sign hanging in the door. Painted board on a brass hook, and the two

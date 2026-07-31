@@ -29,6 +29,7 @@ import {
   sweep,
   torus,
 } from "./primitives";
+import { WALL_THICKNESS } from "./shell-meshes";
 import { makeLabel } from "./sprites";
 import { jitter, type Jitter } from "./wobble";
 import { cssHex, textTexture } from "./text";
@@ -99,15 +100,15 @@ export type ApplianceParts = {
   glass?: THREE.MeshStandardMaterial[];
   /** Bin: flips open when something goes in. */
   lid?: THREE.Object3D;
-  /** Stall: where the goods stand, restocked by `appliance-views.ts`. */
+  /** Shop square: the pallet and everything on it, so the delivery can arrive. */
+  pitch?: THREE.Object3D;
+  /** Shop square: where the goods stand, restocked by `appliance-views.ts`. */
   counter?: THREE.Object3D;
   /** Crate: the mouth of it, where the heap of stock sits. */
   produce?: THREE.Object3D;
-  /** Stall: dropped over the goods while the kitchen is in service. */
-  shutter?: THREE.Object3D;
-  /** Card stand: the card itself — hidden on ordinary mornings, lifted when armed. */
+  /** Poster: the card itself — blank on ordinary mornings, lifted when armed. */
   card?: THREE.Object3D;
-  /** Card stand: where the dish model stands, dressed by `appliance-views.ts`. */
+  /** Poster: where the dish model stands, dressed by `appliance-views.ts`. */
   cardArt?: THREE.Object3D;
   /** Sign: the board that turns over. */
   board?: THREE.Object3D;
@@ -132,9 +133,9 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   if (appliance.kind === "bin") {
     root.add(buildBin(parts, h));
   } else if (appliance.kind === "stall") {
-    buildStall(parts, h);
+    buildPitch(parts, nudge);
   } else if (appliance.kind === "cards") {
-    buildCardStand(parts, h);
+    buildPoster(parts, h);
   } else if (appliance.kind === "sign") {
     buildSign(parts, h);
   } else if (appliance.kind === "crate") {
@@ -205,113 +206,108 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
 }
 
 /**
- * The market stall: a timber counter under a striped awning.
+ * A pallet on the paving, with whatever is for sale standing on it — the goods
+ * themselves are put there by `appliance-views.ts`, because they change every
+ * morning.
  *
- * It is the only structure in the game that faces *outward*, and it is built to
- * be read from two distances. Close up you are looking at what is on the
- * counter and the price above it. From across the patio it is a silhouette —
- * awning, posts, goods — and its state is legible from that silhouette alone:
- * shutters down means closed, and closed is the answer to "can I buy something
- * mid-rush".
+ * **There is no shop.** This was a market stall, and then a caravan, and both
+ * had the same thing wrong with them: they were a structure that existed only
+ * because the game needed somewhere to put a price. What a player walks up to
+ * now is the *goods* themselves — an oven, a table, a crate — so nothing
+ * stands outside the kitchen that the world does not already contain.
+ *
+ * Which leaves the shop one thing to draw, and a pallet is about the least a
+ * delivery can stand on: it says *this was dropped off* rather than *this is a
+ * display*, it gives a lone plate something to sit on instead of a bare slab,
+ * and an empty one is how a square says the morning's delivery has already
+ * been carried inside.
+ *
+ * The rule underneath it all is one the game has always enforced and never
+ * used to say anything with: **nothing may be placed on the paving**, so
+ * anything standing out here is not yours yet.
  */
-function buildStall(parts: ApplianceParts, h: number): void {
-  const group = parts.root;
+function buildPitch(parts: ApplianceParts, nudge: Jitter): void {
+  const pallet = new THREE.Group();
+  // Put down by hand, like everything else in this game — see `wobble.ts`.
+  pallet.rotation.y = nudge(1, 0.22);
+  parts.root.add(pallet);
+  // The whole delivery hangs off this one group, pallet and goods together, so
+  // that arriving and being collected is one thing moving rather than a pallet
+  // and a crate agreeing to move at the same time. `place()` owns the root.
+  parts.pitch = pallet;
 
-  const counter = mesh(roundedBox(0.94, h, 0.94, 0.06), PALETTE.stallBody, "wood");
-  counter.position.y = h / 2;
-  group.add(counter);
-
-  const top = mesh(roundedBox(1.02, 0.08, 1.02, 0.03), PALETTE.woodTop, "wood");
-  top.position.y = h + 0.02;
-  group.add(top);
-
-  // Where the goods stand. An empty group rather than a mesh: what is on the
-  // counter changes every morning, so the shape of it belongs to whoever knows
-  // what the offer is.
-  const stock = new THREE.Group();
-  stock.position.y = h + 0.06;
-  group.add(stock);
-  parts.counter = stock;
-
-  // Two posts and a canopy. The awning is tilted forward so it catches the key
-  // light on its upper face and shades the goods underneath.
-  const canopyY = h + 0.92;
-  for (const x of [-0.42, 0.42]) {
-    const post = mesh(cylinder(0.035, 0.035, canopyY), PALETTE.stallPost, "wood");
-    post.position.set(x, canopyY / 2, -0.4);
-    group.add(post);
+  // Three bearers across, five boards along: the shape everybody recognises,
+  // and the gaps between the boards are what make it read as one rather than
+  // as a plank.
+  for (const x of [-0.34, 0, 0.34]) {
+    const bearer = mesh(roundedBox(0.14, 0.07, 0.82, 0.02), PALETTE.woodShadow, "wood");
+    bearer.position.set(x, 0.035, 0);
+    pallet.add(bearer);
   }
-
-  const awning = new THREE.Group();
-  awning.position.set(0, canopyY, -0.1);
-  awning.rotation.x = -0.28;
   for (let i = 0; i < 5; i++) {
-    const stripe = mesh(
-      roundedBox(0.2, 0.05, 0.86, 0.02),
-      i % 2 === 0 ? PALETTE.awning : PALETTE.awningStripe,
-      "ceramic",
-    );
-    stripe.position.x = -0.4 + i * 0.2;
-    awning.add(stripe);
+    const board = mesh(roundedBox(0.86, 0.04, 0.13, 0.015), PALETTE.woodDark, "wood");
+    board.position.set(0, 0.09, -0.34 + i * 0.17);
+    pallet.add(board);
   }
-  group.add(awning);
 
-  // Shutters: hidden in the build phase, dropped during service. Positioned to
-  // fill the gap between counter and awning exactly, so "closed" is a solid
-  // face rather than a board hanging in the air.
-  const shutter = mesh(roundedBox(0.9, 0.82, 0.06, 0.02), PALETTE.shutter, "wood");
-  shutter.position.set(0, h + 0.44, -0.36);
-  shutter.visible = false;
-  group.add(shutter);
-  parts.shutter = shutter;
+  // Where the goods stand: an empty group, because what is on this pallet
+  // changes every morning and the shape of it belongs to whoever knows what the
+  // offer is. A child of the pallet, so a crate put down crooked is crooked
+  // *with* the thing it was put down on.
+  const spot = new THREE.Group();
+  spot.position.y = PITCH_DECK;
+  spot.rotation.y = nudge(2, 0.3);
+  pallet.add(spot);
+  parts.counter = spot;
 }
 
+/** The top of a pallet: where the goods stand, and where their price sits over. */
+export const PITCH_DECK = 0.11;
+
 /**
- * The recipe card stand: an easel on the apron, with a card on it or without.
+ * A recipe poster, pasted on the outside wall beside the door.
  *
- * The **easel is always there** and the card is not. A stand that vanished
- * entirely on ordinary mornings would be an invisible thing to walk into — it
- * is furniture standing on the patio, and the patio is walked over by every
- * customer in the park. So it follows the stall's grammar instead: the place is
- * permanent, and whether it is *open* is legible from across the patio. Empty
- * easel, nothing to decide.
+ * The card stand was an easel of its own standing on the paving — one more
+ * object in a scene that already had too many. A poster hangs on a wall the
+ * building already has, so it costs the world nothing: **mounted**, like the
+ * sign, which means the square in front of it is still paving anybody may walk
+ * across.
+ *
+ * The board is always there and the paper is not. Whether there is a decision
+ * to make is legible from across the patio, which is the same grammar the
+ * goods use: a bare square means nothing to buy, a bare board means nothing to
+ * choose.
  */
-function buildCardStand(parts: ApplianceParts, h: number): void {
+function buildPoster(parts: ApplianceParts, h: number): void {
   const group = parts.root;
 
-  // Two splayed legs and a crossbar: an easel reads as "something is displayed
-  // here" from any angle, which a plinth does not.
-  for (const x of [-0.26, 0.26]) {
-    const leg = mesh(cylinder(0.032, 0.038, h * 1.1), PALETTE.woodDark, "wood");
-    leg.position.set(x, (h * 1.1) / 2, 0.06);
-    leg.rotation.z = x > 0 ? -0.12 : 0.12;
-    group.add(leg);
-  }
-  const rail = mesh(roundedBox(0.62, 0.05, 0.09, 0.02), PALETTE.woodDark, "wood");
-  rail.position.set(0, h * 0.62, 0.02);
-  group.add(rail);
+  // Flat against the masonry, and *proud* of it. The wall stands on the seam
+  // behind this square, so its outer face is half a tile back less half its own
+  // thickness — measured from `WALL_THICKNESS` rather than guessed at, which is
+  // how the first version of this ended up pasted inside the wall and invisible
+  // from every angle.
+  const face = -(0.5 - WALL_THICKNESS / 2);
 
-  // The card: its own group so it can be hidden, and lifted while somebody is
-  // considering it. Tilted back like a menu board, so the camera reads the face
-  // rather than the edge.
+  const backing = mesh(roundedBox(0.66, 0.84, 0.04, 0.02), PALETTE.cardEdge, "wood");
+  backing.position.set(0, h - 0.48, face + 0.02);
+  group.add(backing);
+
+  // The card: parked at its mount, so the animator only has to add the lift.
+  const mount = new THREE.Group();
+  mount.position.set(0, h - 0.48, face + 0.06);
+  group.add(mount);
+
   const card = new THREE.Group();
-  card.position.set(0, h * 0.98, 0);
-  card.rotation.x = -0.34;
   card.visible = false;
-  group.add(card);
+  mount.add(card);
   parts.card = card;
 
-  const backing = mesh(roundedBox(0.68, 0.86, 0.04, 0.03), PALETTE.cardEdge, "wood");
-  card.add(backing);
-  const face = mesh(roundedBox(0.6, 0.78, 0.02, 0.02), PALETTE.cardFace, "ceramic");
-  face.position.z = 0.03;
-  card.add(face);
+  const paper = mesh(roundedBox(0.56, 0.74, 0.02, 0.02), PALETTE.cardFace, "ceramic");
+  card.add(paper);
 
-  // Where the dish stands. Rotated back out of the card's tilt so the food is
-  // upright: a pizza lying at 20 degrees reads as a pizza sliding off a plate.
+  // Where the dish stands, proud of the paper like a thing pinned to it.
   const art = new THREE.Group();
-  art.position.set(0, 0.06, 0.12);
-  art.rotation.x = 0.34;
+  art.position.set(0, -0.02, 0.12);
   card.add(art);
   parts.cardArt = art;
 }
@@ -341,7 +337,7 @@ export type SignFace = keyof typeof SIGN_FACES;
  * than about where anybody is standing. See `inward`.
  *
  * The wall it hangs on is the one wall the renderer never cuts down to a lip;
- * see `buildWalls`. Nothing here has to carry itself, which is why there is no
+ * see `addWalls`. Nothing here has to carry itself, which is why there is no
  * bracket and no post.
  *
  * Local axes: the wall is at -z, the room is at +z.
@@ -491,10 +487,12 @@ type Look = {
 
 const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // Enamel bodies for anything that would really be enamelled steel.
-  // Built by `buildStall`, and labelled with a price rather than a name.
-  stall: { body: [PALETTE.stallBody, "wood"] },
-  // Built by `buildCardStand`, and labelled with whatever is on the card.
-  cards: { body: [PALETTE.woodDark, "wood"] },
+  // Built by `buildPitch`, which draws a pallet and nothing else: what stands
+  // on it is the appliance for sale, near enough full size. Labelled with a
+  // price rather than a name.
+  stall: { body: [PALETTE.woodDark, "wood"] },
+  // Built by `buildPoster`, and labelled with whatever is on the card.
+  cards: { body: [PALETTE.cardEdge, "wood"] },
   // Built by `buildSign`. No contextual label: a sign that needs a label to say
   // what it is has failed at the only job it has.
   sign: { body: [PALETTE.woodDark, "wood"] },

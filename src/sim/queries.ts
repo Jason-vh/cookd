@@ -6,6 +6,15 @@ import { isDirty, isPlate, specKey } from "./items";
 import { plateCount } from "./plates";
 import { reachableFrom, seatsAround } from "./pathing";
 import { customerSpeed, eatTime, LAST_ORDERS } from "./systems/customers";
+
+/**
+ * Where customers step onto the paving.
+ *
+ * Defined with the arrivals it belongs to and re-exported here, because the
+ * render layer lays the path slabs leading to it and may not reach into
+ * `sim/systems` — those are things that *happen*, and this is one that is true.
+ */
+export { approachTile } from "./systems/customers";
 import type { Appliance, Customer, Item, Player, Station, Vec2, World } from "./types";
 import { canReach } from "./walls";
 import { applianceAtTile, inBounds, mountedAt, tileIndex } from "./world";

@@ -1,18 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { APPLIANCE_KINDS, applianceDef } from "../data/appliances";
 import { PLATE_PRICE, SELLBACK, STALL_SLOTS } from "../data/economy";
+import { CARD_SLOTS } from "../data/progression";
 import { LEVEL } from "../data/level";
 import { RECIPES } from "../data/recipes";
 import { Host } from "../game/host";
 import { platesInWorld } from "./plates";
+import { seatsAround } from "./pathing";
+import { outward } from "./walls";
 import { canPlace } from "./queries";
 import { offerPrice, restockStall, stallSlots } from "./shop";
 import { beginDay, endDay } from "./day";
 import { step } from "./step";
-import type { Appliance, ApplianceKind, PlayerInput, World } from "./types";
+import type { Appliance, ApplianceKind, PlayerInput, Vec2, World } from "./types";
 import {
   applianceAtTile,
   createWorld,
+  isSolid,
   emptyInput,
   nearestFreeTile,
   removePlayer,
@@ -46,19 +50,25 @@ function press(world: World, button: "grab"): void {
   step(world, idle());
 }
 
-/** Stand on the tile east of `tile`, facing west at it. */
-function faceWest(world: World, tile: { x: number; y: number }): void {
+/**
+ * Stand on the paving beside a square, facing it.
+ *
+ * Any side will do — what stands there is an appliance with four sides, not a
+ * counter with a front — so this takes the first walkable neighbour, which is
+ * also a small guarantee that the delivery has landed somewhere reachable.
+ */
+function faceGoods(world: World, tile: Vec2): void {
+  const from = seatsAround(world, tile)[0]!;
   const player = world.players[0]!;
-  player.pos.x = tile.x + 1.5;
-  player.pos.y = tile.y + 0.5;
+  player.pos = { x: from.x + 0.5, y: from.y + 0.5 };
   player.prevPos = { ...player.pos };
-  player.facing = { x: -1, y: 0 };
+  player.facing = { x: tile.x - from.x, y: tile.y - from.y };
 }
 
 /** Face slot `index` and press grab. */
 function useSlot(world: World, index: number): Appliance {
   const slot = stallSlots(world)[index]!;
-  faceWest(world, slot.tile);
+  faceGoods(world, slot.tile);
   press(world, "grab");
   return slot;
 }
@@ -73,6 +83,13 @@ function stock(world: World, index: number, kind: ApplianceKind): Appliance {
 
 function counts(world: World, kind: ApplianceKind): number {
   return [...world.appliances.values()].filter((a) => a.kind === kind).length;
+}
+
+/** Where the delivery landed, as one comparable string. */
+function spots(world: World): string {
+  return stallSlots(world)
+    .map((slot) => `${slot.tile.x},${slot.tile.y}`)
+    .join("|");
 }
 
 /** What the stall is showing, as one comparable string. */
@@ -107,16 +124,15 @@ function meanInterval(world: World): number {
 }
 
 describe("the stall", () => {
-  test("the level stands three slots on the patio, and nothing may be built there", () => {
+  test("three squares land outside, and nothing may be built there", () => {
     const world = morning();
     const slots = stallSlots(world);
     expect(slots).toHaveLength(STALL_SLOTS);
 
     for (const slot of slots) {
-      // A slot is not a placement target, and neither is the paving it stands
-      // on: the ring is walkable and unplaceable, which are two separate facts.
+      // A square is not a placement target: the delivery stands on paving, and
+      // paving is not anywhere a kitchen may put an oven.
       expect(canPlace(world, slot.tile.x, slot.tile.y)).toBe(false);
-      expect(canPlace(world, slot.tile.x + 1, slot.tile.y)).toBe(false);
       expect(world.tiles[slot.tile.y * world.width + slot.tile.x]?.placeable).toBe(false);
     }
   });
@@ -124,6 +140,34 @@ describe("the stall", () => {
   test("every slot is stocked in the morning", () => {
     const world = morning();
     for (const slot of stallSlots(world)) expect(slot.offer).not.toBeNull();
+  });
+
+  test("everything for sale is out on the paving, and nothing is built there", () => {
+    // The whole shop rests on one rule the game already enforced and never used
+    // to say anything with: nothing may be *placed* on the paving, so anything
+    // standing on it is not yours yet. That is what lets the goods be drawn as
+    // themselves, with no stall around them to explain what they are.
+    const world = morning();
+    for (const slot of stallSlots(world)) {
+      const tile = world.tiles[slot.tile.y * world.width + slot.tile.x];
+      expect(tile?.walkable).toBe(true);
+      expect(tile?.placeable).toBe(false);
+      // And reachable: a delivery nobody can walk up to is money nobody can
+      // spend, which is the one way this arrangement can be got wrong.
+      expect(seatsAround(world, slot.tile).length).toBeGreaterThan(0);
+    }
+  });
+
+  test("the recipe posters hang on a wall, and the paving under them stays paving", () => {
+    // Mounted, like the sign: a poster occupies a wall rather than a square, so
+    // the tile in front of it is still somewhere a chef or a customer may walk.
+    const world = morning();
+    for (const stand of [...world.appliances.values()].filter((a) => a.kind === "cards")) {
+      expect(applianceDef(stand.kind).mounted).toBe(true);
+      expect(isSolid(world, stand.tile.x, stand.tile.y)).toBe(false);
+      expect(outward(world.room, stand.tile)).toBeDefined();
+    }
+    expect(counts(world, "cards")).toBe(CARD_SLOTS);
   });
 
   test("a new morning's stock is a layout change", () => {
@@ -331,6 +375,11 @@ describe("the stock is the same shop for everybody", () => {
       expect(shown(a.world)).toBe(shown(b.world));
       // ...and it is a real shop, not three empty slots agreeing.
       expect(shown(a.world)).not.toBe("-|-|-");
+      // Where it landed is rolled from the same seed and the same day, and
+      // nobody sends it over the wire either. A friend walking out of the door
+      // to a different set of squares is the same class of bug as a friend
+      // seeing a different price.
+      expect(spots(a.world)).toBe(spots(b.world));
 
       // Only one of them plays: the roll must not depend on the live RNG
       // stream, which arrivals and seating consume at their own pace.
@@ -341,6 +390,28 @@ describe("the stock is the same shop for everybody", () => {
       endDay(b.world);
       expect(a.world.day).toBe(b.world.day);
     }
+  });
+
+  test("a new morning lands the delivery somewhere else, and never on the way in", () => {
+    // A delivery that appeared on the same three squares every day would be
+    // three squares the game had reserved, which is the shop-as-furniture
+    // problem coming back in through the floor.
+    const world = morning();
+    const seen = new Set<string>();
+    for (let day = 1; day <= 6; day++) {
+      world.day = day;
+      restockStall(world);
+      seen.add(spots(world));
+      for (const slot of stallSlots(world)) {
+        // Never the row somebody walks up to the door along: a crate there can
+        // seal a restaurant shut, and it is the one square that must stay free.
+        expect(slot.tile.y).not.toBe(world.door.y);
+        // On the paving, and on the grid it says it is on.
+        expect(world.tiles[slot.tile.y * world.width + slot.tile.x]?.walkable).toBe(true);
+        expect(applianceAtTile(world, slot.tile.x, slot.tile.y)).toBe(slot);
+      }
+    }
+    expect(seen.size).toBeGreaterThan(3);
   });
 
   test("a morning always holds something the kitchen is short of", () => {

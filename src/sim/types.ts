@@ -327,6 +327,17 @@ export type Tile = {
   /** true for the one tile inside the doorway customers arrive through. */
   door: boolean;
   /**
+   * Floor or paving, as opposed to the grass between them.
+   *
+   * The grid used to be the building plus its ring exactly, so every square in
+   * it was somewhere to stand and "walkable" needed no field. A market square
+   * further out ends that: the ground between here and there is scenery, and
+   * scenery is not walked on. **Walkable = paved** is now a fact the level
+   * states — see `LevelDef.paving` — rather than one the grid's dimensions
+   * happened to imply.
+   */
+  walkable: boolean;
+  /**
    * May an appliance stand here?
    *
    * A property of the tile rather than a test for "is this outside", so the
@@ -429,6 +440,15 @@ export type World = {
   tiles: Tile[];
   /** The building: kitchen floor inside, patio outside. */
   room: Rect;
+  /**
+   * The paved ground outside the building: the ring, and whatever it leads to.
+   *
+   * The tiles already know (`Tile.walkable`); this is the same fact as
+   * rectangles, because the renderer lays slabs rather than tiles and a
+   * marching-squares outline of a tile set is a great deal of machinery for a
+   * shape somebody drew as three rooms in the first place.
+   */
+  paving: Rect[];
   walls: Walls;
   /**
    * The drive-through lane, or null for a kitchen with a dining room.
