@@ -7,8 +7,7 @@ import { itemLabel } from "../sim/queries";
 import type { Appliance, Item, ItemSpec } from "../sim/types";
 import { CAMERA_OFFSET } from "../orientation";
 import { buildAppliance } from "./appliance-meshes";
-import { addLights, lightingEnvironment } from "./environment";
-import { disposeSubtree } from "./dispose";
+import { Daylight } from "./daylight";
 import { buildItemModel, modelledStates } from "./models";
 import { PALETTE } from "./palette";
 import { buildChef, buildCustomer } from "./person-mesh";
@@ -29,7 +28,9 @@ import { makeLabel } from "./sprites";
  *
  *  - **The real lighting and the real post chain.** A model judged under a
  *    studio rig is a model tuned for a room the game does not have. It borrows
- *    the park's sun, fill, ambient and grade wholesale.
+ *    the park's sun, fill, ambient and grade wholesale, stopped at the hour the
+ *    kitchen is busiest — a turntable is for comparing models to each other,
+ *    which needs the light to hold still.
  *  - **A one-tile grid under everything.** Scale is the most common thing to
  *    get wrong and the hardest to see in isolation; each model stands on the
  *    same square the kitchen would give it.
@@ -43,6 +44,9 @@ const SPACING = 1.9;
 
 /** How many models per row before wrapping. */
 const COLUMNS = 6;
+
+/** Which hour of the park's day the gallery stands in: the middle of service. */
+const GALLERY_HOUR = 0.5;
 
 /** Radians per second. Slow enough to read a silhouette as it comes round. */
 const TURN_RATE = 0.35;
@@ -139,14 +143,6 @@ export class Gallery {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = biome.exposure;
-
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    const world = lightingEnvironment(biome);
-    this.scene.environment = pmrem.fromScene(world, 0.04).texture;
-    this.scene.environmentIntensity = biome.environmentIntensity;
-    disposeSubtree(world);
-    pmrem.dispose();
     this.scene.background = new THREE.Color(PALETTE.wallLow);
 
     const entries = [...applianceEntries(), ...itemEntries(), ...peopleEntries()];
@@ -156,12 +152,21 @@ export class Gallery {
     this.pivot.set(0, 0.4, 0);
     this.zoom = Math.max(width, depth) * 0.42;
 
-    addLights(this.scene, biome, { width, height: depth }, 0, 0);
+    // The light and none of the weather: the gallery keeps its own flat
+    // backdrop, and fog would haze the back rows of a layout that is all rows.
+    const daylight = new Daylight(
+      this.renderer,
+      this.scene,
+      biome,
+      { width, height: depth, cx: 0, cz: 0 },
+      { atmosphere: false },
+    );
+    daylight.set(GALLERY_HOUR);
     this.addFloor(width, depth);
     this.layout(entries, rows);
 
     this.post = postEnabled()
-      ? createPost(this.renderer, this.scene, this.camera, biome.grade)
+      ? createPost(this.renderer, this.scene, this.camera, daylight.state.grade)
       : null;
     this.resize();
 

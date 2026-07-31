@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { EffectCue, Rect, Seam, World } from "../sim/types";
-import type { Biome } from "../data/biomes";
 import { applianceAtTile, playerById } from "../sim/world";
+import { dayProgress } from "../sim/queries";
 import { hatchOf } from "../sim/lane";
 import { edgeSeam, horizontalWall, verticalWall } from "../sim/walls";
 import { biome as lookupBiome } from "../data/biomes";
@@ -10,8 +10,9 @@ import { lerp } from "./anim";
 import { ApplianceViews } from "./appliance-views";
 import { CarViews } from "./car-views";
 import { KitchenCamera, type FollowTarget } from "./camera";
+import { Daylight } from "./daylight";
 import { disposeSubtree } from "./dispose";
-import { createEnvironment, lightingEnvironment } from "./environment";
+import { createEnvironment } from "./environment";
 import { HighlightViews } from "./highlight-views";
 import { ItemViews } from "./item-views";
 import { mergeStatic } from "./merge";
@@ -55,7 +56,7 @@ export class View {
   private readonly rig: KitchenCamera;
   private readonly renderer: THREE.WebGLRenderer;
   private post: Post | null = null;
-  private readonly grade: { saturation: number; warmth: number; lift: number };
+  private readonly daylight: Daylight;
 
   private readonly appliances: ApplianceViews;
   private readonly people: PeopleViews;
@@ -78,13 +79,11 @@ export class View {
 
   constructor(canvas: HTMLCanvasElement, world: World, biomeId: string) {
     const biome = lookupBiome(biomeId);
-    this.grade = biome.grade;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !postEnabled() });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = biome.exposure;
 
     // Orthographic at a 3/4 angle: real 3D, isometric read. It follows the
     // local chefs and never shows past these bounds — see render/camera.ts.
@@ -110,8 +109,14 @@ export class View {
     this.items = new ItemViews(this.scene, this.people);
     this.highlights = new HighlightViews(this.scene, this.appliances, this.people);
 
-    // Sky, sunlight, ground and scenery all come from the biome.
-    this.setupImageBasedLighting(biome);
+    // Sky, sunlight, ground and scenery all come from the biome — the first two
+    // of them from wherever the service clock has got to.
+    this.daylight = new Daylight(this.renderer, this.scene, biome, {
+      width: world.width,
+      height: world.height,
+      cx: world.width / 2,
+      cz: world.height / 2,
+    });
     createEnvironment(this.scene, biome, {
       width: world.width,
       height: world.height,
@@ -124,20 +129,6 @@ export class View {
   }
 
   // --- scene setup -----------------------------------------------------------
-
-  private setupImageBasedLighting(biome: Biome): void {
-    // Image-based lighting with zero assets: soft directional variation and a
-    // believable roughness response on every surface, which is the single
-    // biggest quality win over plain analytic lights. The environment is built
-    // out of the biome rather than out of three.js's white studio, so what a
-    // steel rim catches is this kitchen's sky and this kitchen's sun.
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    const world = lightingEnvironment(biome);
-    this.scene.environment = pmrem.fromScene(world, 0.04).texture;
-    this.scene.environmentIntensity = biome.environmentIntensity;
-    disposeSubtree(world);
-    pmrem.dispose();
-  }
 
   /**
    * The kitchen itself: its tiled floor and its walls.
@@ -263,7 +254,7 @@ export class View {
     this.rig.setAspect(w / h);
 
     if (postEnabled() && !this.post) {
-      this.post = createPost(this.renderer, this.scene, this.camera, this.grade);
+      this.post = createPost(this.renderer, this.scene, this.camera, this.daylight.state.grade);
     }
     this.post?.resize(w, h);
   }
@@ -276,6 +267,10 @@ export class View {
   render(world: World, alpha: number, localIds: readonly number[] = []): void {
     const dt = Math.min(0.1, this.clock.getDelta());
     const time = this.clock.elapsedTime;
+
+    // The hour first: the grade it settles on is part of this frame's image.
+    this.daylight.update(dayProgress(world), dt);
+    this.post?.setGrade(this.daylight.state.grade);
 
     this.syncEffects(world, dt);
     this.appliances.sync(world, dt, time);
@@ -444,7 +439,7 @@ export class View {
     for (const part of [...this.shell, ...this.walls]) disposeSubtree(part);
     this.shell.length = 0;
     this.walls.length = 0;
-    this.scene.environment?.dispose();
+    this.daylight.dispose();
     this.post?.dispose();
     this.renderer.dispose();
   }

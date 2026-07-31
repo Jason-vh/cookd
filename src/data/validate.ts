@@ -4,6 +4,7 @@ import { APPLIANCES, APPLIANCE_KINDS, isApplianceKind, type ApplianceKind } from
 import { CUSTOMER_KINDS, DEFAULT_CUSTOMER_KIND } from "./customers";
 import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
+import { BIOMES, type DaylightKey } from "./biomes";
 import { LEVELS, runSeams, type LevelDef } from "./level";
 import type { Rect, Vec2, World } from "../sim/types";
 import { hatchOf, servingSpot } from "../sim/lane";
@@ -207,14 +208,56 @@ export function validateContent(): string[] {
     }
   }
 
+  // --- biomes: a day runs one way, from opening to closing ---
+  for (const [id, biome] of Object.entries(BIOMES)) {
+    const where = `biome "${id}"`;
+    if (biome.id !== id) problems.push(`${where}: registered under a different id`);
+    if (biome.daylight.length === 0) problems.push(`${where}: has no daylight keys`);
+    problems.push(...daylightProblems(where, biome.daylight));
+  }
+
   // --- levels ---
   for (const [id, level] of Object.entries(LEVELS)) {
     if (level.id !== id) problems.push(`level "${id}": registered under a different id`);
+    if (!Object.hasOwn(BIOMES, level.biome)) {
+      problems.push(`level "${id}": unknown biome "${level.biome}"`);
+    }
     problems.push(...levelProblems(level));
   }
 
   return problems;
 }
+
+/**
+ * What is wrong with a biome's day.
+ *
+ * Keys are crossfaded, which makes two of these silent rather than wrong-
+ * looking: keys out of order sample the wrong pair, and an azimuth that turns
+ * back on itself swings every shadow in the kitchen the other way at noon. The
+ * elevation floor is the shadow camera's — a sun on the horizon lays shadows
+ * out further than it covers, and they end in a straight line across the grass.
+ */
+function daylightProblems(where: string, keys: readonly DaylightKey[]): string[] {
+  const problems: string[] = [];
+  const azimuths = keys.map((key) => key.sun.azimuth);
+  const oneWay =
+    azimuths.every((a, i) => i === 0 || a < azimuths[i - 1]!) ||
+    azimuths.every((a, i) => i === 0 || a > azimuths[i - 1]!);
+  if (!oneWay) problems.push(`${where}: the sun doubles back — azimuth must move one way`);
+
+  keys.forEach((key, i) => {
+    const at = `${where}, key at ${key.at}`;
+    if (key.at < 0 || key.at > 1) problems.push(`${at}: outside the service day`);
+    if (i > 0 && key.at <= keys[i - 1]!.at) problems.push(`${at}: out of order`);
+    if (key.sun.elevation < MIN_SUN_ELEVATION) {
+      problems.push(`${at}: sun below ${MIN_SUN_ELEVATION} degrees, so its shadows clip`);
+    }
+  });
+  return problems;
+}
+
+/** How low the sun may hang before the shadow camera stops covering it. */
+const MIN_SUN_ELEVATION = 12;
 
 /**
  * What is wrong with a level, asked of the world it builds.

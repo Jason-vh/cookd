@@ -9,8 +9,10 @@ import { box, cylinder, mesh, roundedBox, sphere, tonedMesh } from "./primitives
 import { mergeStatic } from "./merge";
 
 /**
- * Everything outside the kitchen walls: sky, sunlight, ground, the patio the
- * kitchen stands on, and the props scattered around it.
+ * Everything outside the kitchen walls that stands still: the ground, the patio
+ * the kitchen sits on, and the props scattered around it. The sky and the
+ * sunlight over all of it move with the service clock and live in
+ * `daylight.ts`.
  *
  * All of it is driven by a `Biome` from `data/biomes.ts`, so a new location is
  * a data entry plus (at most) a new prop builder in `PROPS` below.
@@ -46,12 +48,7 @@ export function createEnvironment(
   const cz = bounds.height / 2;
   const groundY = -biome.patio.lift;
 
-  scene.background = skyTexture(biome);
-  scene.fog = new THREE.Fog(biome.fog.color, biome.fog.near, biome.fog.far);
-
-  addLights(scene, biome, bounds, cx, cz);
-
-  // Everything past this point is scenery: built into a scratch group, then
+  // Everything here is scenery: built into a scratch group, then
   // collapsed into a handful of draw calls before it reaches the scene.
   const scenery = new THREE.Group();
   addGround(scenery, biome, cx, cz, groundY);
@@ -60,112 +57,6 @@ export function createEnvironment(
   if (bounds.lane) addLane(scenery, bounds.lane);
   addScatter(scenery, biome, bounds, cx, cz, groundY);
   scene.add(...mergeStatic(scenery));
-}
-
-// --- lighting ----------------------------------------------------------------
-
-/**
- * A stand-in for the world outside, rendered once into the image-based lighting.
- *
- * Every reflective thing in the game was lit by three.js's `RoomEnvironment` —
- * a white studio with rectangular lamps in it. It gives a beautiful roughness
- * response, and it is *the same room* on a park lawn, a midday beach and a
- * roadside at dusk: the steel of a sink caught a photographer's softbox in all
- * three, and the one appliance that should have told you where it was standing
- * told you nothing. It also fought the grade, which is trying to push the whole
- * frame amber while the highlights insist on neutral studio white.
- *
- * So the environment is the biome: its own sky above, its own ground below, and
- * its own sun where its own sun is. That is why metalness is capped around 0.3
- * in `SURFACE` — a fully metallic surface *is* its reflections — and it is the
- * cheapest way to raise the ceiling on how metallic anything is allowed to be.
- *
- * Deliberately crude: it is blurred into a handful of mip levels by
- * `PMREMGenerator` about a millisecond after it is built, so shapes in it are
- * energy, not detail.
- */
-export function lightingEnvironment(biome: Biome): THREE.Scene {
-  const scene = new THREE.Scene();
-
-  const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(12, 20, 14),
-    new THREE.MeshBasicMaterial({ map: skyTexture(biome), side: THREE.BackSide }),
-  );
-  scene.add(dome);
-
-  // What the ground throws back up. The beach is bright sand and the park is
-  // grass, and the underside of everything in the room should know which.
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(20, 20),
-    new THREE.MeshBasicMaterial({ color: biome.ground.base }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.6;
-  scene.add(ground);
-
-  // The sun itself, well past white, so there is a hot spot for a curved metal
-  // surface to catch. Colour beyond 1 is how three.js's own room does its lamps.
-  const azimuth = (biome.sun.azimuth * Math.PI) / 180;
-  const elevation = (biome.sun.elevation * Math.PI) / 180;
-  const disc = new THREE.Mesh(
-    new THREE.SphereGeometry(2.4, 12, 10),
-    new THREE.MeshBasicMaterial({ color: biome.sun.color }),
-  );
-  disc.material.color.multiplyScalar(6 * biome.sun.intensity);
-  disc.position.set(
-    Math.cos(azimuth) * Math.cos(elevation) * 10,
-    Math.sin(elevation) * 10,
-    Math.sin(azimuth) * Math.cos(elevation) * 10,
-  );
-  scene.add(disc);
-
-  return scene;
-}
-
-/** Exported for the model gallery, which wants the game's light and nothing else. */
-export function addLights(
-  scene: THREE.Scene,
-  biome: Biome,
-  bounds: EnvironmentBounds,
-  cx: number,
-  cz: number,
-): void {
-  const azimuth = (biome.sun.azimuth * Math.PI) / 180;
-  const elevation = (biome.sun.elevation * Math.PI) / 180;
-  const distance = 18;
-
-  const sun = new THREE.DirectionalLight(biome.sun.color, biome.sun.intensity);
-  sun.position.set(
-    cx + Math.cos(azimuth) * Math.cos(elevation) * distance,
-    Math.sin(elevation) * distance,
-    cz + Math.sin(azimuth) * Math.cos(elevation) * distance,
-  );
-  sun.target.position.set(cx, 0, cz);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.bias = -0.0006;
-  sun.shadow.normalBias = 0.02;
-
-  // Cover the kitchen plus a margin so nearby trees cast onto the patio, but
-  // no more than that: every extra unit costs shadow-map resolution.
-  const reach = Math.max(bounds.width, bounds.height) * 0.72 + 6;
-  const shadowCam = sun.shadow.camera;
-  shadowCam.left = -reach;
-  shadowCam.right = reach;
-  shadowCam.top = reach;
-  shadowCam.bottom = -reach;
-  shadowCam.near = 1;
-  shadowCam.far = distance * 2.4;
-  shadowCam.updateProjectionMatrix();
-  scene.add(sun, sun.target);
-
-  const fill = new THREE.DirectionalLight(biome.fill.color, biome.fill.intensity);
-  fill.position.set(cx - 10, 7, cz - 8);
-  scene.add(fill);
-
-  scene.add(
-    new THREE.HemisphereLight(biome.ambient.sky, biome.ambient.ground, biome.ambient.intensity),
-  );
 }
 
 // --- ground and patio --------------------------------------------------------
@@ -535,22 +426,6 @@ function addScatter(
 }
 
 // --- generated textures ------------------------------------------------------
-
-function skyTexture(biome: Biome): THREE.Texture {
-  const canvas = document.createElement("canvas");
-  canvas.width = 4;
-  canvas.height = 256;
-  const ctx = canvas.getContext("2d")!;
-  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-  gradient.addColorStop(0, biome.sky.top);
-  gradient.addColorStop(0.55, biome.sky.middle);
-  gradient.addColorStop(1, biome.sky.horizon);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 4, 256);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
 
 /** Blotchy grass: flat colour would read as plastic under this much sunlight. */
 function groundTexture(biome: Biome): THREE.Texture {

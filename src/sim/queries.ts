@@ -324,6 +324,20 @@ export function isLastOrders(world: World): boolean {
   return world.phase === "service" && world.dayTime <= LAST_ORDERS;
 }
 
+/**
+ * How far through the service day it is, 0 at opening and 1 at closing.
+ *
+ * What the light is made of — see `render/daylight.ts`. Two things are
+ * deliberate. Past closing time `dayTime` goes negative while the room empties,
+ * and that stretch is still the last of the light rather than the small hours,
+ * so it clamps. And every phase that is not service is **morning**: the build
+ * phase is planning tomorrow, and tomorrow starts at opening.
+ */
+export function dayProgress(world: World): number {
+  if (world.phase !== "service" || world.dayLength <= 0) return 0;
+  return Math.max(0, Math.min(1, 1 - world.dayTime / world.dayLength));
+}
+
 /** Display name for the HUD, e.g. "Chopped Tomato" or "Plate: Pizza". */
 export function itemLabel(item: Item): string {
   const base = ingredient(item.base).name;

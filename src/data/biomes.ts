@@ -6,6 +6,10 @@
  * location (beach, night market, ski lodge, space station) means adding an
  * entry here plus, at most, a new prop builder in `render/environment.ts`.
  *
+ * The light is a *day* rather than an hour: each biome keyframes its own sky
+ * from opening to closing time, and `render/daylight.ts` samples it against the
+ * service clock. A biome is still a mood — it is just a mood that runs.
+ *
  * This is content: plain data, no logic, no three.js.
  */
 
@@ -31,11 +35,16 @@ export type ScatterEntry = {
   scale: [number, number];
 };
 
-export type Biome = {
-  id: string;
-  name: string;
+/**
+ * The weather at one moment: everything about how a biome is lit.
+ *
+ * Every field here used to sit directly on the `Biome`, which fixed each
+ * location at one hour of one day. They are now sampled from `daylight` below,
+ * so the same numbers describe an instant rather than a place.
+ */
+export type SkyState = {
   /** Background gradient, top to bottom. */
-  sky: { top: string; middle: string; horizon: string };
+  sky: { top: number; middle: number; horizon: number };
   fog: { color: number; near: number; far: number };
   /** Sun direction in degrees: azimuth around Y, elevation above the horizon. */
   sun: { color: number; intensity: number; azimuth: number; elevation: number };
@@ -50,6 +59,24 @@ export type Biome = {
    * crushing to near-black.
    */
   grade: { saturation: number; warmth: number; lift: number };
+};
+
+/**
+ * One hour of the service day: `at` 0 is the doors opening, 1 is closing time.
+ *
+ * Keys are interpolated, so three of them are a whole day — and because the
+ * sun's azimuth is one of the numbers being crossfaded, it should move one way
+ * only, or the shadows will double back at noon. Keep elevations above ~12
+ * degrees as well: a sun on the horizon throws shadows longer than the shadow
+ * camera covers, and they clip at the edge of it.
+ */
+export type DaylightKey = SkyState & { at: number };
+
+export type Biome = {
+  id: string;
+  name: string;
+  /** The day, in keyframes, from opening to closing. See `DaylightKey`. */
+  daylight: DaylightKey[];
   ground: { base: number; patch: number; accent: number };
   /** The raised platform the kitchen sits on. */
   patio: { edge: number; trim: number; lift: number; overhang: number };
@@ -68,15 +95,43 @@ export type Biome = {
 export const PARK: Biome = {
   id: "park",
   name: "City Park",
-  // A hazy warm afternoon rather than a poster-bright midday.
-  sky: { top: "#a9bccb", middle: "#cbd3d2", horizon: "#e9e0cf" },
-  fog: { color: 0xdcd5c6, near: 30, far: 92 },
-  sun: { color: 0xffeccd, intensity: 2.2, azimuth: 38, elevation: 46 },
-  fill: { color: 0xbfc9d6, intensity: 0.42 },
-  ambient: { sky: 0xdcd9cd, ground: 0x6d6a4c, intensity: 0.72 },
-  environmentIntensity: 0.5,
-  exposure: 1.0,
-  grade: { saturation: 0.9, warmth: 0.38, lift: 0.006 },
+  // A hazy warm afternoon rather than a poster-bright midday, arrived at from a
+  // cool morning and left for a low amber evening.
+  daylight: [
+    {
+      at: 0,
+      sky: { top: 0x9db5c8, middle: 0xc6d2d6, horizon: 0xefe7d6 },
+      fog: { color: 0xe2dccd, near: 32, far: 96 },
+      sun: { color: 0xffe6c6, intensity: 1.9, azimuth: 92, elevation: 21 },
+      fill: { color: 0xc2cfe0, intensity: 0.46 },
+      ambient: { sky: 0xdbdfd8, ground: 0x67684e, intensity: 0.76 },
+      environmentIntensity: 0.48,
+      exposure: 1.02,
+      grade: { saturation: 0.9, warmth: 0.3, lift: 0.008 },
+    },
+    {
+      at: 0.5,
+      sky: { top: 0xa9bccb, middle: 0xcbd3d2, horizon: 0xe9e0cf },
+      fog: { color: 0xdcd5c6, near: 30, far: 92 },
+      sun: { color: 0xffeccd, intensity: 2.2, azimuth: 38, elevation: 46 },
+      fill: { color: 0xbfc9d6, intensity: 0.42 },
+      ambient: { sky: 0xdcd9cd, ground: 0x6d6a4c, intensity: 0.72 },
+      environmentIntensity: 0.5,
+      exposure: 1.0,
+      grade: { saturation: 0.9, warmth: 0.38, lift: 0.006 },
+    },
+    {
+      at: 1,
+      sky: { top: 0x7b8ea9, middle: 0xc9bdb0, horizon: 0xf3d3a4 },
+      fog: { color: 0xe8ceaa, near: 26, far: 84 },
+      sun: { color: 0xffd39a, intensity: 1.85, azimuth: -18, elevation: 15 },
+      fill: { color: 0xa9b3c9, intensity: 0.34 },
+      ambient: { sky: 0xd0c6b6, ground: 0x5e5744, intensity: 0.64 },
+      environmentIntensity: 0.45,
+      exposure: 1.0,
+      grade: { saturation: 0.88, warmth: 0.52, lift: 0.012 },
+    },
+  ],
   ground: { base: 0x8d9a66, patch: 0x84915e, accent: 0x99a672 },
   patio: { edge: 0x9a8c76, trim: 0x847860, lift: 0.36, overhang: 0.7 },
   path: { color: 0xc0b4a0, count: 7 },
@@ -101,10 +156,10 @@ export const PARK: Biome = {
  * The other end of the country: bleached sand, a hard sun and a sea breeze.
  *
  * A biome is a *mood*, and the two dials that carry it are the grade and the
- * ground. Everything else here follows from "midday at the coast": the sun is
- * higher and whiter than the park's afternoon, the fog is further away because
- * sea air is clear, and the sand is bright enough that the grade pulls the
- * exposure back down rather than letting the whole frame glare.
+ * ground. Everything else here follows from "midday at the coast": the sun
+ * climbs higher and whiter than the park's ever does, the fog is further away
+ * because sea air is clear, and the sand is bright enough that the grade pulls
+ * the exposure back down rather than letting the whole frame glare.
  *
  * It reuses the park's prop *kinds* wherever a shape does the same job — a rock
  * is a rock, a tuft of grass is dune grass — and adds three that only make
@@ -114,16 +169,46 @@ export const PARK: Biome = {
 export const BEACH: Biome = {
   id: "beach",
   name: "Beach Shack",
-  sky: { top: "#5f9fd0", middle: "#9ec9e4", horizon: "#eae2c8" },
-  fog: { color: 0xe8e0c8, near: 44, far: 120 },
-  sun: { color: 0xfff6e0, intensity: 2.6, azimuth: 122, elevation: 62 },
-  fill: { color: 0xcfe0ee, intensity: 0.5 },
-  ambient: { sky: 0xe8f0f6, ground: 0xbfa87e, intensity: 0.85 },
-  environmentIntensity: 0.62,
-  // Sand throws a great deal of light back up. Left at the park's exposure the
-  // whole frame sat half a stop hot and the white plates lost their edges.
-  exposure: 0.92,
-  grade: { saturation: 0.86, warmth: 0.3, lift: 0.012 },
+  daylight: [
+    {
+      at: 0,
+      sky: { top: 0x6aa8d4, middle: 0xa8cfe6, horizon: 0xeeead4 },
+      fog: { color: 0xece4cc, near: 46, far: 124 },
+      sun: { color: 0xfff0d2, intensity: 2.3, azimuth: 172, elevation: 33 },
+      fill: { color: 0xcadcee, intensity: 0.48 },
+      ambient: { sky: 0xe4eef6, ground: 0xbaa47c, intensity: 0.8 },
+      environmentIntensity: 0.58,
+      exposure: 0.95,
+      grade: { saturation: 0.86, warmth: 0.24, lift: 0.012 },
+    },
+    {
+      // Noon comes early here, because the mood of the place is the hard sun
+      // and the afternoon should be spent leaving it.
+      at: 0.45,
+      sky: { top: 0x5f9fd0, middle: 0x9ec9e4, horizon: 0xeae2c8 },
+      fog: { color: 0xe8e0c8, near: 44, far: 120 },
+      sun: { color: 0xfff6e0, intensity: 2.6, azimuth: 122, elevation: 62 },
+      fill: { color: 0xcfe0ee, intensity: 0.5 },
+      ambient: { sky: 0xe8f0f6, ground: 0xbfa87e, intensity: 0.85 },
+      environmentIntensity: 0.62,
+      // Sand throws a great deal of light back up. Left at the park's exposure
+      // the whole frame sat half a stop hot and the white plates lost their
+      // edges.
+      exposure: 0.92,
+      grade: { saturation: 0.86, warmth: 0.3, lift: 0.012 },
+    },
+    {
+      at: 1,
+      sky: { top: 0x4f83b0, middle: 0xc6b4b2, horizon: 0xf8d4a8 },
+      fog: { color: 0xf0d6b2, near: 40, far: 112 },
+      sun: { color: 0xffd6ac, intensity: 2.0, azimuth: 72, elevation: 17 },
+      fill: { color: 0xbcc6dc, intensity: 0.4 },
+      ambient: { sky: 0xdfd6cc, ground: 0xb09776, intensity: 0.72 },
+      environmentIntensity: 0.52,
+      exposure: 0.98,
+      grade: { saturation: 0.85, warmth: 0.46, lift: 0.016 },
+    },
+  ],
   ground: { base: 0xe0cfa4, patch: 0xd6c395, accent: 0xeadcb8 },
   patio: { edge: 0xc9b489, trim: 0xa8946c, lift: 0.36, overhang: 0.7 },
   path: { color: 0xd8c9a2, count: 7 },
@@ -147,9 +232,10 @@ export const BEACH: Biome = {
  * A layby off a hot road: dry verge, bleached tarmac, a sun going down behind
  * the traffic.
  *
- * The mood is *late* rather than bright — a low amber sun and long shadows,
- * because a drive-through is somewhere you stop on the way to somewhere else,
- * and the whole room is one long wall with a queue against it. It is the first
+ * The mood is *late* rather than bright — the service opens on a hot afternoon
+ * and spends itself going gold and then dim, because a drive-through is
+ * somewhere you stop on the way to somewhere else, and the whole room is one
+ * long wall with a queue against it. It is the first
  * biome with no `path`: nobody walks up to this kitchen, so a run of paving
  * slabs to the door would be a promise about arrival that the lane keeps
  * instead.
@@ -161,14 +247,41 @@ export const BEACH: Biome = {
 export const ROADSIDE: Biome = {
   id: "roadside",
   name: "Highway Stop",
-  sky: { top: "#7f93b0", middle: "#c2b4a8", horizon: "#f0cf9c" },
-  fog: { color: 0xe4c9a0, near: 26, far: 86 },
-  sun: { color: 0xffd9a0, intensity: 2.4, azimuth: 246, elevation: 22 },
-  fill: { color: 0xb9bccb, intensity: 0.38 },
-  ambient: { sky: 0xd8cdbb, ground: 0x6f6552, intensity: 0.7 },
-  environmentIntensity: 0.48,
-  exposure: 1.02,
-  grade: { saturation: 0.84, warmth: 0.52, lift: 0.01 },
+  daylight: [
+    {
+      at: 0,
+      sky: { top: 0x8aa2c0, middle: 0xc9c3b2, horizon: 0xf2e0b6 },
+      fog: { color: 0xe8d6b0, near: 28, far: 92 },
+      sun: { color: 0xffe6bc, intensity: 2.5, azimuth: 296, elevation: 43 },
+      fill: { color: 0xc0c8d6, intensity: 0.42 },
+      ambient: { sky: 0xdcd6c4, ground: 0x746954, intensity: 0.74 },
+      environmentIntensity: 0.5,
+      exposure: 1.0,
+      grade: { saturation: 0.86, warmth: 0.4, lift: 0.008 },
+    },
+    {
+      at: 0.55,
+      sky: { top: 0x7f93b0, middle: 0xc2b4a8, horizon: 0xf0cf9c },
+      fog: { color: 0xe4c9a0, near: 26, far: 86 },
+      sun: { color: 0xffd9a0, intensity: 2.4, azimuth: 246, elevation: 22 },
+      fill: { color: 0xb9bccb, intensity: 0.38 },
+      ambient: { sky: 0xd8cdbb, ground: 0x6f6552, intensity: 0.7 },
+      environmentIntensity: 0.48,
+      exposure: 1.02,
+      grade: { saturation: 0.84, warmth: 0.52, lift: 0.01 },
+    },
+    {
+      at: 1,
+      sky: { top: 0x5a6d92, middle: 0xa892a2, horizon: 0xecab78 },
+      fog: { color: 0xdca87c, near: 22, far: 76 },
+      sun: { color: 0xffb478, intensity: 1.7, azimuth: 210, elevation: 13 },
+      fill: { color: 0x99a0bc, intensity: 0.34 },
+      ambient: { sky: 0xb8a89a, ground: 0x554c3e, intensity: 0.62 },
+      environmentIntensity: 0.42,
+      exposure: 1.06,
+      grade: { saturation: 0.82, warmth: 0.6, lift: 0.016 },
+    },
+  ],
   ground: { base: 0x9c9268, patch: 0x8d8560, accent: 0xa89c74 },
   patio: { edge: 0x8e8a84, trim: 0x74716c, lift: 0.3, overhang: 0.55 },
   path: null,

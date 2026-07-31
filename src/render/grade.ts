@@ -63,7 +63,17 @@ const GRADE = /* glsl */ `
   }
 `;
 
-export function createGradedOutputPass(grade: Grade): OutputPass {
+export type GradedOutputPass = {
+  pass: OutputPass;
+  /**
+   * Re-point the dial. The grade is part of the biome's *day*, so it moves: a
+   * roadside at closing time is a warmer, flatter image than the same roadside
+   * at opening. Uniforms only — nothing here recompiles.
+   */
+  setGrade: (grade: Grade) => void;
+};
+
+export function createGradedOutputPass(grade: Grade): GradedOutputPass {
   const pass = new OutputPass();
   const source = pass.material.fragmentShader;
 
@@ -79,13 +89,24 @@ export function createGradedOutputPass(grade: Grade): OutputPass {
     .replace(PIXEL_ANCHOR, PIXEL_ANCHOR + GRADE);
 
   // Added before the program is first compiled, so they are picked up normally.
-  Object.assign(pass.uniforms, {
+  // Kept by reference as well: they are the ones this file declared, so the
+  // setter below can move them without asking three's `uniforms` bag — which is
+  // typed as a bare `object` — to hand them back.
+  const uniforms = {
     saturation: { value: grade.saturation },
     warmth: { value: grade.warmth },
     lift: { value: grade.lift },
     offset: { value: VIGNETTE_OFFSET },
     darkness: { value: VIGNETTE_DARKNESS },
-  });
+  };
+  Object.assign(pass.uniforms, uniforms);
 
-  return pass;
+  return {
+    pass,
+    setGrade: (next: Grade): void => {
+      uniforms.saturation.value = next.saturation;
+      uniforms.warmth.value = next.warmth;
+      uniforms.lift.value = next.lift;
+    },
+  };
 }

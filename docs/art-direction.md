@@ -16,11 +16,11 @@ The five things doing the work:
    bevel catches the key light and makes a cube look sculpted. Geometry is
    built at final size and cached — never unit-scaled, which would smear the
    bevel.
-2. **Image-based lighting.** `RoomEnvironment` through a `PMREMGenerator` gives
-   soft directional variation and believable roughness response with zero
-   assets, plus a warm key light, a cool fill, and a hemisphere wrap. The
-   `enamel` surface finish (low roughness, almost no metalness) turns that into
-   the broad soft highlight of a fired enamel mug.
+2. **Image-based lighting.** A sky dome, a ground disc and a sun through a
+   `PMREMGenerator` give soft directional variation and believable roughness
+   response with zero assets, plus a warm key light, a cool fill, and a
+   hemisphere wrap. The `enamel` surface finish (low roughness, almost no
+   metalness) turns that into the broad soft highlight of a fired enamel mug.
 3. **Ambient occlusion.** `GTAOPass` puts contact shadows in every crevice,
    which is what makes objects feel like they are *resting on* the counter
    rather than floating near it.
@@ -164,6 +164,55 @@ actually drives must be one fact.
 Because the biome also owns the lighting, a night or golden-hour variant is
 purely a matter of numbers.
 
+## The day
+
+A biome's light is not an hour, it is a **day**: `daylight` is a list of
+keyframes from opening to closing, and `render/daylight.ts` samples that curve
+against the service clock (`dayProgress`, 0 at open and 1 at close). Three keys
+is a whole day. The park opens cool and low, spends the middle of service in the
+hazy warm afternoon that was the only light it used to have, and closes amber
+and long-shadowed; the beach burns a bright morning up into a hard midday and
+leaves it pink; the roadside starts hot and goes down behind the traffic.
+
+What that bought, and what it cost:
+
+- **The service clock was already the drama, and nothing was drawing it.** The
+  HUD counts down and the customers arrive in waves, but the room looked the
+  same at 0:10 as at 2:30. A shadow that has visibly swung across the patio
+  since you opened is the same information without a number on it.
+- **It replicates for free.** `dayTime` and `dayLength` are already on the wire,
+  so every client works the same hour out of the same world. There is nothing to
+  synchronise, which there would have been the moment the sun ran off a
+  wall-clock timer instead.
+- **The build phase is morning.** It is planning tomorrow, and tomorrow starts at
+  opening, so `dayProgress` is 0 in every phase that is not service. Closing time
+  therefore hands the sky a target it has to travel the whole day backwards to
+  reach: eased over a couple of seconds that reads as a time-lapse rewinding, and
+  snapped it reads as a bug.
+- **Two things in that pipeline are expensive, and neither is the light.** Moving
+  a sun is three numbers a frame. Redrawing the sky gradient is a canvas upload
+  and rebuilding the environment map is a PMREM render, so both run on a bucketed
+  clock — two dozen times a day rather than sixty times a second. Neither carries
+  detail (the gradient is four pixels wide, the environment is blurred to a few
+  mip levels), so a step in either is not a thing the eye can catch. The
+  environment probe is built once and *mutated*, never rebuilt.
+- **Colours cross in linear light.** `THREE.Color` mixing rather than arithmetic
+  on hex — the difference between a sun going white-to-amber through warm gold
+  and the same sun going through khaki.
+- **Two things about authoring a day are silent when wrong**, so
+  `data/validate.ts` checks them: the sun's azimuth must move *one way* across
+  the keys (crossfading a value that doubles back swings every shadow in the
+  kitchen the other way at noon), and no key may put the sun below ~12°, where it
+  lays shadows out further than the shadow camera covers and they end in a
+  straight line across the grass.
+- **The grade moves with the hour too**, which is why `Post` gained a `setGrade`.
+  It stays gentle at both ends: the evening should be *warmer*, not more graded,
+  and the old warning about desaturating twice applies just as much to a dial
+  that is now animated.
+- **The gallery takes the light and not the weather.** It stands at midday with
+  no sky and no fog, because a turntable is for comparing models to each other
+  and that needs the light to hold still.
+
 The park deliberately includes **picnic tables**: they were set dressing and the
 seed of the dining room, back when there was not one. The beach has parasols for
 the same reason — a place should look like it knows what it is for.
@@ -254,6 +303,8 @@ live in [lessons.md](lessons.md).
   sky, ground and sun — rather than three.js's white studio room, which was the
   same room on a park lawn, a midday beach and a roadside at dusk — the steel
   could go up to 0.45 and finally reads as steel that is standing *somewhere*.
+  It now reflects *when*, too: the same probe is re-baked as the day runs, so a
+  sink catches the evening it is standing in.
 - **Scene fog applies to sprites.** Labels and progress bars faded into the
   background on the far side of the kitchen. Every UI-ish material sets
   `fog: false`.

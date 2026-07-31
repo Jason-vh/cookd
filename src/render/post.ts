@@ -27,6 +27,8 @@ export type Post = {
   composer: EffectComposer;
   resize(width: number, height: number): void;
   render(): void;
+  /** The mood dial, which moves with the hour — see `daylight.ts`. */
+  setGrade: (grade: Grade) => void;
   /** Release the render targets. The chain holds several framebuffers. */
   dispose(): void;
 };
@@ -112,7 +114,8 @@ export function createPost(
 
   // The biome's mood dial, the vignette, tone mapping and the sRGB conversion,
   // all in the one shader that finishes the image — see grade.ts.
-  composer.addPass(createGradedOutputPass(grade));
+  const output = createGradedOutputPass(grade);
+  composer.addPass(output.pass);
 
   // After the output pass on purpose: SMAA needs sRGB input to find edges.
   composer.addPass(new SMAAPass());
@@ -141,7 +144,7 @@ export function createPost(
     composer.dispose();
   };
 
-  return { composer, resize, render, dispose };
+  return { composer, resize, render, dispose, setGrade: output.setGrade };
 }
 
 export function postEnabled(): boolean {
