@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { specKey } from "../sim/items";
-import type { IngredientId, Item } from "../sim/types";
+import type { IngredientId, Item, ItemSpec } from "../sim/types";
 import { PALETTE } from "./palette";
 import {
   cylinder,
@@ -751,6 +751,14 @@ const STATE_MODELS: Record<string, Builder> = {
 /** Which ingredient bases have a model. For the coverage test. */
 export function modelledBases(): string[] {
   return Object.keys(BASE_MODELS);
+}
+
+/** Every item state with a model of its own, as specs. For the gallery. */
+export function modelledStates(): ItemSpec[] {
+  return Object.keys(STATE_MODELS).map((key) => {
+    const [base, processes] = key.split("|");
+    return { base: base ?? key, processes: processes ? processes.split(",") : [] };
+  });
 }
 
 export function addModel(parent: THREE.Object3D, item: Item, y: number): void {

@@ -87,6 +87,13 @@ online: customers walk the path, take a seat, raise a bubble with the dish and a
 patience ring, eat a delivered plate, and leave a dirty plate and a stack of
 coins behind.
 
+**Look at the models, in the gallery.** `?gallery` puts every model the game can
+draw side by side under the game's own lighting and post chain, which is the
+only way the *comparative* faults show up: two woods that should be one, a
+tabletop half the thickness of every other, an ingredient a size the plate
+cannot hold. Judging art one object at a time in a running kitchen is how those
+survive.
+
 **Multiplayer against a 180ms latency proxy.** Two browsers in one room collide
 with each other and with the customers walking between them; a build-phase move
 propagates and lands on disk; a reset reaches every client and names who did it;

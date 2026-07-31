@@ -64,7 +64,8 @@ export function createEnvironment(
 
 // --- lighting ----------------------------------------------------------------
 
-function addLights(
+/** Exported for the model gallery, which wants the game's light and nothing else. */
+export function addLights(
   scene: THREE.Scene,
   biome: Biome,
   bounds: EnvironmentBounds,

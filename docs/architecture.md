@@ -106,6 +106,7 @@ src/
     layers.ts             which objects post-processing is allowed to see
     grade.ts              the colour grade, vignette and output shader
     post.ts               post-processing chain (AO, bloom, vignette, AA)
+    gallery.ts            dev-only `?gallery`: every model on a turntable, under the game's light
   ui/
     hud.ts                DOM HUD (stats, event log, build banner — no order list)
     menu.ts               the pause menu
@@ -113,7 +114,8 @@ src/
     controls.ts           the controls table, generated from the bindings and editable
     join.ts               the join screen: start a kitchen, or join one by code
     style.css
-  main.ts                 the shell: input in, pixels out; owns no rules
+  main.ts                 the entry point: the game, or the model gallery
+  shell.ts                the shell: input in, pixels out; owns no rules
 server/
   index.ts                Bun.serve: static files + game socket, rooms
   store.ts                one JSON file per room

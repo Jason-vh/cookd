@@ -40,6 +40,11 @@ skips the server entirely.
 For local development you only need `bun run dev` if you're playing offline; run
 the server too if you want online play.
 
+`http://localhost:5273/?gallery` opens the **model gallery** instead of a
+kitchen: every appliance, ingredient, dish and rig the game can draw, on
+turntables over a one-tile grid, lit and graded exactly as the game lights them.
+Drag to pan, scroll to zoom, `r` to stop the spin. Dev builds only.
+
 `bun run check` runs the typechecker, the linter, the formatter and the tests.
 It also runs on its own: [lefthook](lefthook.yml) gates commits on the fast
 three and pushes on all four, and CI runs the same command again. `bun install`
