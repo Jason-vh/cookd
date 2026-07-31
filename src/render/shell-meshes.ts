@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { PALETTE } from "./palette";
-import { mesh, roundedBox } from "./primitives";
+import { mesh, roundedBox, tonedMesh } from "./primitives";
 import { canvas2d, cssHex } from "./text";
 
 /**
@@ -41,7 +41,9 @@ export function buildWall(height: number, axis: "vertical" | "horizontal"): THRE
   const color = height < 0.5 ? PALETTE.wallLow : PALETTE.wall;
   const long = 1 + WALL_THICKNESS;
   const [w, d] = axis === "vertical" ? [WALL_THICKNESS, long] : [long, WALL_THICKNESS];
-  const body = mesh(roundedBox(w, height, d, 0.04), color, "plaster");
+  // Toned: a two-metre wall of one flat value is the largest plastic surface on
+  // screen. Gentle — the fall is the sky above and the floor below, not dirt.
+  const body = tonedMesh(roundedBox(w, height, d, 0.04), color, "plaster", 0.88);
   body.position.y = height / 2;
   group.add(body);
   if (height > 0.6) {

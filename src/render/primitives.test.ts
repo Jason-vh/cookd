@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { capsule, cylinder, extruded, isCached, roundedCylinder, sweep } from "./primitives";
+import {
+  capsule,
+  cylinder,
+  extruded,
+  isCached,
+  roundedCylinder,
+  sphere,
+  sweep,
+  tonedMesh,
+} from "./primitives";
 
 /**
  * The primitive cache is load-bearing, and silently so.
@@ -130,4 +139,42 @@ describe("the shapes are the size they claim", () => {
 /** Cylinders are still the right answer where nothing is filleted. */
 test("a plain cylinder is unchanged", () => {
   expect(size(cylinder(0.2, 0.2, 1)).y).toBeCloseTo(1, 5);
+});
+
+/**
+ * Baked shading is invisible in code review and easy to get upside down, which
+ * would light every tree in the park from underneath.
+ */
+const shade = (object: THREE.Mesh, index: number): number =>
+  object.geometry.attributes.color!.getX(index);
+
+describe("toned meshes", () => {
+  test("are darker at the bottom than at the top", () => {
+    const object = tonedMesh(cylinder(0.3, 0.3, 1), 0x88aa66, "cloth", 0.5);
+    const color = object.geometry.attributes.color!;
+    const position = object.geometry.attributes.position!;
+
+    let lowest = 0;
+    let highest = 0;
+    for (let i = 1; i < position.count; i++) {
+      if (position.getY(i) < position.getY(lowest)) lowest = i;
+      if (position.getY(i) > position.getY(highest)) highest = i;
+    }
+    expect(shade(object, lowest)).toBeCloseTo(0.5, 5);
+    expect(shade(object, highest)).toBeCloseTo(1, 5);
+    expect(color.count).toBe(position.count);
+  });
+
+  test("leave the shape they were given alone", () => {
+    const shared = cylinder(0.3, 0.3, 1);
+    expect(tonedMesh(shared, 0x88aa66).geometry).not.toBe(shared);
+    expect(shared.attributes.color).toBeUndefined();
+  });
+
+  test("share one buffer per shape and tone", () => {
+    const first = tonedMesh(sphere(0.4, 8), 0x88aa66, "cloth", 0.8);
+    const second = tonedMesh(sphere(0.4, 8), 0x223344, "cloth", 0.8);
+    expect(first.geometry).toBe(second.geometry);
+    expect(isCached(first.geometry)).toBe(true);
+  });
 });

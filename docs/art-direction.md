@@ -49,6 +49,11 @@ Supporting decisions:
   surfaces and to nothing else — fired enamel, glazed ceramic and polished steel
   are supposed to be even, and roughing them up makes them look dusty. It costs
   one texture upload and no draw calls, because every material shares it.
+- **Vertex colours where a shape is broad and flat.** A vertical tone baked into
+  the vertices (`tonedMesh`) costs nothing per frame, needs no texture and no
+  shader, and is the difference between a green ball and a tree canopy. Used on
+  foliage, rocks and wall panels. It is not an AO substitute — GTAO does
+  contact, this does the broad fall from a bright sky to a dark floor.
 - **One dial for mood.** `GradeShader` (`render/grade.ts`) applies saturation,
   warmth and black-lift as a post pass, configured per biome. Tuning the whole
   look is three numbers rather than fifty material colours.

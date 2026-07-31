@@ -267,12 +267,16 @@ function grainTexture(): THREE.Texture | null {
   return grain;
 }
 
-export function material(color: number, surface: SurfaceName = "wood"): THREE.MeshStandardMaterial {
-  const key = `${color}:${surface}`;
+export function material(
+  color: number,
+  surface: SurfaceName = "wood",
+  vertexColors = false,
+): THREE.MeshStandardMaterial {
+  const key = `${color}:${surface}:${vertexColors ? "toned" : "flat"}`;
   let found = materials.get(key);
   if (!found) {
     const { roughness, metalness, grained } = SURFACE[surface];
-    found = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    found = new THREE.MeshStandardMaterial({ color, roughness, metalness, vertexColors });
     if (grained) found.roughnessMap = grainTexture();
     materials.set(key, found);
     owned.add(found);
@@ -308,6 +312,52 @@ export function mesh(
   surface: SurfaceName = "wood",
 ): THREE.Mesh {
   const object = new THREE.Mesh(geometry, material(color, surface));
+  object.castShadow = true;
+  object.receiveShadow = true;
+  return object;
+}
+
+/**
+ * The same shape with a vertical tonal gradient baked into its vertex colours:
+ * `base` of the light at the bottom, full light at the top.
+ *
+ * The cheapest form of shading there is. It costs nothing per frame, needs no
+ * texture and no shader, and it does the one thing flat-shaded blobs most need
+ * — a bush lit evenly top to bottom is a green ball, and a bush that darkens
+ * underneath is foliage. It is *not* an ambient-occlusion substitute: GTAO
+ * handles contact, and this handles the broad top-to-bottom fall that a sky
+ * above and a ground below produce on everything.
+ *
+ * Keyed by the source geometry's uuid, which is stable because geometry itself
+ * comes from the cache above — pass a shared shape, not a one-off.
+ */
+function shaded(geometry: THREE.BufferGeometry, base: number): THREE.BufferGeometry {
+  return cached(`shd:${geometry.uuid},${base}`, () => {
+    const copy = geometry.clone();
+    copy.computeBoundingBox();
+    const bounds = copy.boundingBox!;
+    const span = Math.max(1e-6, bounds.max.y - bounds.min.y);
+    const position = copy.attributes.position!;
+    const colors = new Float32Array(position.count * 3);
+    for (let i = 0; i < position.count; i++) {
+      const shade = base + (1 - base) * ((position.getY(i) - bounds.min.y) / span);
+      colors[i * 3] = shade;
+      colors[i * 3 + 1] = shade;
+      colors[i * 3 + 2] = shade;
+    }
+    copy.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    return copy;
+  });
+}
+
+/** `mesh`, darkened towards its base. See `shaded`. */
+export function tonedMesh(
+  geometry: THREE.BufferGeometry,
+  color: number,
+  surface: SurfaceName = "cloth",
+  base = 0.78,
+): THREE.Mesh {
+  const object = new THREE.Mesh(shaded(geometry, base), material(color, surface, true));
   object.castShadow = true;
   object.receiveShadow = true;
   return object;

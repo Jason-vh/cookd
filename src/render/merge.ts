@@ -79,8 +79,16 @@ export function mergeStatic(root: THREE.Object3D): THREE.Mesh[] {
   return merged;
 }
 
-/** Attributes a merged batch carries. Anything else is dropped. */
-const KEEP = new Set(["position", "normal", "uv"]);
+/**
+ * Attributes a merged batch carries. Anything else is dropped.
+ *
+ * `color` is here because scenery is where baked vertex shading is worth the
+ * most and merging is compulsory out there — dropping it would have quietly
+ * unshaded every tree in the park. Batches are keyed by material and only a
+ * `vertexColors` material ever gets shaded geometry, so a batch cannot end up
+ * half with colours and half without.
+ */
+const KEEP = new Set(["position", "normal", "uv", "color"]);
 
 /**
  * `mergeGeometries` requires every input to agree on indexing and on which

@@ -5,7 +5,7 @@ import { mulberry32 } from "../sim/random";
 import type { Biome, PropKind } from "../data/biomes";
 import type { Vec2 } from "../sim/types";
 import { PALETTE } from "./palette";
-import { box, cylinder, mesh, roundedBox, sphere } from "./primitives";
+import { box, cylinder, mesh, roundedBox, sphere, tonedMesh } from "./primitives";
 import { mergeStatic } from "./merge";
 
 /**
@@ -293,7 +293,7 @@ const PROP_BUILDERS: Record<PropKind, PropBuilder> = {
     const group = new THREE.Group();
     const color = pick(biome.foliage, random);
     for (let i = 0; i < 3; i++) {
-      const blob = mesh(sphere(0.34 + random() * 0.16, 12), color, "cloth");
+      const blob = tonedMesh(sphere(0.34 + random() * 0.16, 12), color, "cloth");
       blob.position.set((random() - 0.5) * 0.5, 0.26 + random() * 0.12, (random() - 0.5) * 0.5);
       blob.scale.set(1, 0.82, 1);
       group.add(blob);
@@ -302,7 +302,7 @@ const PROP_BUILDERS: Record<PropKind, PropBuilder> = {
   },
   rock: (biome, random) => {
     const group = new THREE.Group();
-    const stone = mesh(sphere(0.26 + random() * 0.1, 10), biome.rock, "stone");
+    const stone = tonedMesh(sphere(0.26 + random() * 0.1, 10), biome.rock, "stone", 0.85);
     stone.scale.set(1.2, 0.62 + random() * 0.25, 1);
     stone.rotation.y = random() * Math.PI;
     stone.position.y = 0.12;
@@ -459,7 +459,8 @@ function tree(biome: Biome, random: () => number, palette: number[]): THREE.Obje
   const crown = 3 + Math.floor(random() * 2);
   for (let i = 0; i < crown; i++) {
     const radius = 0.5 + random() * 0.35;
-    const blob = mesh(sphere(radius, 14), color, "cloth");
+    // Toned rather than flat: a canopy lit evenly top to bottom is a green ball.
+    const blob = tonedMesh(sphere(radius, 14), color, "cloth");
     blob.position.set(
       (random() - 0.5) * 0.7,
       height + 0.15 + (random() - 0.3) * 0.5,
