@@ -1215,6 +1215,27 @@ describe("walls between blocks", () => {
     expect(eastFrom(PASS[1] - 0.5)).toBeGreaterThan(PASS[0] + 1);
   });
 
+  test("turning around against a wall walks away from it, not through it", () => {
+    // Regression: resting flush against a seam puts the whole body in the
+    // square before it, so the seam behind the new leading edge on the frame
+    // the chef turns round is the wall they were leaning on. Treating it as
+    // just-crossed resolved them to its far side — a step west through the
+    // pass wall landed them in the kitchen.
+    const world = makeWorld();
+    const player = world.players[0]!;
+    player.pos = { x: 3.5, y: 2.5 };
+    player.prevPos = { ...player.pos };
+
+    const inputs = idle();
+    inputs[0]!.move = { x: 1, y: 0 };
+    for (let i = 0; i < 120; i++) step(world, inputs);
+    expect(player.pos.x).toBeCloseTo(PASS[0] - PLAYER_RADIUS, 3);
+
+    inputs[0]!.move = { x: -1, y: 0 };
+    step(world, inputs);
+    expect(player.pos.x).toBeLessThan(PASS[0] - PLAYER_RADIUS);
+  });
+
   test("a square against the wall has three sides, and the fourth is not one", () => {
     // What `seatsAround` is for, and why it had to learn about walls: the tile
     // west of the sign is paving, walkable, and on the other side of the shell.
