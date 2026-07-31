@@ -206,15 +206,34 @@ export const PALETTE = {
  * a rich environment it renders near-black. Stylised scenes want semi-metals at
  * most.
  */
+/**
+ * `grained` surfaces get the shared noise roughness map from `primitives.ts`.
+ *
+ * Only the matte, fibrous ones. Timber, plaster, cloth and stone scatter light
+ * differently across a few centimetres and look like plastic without it; fired
+ * enamel, glazed ceramic and polished steel are *supposed* to have an even
+ * sheen, and roughing them up makes them look dusty rather than real. Food is
+ * left alone too — it is the most detailed geometry in the game and does not
+ * need help breaking up.
+ */
 export const SURFACE = {
-  enamel: { roughness: 0.3, metalness: 0.04 },
-  wood: { roughness: 0.78, metalness: 0.0 },
-  metal: { roughness: 0.32, metalness: 0.3 },
-  paintedMetal: { roughness: 0.45, metalness: 0.1 },
-  ceramic: { roughness: 0.22, metalness: 0.0 },
-  food: { roughness: 0.58, metalness: 0.0 },
-  cloth: { roughness: 0.88, metalness: 0.0 },
-  stone: { roughness: 0.92, metalness: 0.0 },
+  enamel: { roughness: 0.3, metalness: 0.04, grained: false },
+  /**
+   * The walls, which are painted plaster and were being drawn as enamel.
+   *
+   * They are the largest flat areas on screen by a wide margin, so the one
+   * surface in the house style that can least afford a mug's sheen is the one
+   * that had it: a broad, even highlight across a two-metre wall says plastic in
+   * a way the same highlight on an oven door does not.
+   */
+  plaster: { roughness: 0.82, metalness: 0.0, grained: true },
+  wood: { roughness: 0.78, metalness: 0.0, grained: true },
+  metal: { roughness: 0.32, metalness: 0.3, grained: false },
+  paintedMetal: { roughness: 0.45, metalness: 0.1, grained: true },
+  ceramic: { roughness: 0.22, metalness: 0.0, grained: false },
+  food: { roughness: 0.58, metalness: 0.0, grained: false },
+  cloth: { roughness: 0.88, metalness: 0.0, grained: true },
+  stone: { roughness: 0.92, metalness: 0.0, grained: true },
 } as const;
 
 export type SurfaceName = keyof typeof SURFACE;

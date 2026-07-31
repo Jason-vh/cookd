@@ -42,6 +42,13 @@ Supporting decisions:
 - **The top face is what identifies an appliance.** At this camera angle you see
   a lot of it: the oven is a cream enamel range with a charcoal hotplate, the
   fryer terracotta with a golden basin. Body colour alone is not enough.
+- **Matte surfaces get a roughness map.** Flat colour with a *perfectly* even
+  sheen is what reads as plastic: timber, plaster, cloth and stone all vary in
+  how they scatter light across a few centimetres. One shared 128px sheet of
+  soft noise (`primitives.ts`) is applied as a `roughnessMap` to those four
+  surfaces and to nothing else — fired enamel, glazed ceramic and polished steel
+  are supposed to be even, and roughing them up makes them look dusty. It costs
+  one texture upload and no draw calls, because every material shares it.
 - **One dial for mood.** `GradeShader` (`render/grade.ts`) applies saturation,
   warmth and black-lift as a post pass, configured per biome. Tuning the whole
   look is three numbers rather than fifty material colours.

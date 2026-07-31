@@ -41,11 +41,11 @@ export function buildWall(height: number, axis: "vertical" | "horizontal"): THRE
   const color = height < 0.5 ? PALETTE.wallLow : PALETTE.wall;
   const long = 1 + WALL_THICKNESS;
   const [w, d] = axis === "vertical" ? [WALL_THICKNESS, long] : [long, WALL_THICKNESS];
-  const body = mesh(roundedBox(w, height, d, 0.04), color, "enamel");
+  const body = mesh(roundedBox(w, height, d, 0.04), color, "plaster");
   body.position.y = height / 2;
   group.add(body);
   if (height > 0.6) {
-    const trim = mesh(roundedBox(w + 0.05, 0.09, d + 0.05, 0.03), PALETTE.wallTrim, "enamel");
+    const trim = mesh(roundedBox(w + 0.05, 0.09, d + 0.05, 0.03), PALETTE.wallTrim, "plaster");
     trim.position.y = height;
     group.add(trim);
   }
@@ -67,11 +67,11 @@ export function buildDoorway(): THREE.Object3D {
   const height = 1.1;
   const depth = WALL_THICKNESS;
   for (const z of [-0.42, 0.42]) {
-    const post = mesh(roundedBox(depth, height, 0.16, 0.04), PALETTE.wall, "enamel");
+    const post = mesh(roundedBox(depth, height, 0.16, 0.04), PALETTE.wall, "plaster");
     post.position.set(0, height / 2, z);
     group.add(post);
   }
-  const lintel = mesh(roundedBox(depth + 0.05, 0.14, 1 + depth, 0.04), PALETTE.wallTrim, "enamel");
+  const lintel = mesh(roundedBox(depth + 0.05, 0.14, 1 + depth, 0.04), PALETTE.wallTrim, "plaster");
   lintel.position.y = height + 0.07;
   group.add(lintel);
   return group;
@@ -95,12 +95,12 @@ export function buildServingHatch(out: number): THREE.Object3D {
   const height = 0.95;
   const depth = WALL_THICKNESS;
   for (const z of [-0.46, 0.46]) {
-    const post = mesh(roundedBox(depth, 1.1, 0.12, 0.04), PALETTE.wall, "enamel");
+    const post = mesh(roundedBox(depth, 1.1, 0.12, 0.04), PALETTE.wall, "plaster");
     post.position.set(0, 0.55, z);
     group.add(post);
   }
 
-  const lintel = mesh(roundedBox(depth + 0.05, 0.18, 1 + depth, 0.04), PALETTE.wallTrim, "enamel");
+  const lintel = mesh(roundedBox(depth + 0.05, 0.18, 1 + depth, 0.04), PALETTE.wallTrim, "plaster");
   lintel.position.y = height + 0.09;
   group.add(lintel);
 
@@ -112,7 +112,7 @@ export function buildServingHatch(out: number): THREE.Object3D {
   canopy.rotation.z = out * 0.16;
   group.add(canopy);
 
-  const bracket = mesh(roundedBox(0.24, 0.06, 0.06, 0.02), PALETTE.wallTrim, "enamel");
+  const bracket = mesh(roundedBox(0.24, 0.06, 0.06, 0.02), PALETTE.wallTrim, "plaster");
   bracket.position.set(out * 0.14, height + 0.18, 0);
   group.add(bracket);
 

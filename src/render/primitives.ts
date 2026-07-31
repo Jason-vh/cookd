@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { SURFACE, type SurfaceName } from "./palette";
+import { wobble } from "./wobble";
 
 /**
  * Shared geometry/material factories.
@@ -209,11 +210,70 @@ export function extruded(
   });
 }
 
+/**
+ * One shared sheet of soft noise, used as a roughness map.
+ *
+ * Every surface in the kitchen was a flat colour with a *perfectly* uniform
+ * sheen, which is the thing that reads as plastic: real timber, plaster and
+ * cloth vary in how they scatter light across a few centimetres, and that
+ * variation is most of what the eye uses to tell materials apart. One 128px
+ * texture applied to the matte surfaces costs a single upload and no draw
+ * calls, because it is shared by every material that wants it.
+ *
+ * Blotches rather than per-pixel static: fine noise aliases into a shimmer the
+ * moment the camera moves, and the feature wanted here is at the scale of a
+ * knot in a plank, not a grain of sand. Deterministic, like every other
+ * generated thing here.
+ */
+let grain: THREE.Texture | null = null;
+
+function grainTexture(): THREE.Texture | null {
+  // Headless (tests, and anything that builds a mesh without a DOM).
+  if (typeof document === "undefined") return null;
+  if (grain) return grain;
+
+  const cells = 32;
+  const coarse = document.createElement("canvas");
+  coarse.width = cells;
+  coarse.height = cells;
+  const paint = coarse.getContext("2d")!;
+  for (let y = 0; y < cells; y++) {
+    for (let x = 0; x < cells; x++) {
+      // 0.82..1.0 of full roughness: enough to break the sheen, never enough to
+      // look like dirt.
+      const value = Math.round(232 + wobble(x + 1, y + 1) * 46);
+      paint.fillStyle = `rgb(${value},${value},${value})`;
+      paint.fillRect(x, y, 1, 1);
+    }
+  }
+
+  // Scaled up with smoothing, which is the cheapest bilinear value noise there
+  // is: 32 cells of random become soft blotches at 128.
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext("2d")!;
+  context.imageSmoothingEnabled = true;
+  context.drawImage(coarse, 0, 0, 128, 128);
+
+  grain = new THREE.CanvasTexture(canvas);
+  grain.wrapS = THREE.RepeatWrapping;
+  grain.wrapT = THREE.RepeatWrapping;
+  // Geometry is UV-mapped per face, so this is "three blotches across a face"
+  // rather than a world-space size. Parts here differ in size by about 10x, and
+  // roughness is forgiving of that in a way a colour map would not be.
+  grain.repeat.set(3, 3);
+  owned.add(grain);
+  return grain;
+}
+
 export function material(color: number, surface: SurfaceName = "wood"): THREE.MeshStandardMaterial {
   const key = `${color}:${surface}`;
   let found = materials.get(key);
   if (!found) {
-    found = new THREE.MeshStandardMaterial({ color, ...SURFACE[surface] });
+    const { roughness, metalness, grained } = SURFACE[surface];
+    found = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    if (grained) found.roughnessMap = grainTexture();
     materials.set(key, found);
     owned.add(found);
   }
@@ -228,7 +288,14 @@ export function shellMaterial(
   const key = `${color}:${surface}:shell`;
   let found = materials.get(key);
   if (!found) {
-    found = new THREE.MeshStandardMaterial({ color, ...SURFACE[surface], side: THREE.DoubleSide });
+    const { roughness, metalness, grained } = SURFACE[surface];
+    found = new THREE.MeshStandardMaterial({
+      color,
+      roughness,
+      metalness,
+      side: THREE.DoubleSide,
+    });
+    if (grained) found.roughnessMap = grainTexture();
     materials.set(key, found);
     owned.add(found);
   }
