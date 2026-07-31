@@ -327,6 +327,30 @@ before anything simulates from it again (`show` and `hide`). Leaving it in would
 feed the correction into the next tick's movement and collision — a correction
 applied twice, and a chef who never quite arrives.
 
+**Chefs do not push each other.** A shove is the one thing prediction cannot
+guess at: your own chef is simulated *now*, and the chef shoving you is drawn on
+the playout clock, a broadcast and half a round trip in the past. Resolving a
+push against a body that is not where we think it is is a guess that is wrong
+every single frame, and the correction it produces is a correction to *your*
+chef, while you are holding a direction — which is what "we desync when we walk
+through each other" describes. Measured, as the correction still to be walked
+off while two chefs press together (`game/latency.test.ts`):
+
+| round trip | pushing, before | now |
+| --- | --- | --- |
+| 0ms | 0.21 tiles | **0.01** |
+| 30ms | 0.14 tiles | **0.01** |
+| 180ms | 0.47 tiles | **0.00** |
+
+The options were: predict the shove (the table's left column), leave it to the
+server alone (worse — 1.2 tiles at 180ms, because the client walks through and
+the server keeps pushing back), or stop shoving. Bodies do not gate anything in
+this game — you interact with the tile you face, not the space you occupy — so
+the collision was only ever *worth* what it looked like, and looking is
+something the renderer can do on its own. `render/people-views.ts` slides drawn
+chefs apart instead: the same picture, none of it on the wire, and every client
+free to disagree about it.
+
 ## Dropping out, and coming back
 
 A dropped connection **holds your seat for 25 seconds**. Your chef stays where

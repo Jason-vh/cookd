@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { DT } from "../sim/step";
 import type { ChefMotion, Customer, Player, World } from "../sim/types";
 import { customerSpeed } from "../sim/queries";
-import { PLAYER_SPEED } from "../sim/world";
+import { PLAYER_RADIUS, PLAYER_SPEED } from "../sim/world";
 import { chopImpact, chopLift, ease, isChefMotion, lerp, workPhase } from "./anim";
 import { disposeSubtree } from "./dispose";
 import { setGhost } from "./ghost";
@@ -37,6 +37,12 @@ type ChefRig = Rig & {
   tag?: THREE.Sprite;
   tagName?: string;
   wasAway?: boolean;
+  /** Where the simulation says they are, before any jostling. See `jostle`. */
+  at: { x: number; z: number };
+  /** How far out of that spot the bodies around them want them, this frame. */
+  shove: { x: number; z: number };
+  /** How far they are currently drawn from it, eased towards `shove`. */
+  nudge: { x: number; z: number };
 };
 
 type CustomerRig = Rig & {
@@ -55,6 +61,10 @@ const SEAT_HEIGHT = 0.3;
  * full dining room never munches in unison.
  */
 const MUNCH_RATE = 4.6;
+
+/** How far apart drawn chefs are held, and how fast they slide there. */
+const JOSTLE_GAP = PLAYER_RADIUS * 2;
+const JOSTLE_RATE = 14;
 
 export class PeopleViews {
   private readonly chefs = new Map<number, ChefRig>();
@@ -104,10 +114,69 @@ export class PeopleViews {
         this.colors.set(player.id, this.freeColorSlot());
         const parts = buildChef(this.colors.get(player.id) ?? 0);
         this.scene.add(parts.root);
-        chef = { ...parts, phase: 0, pop: 0, lastCarried: 0 };
+        chef = {
+          ...parts,
+          phase: 0,
+          pop: 0,
+          lastCarried: 0,
+          at: { x: 0, z: 0 },
+          shove: { x: 0, z: 0 },
+          nudge: { x: 0, z: 0 },
+        };
         this.chefs.set(player.id, chef);
       }
       this.syncChef(world, player, chef, alpha, dt, time);
+    }
+
+    this.jostle(dt);
+  }
+
+  /**
+   * Slide overlapping chefs apart, in the drawing only.
+   *
+   * The simulation lets bodies pass through each other on purpose — a shove is
+   * the one thing a client cannot predict, because the chef doing the shoving
+   * is drawn a broadcast in the past (see `sim/systems/movement.ts`). What is
+   * left is a picture problem: two chefs in one spot read as one chef, and a
+   * co-op kitchen where you lose your team-mate inside yourself is worse than
+   * one where they stand a body's width away.
+   *
+   * Eased rather than applied outright, so a pair meeting and parting does not
+   * pop, and symmetric, so nobody's chef is the one that always gives way.
+   * Every client draws its own arrangement; none of it is on the wire.
+   */
+  private jostle(dt: number): void {
+    const rigs = [...this.chefs.values()];
+    for (const rig of rigs) {
+      rig.shove.x = 0;
+      rig.shove.z = 0;
+    }
+
+    for (let i = 0; i < rigs.length; i++) {
+      for (let j = i + 1; j < rigs.length; j++) {
+        const a = rigs[i]!;
+        const b = rigs[j]!;
+        const dx = b.at.x - a.at.x;
+        const dz = b.at.z - a.at.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist >= JOSTLE_GAP) continue;
+        // Chefs standing exactly on top of each other still have to part
+        // somewhere, so pick an axis rather than dividing by nothing.
+        const nx = dist > 1e-4 ? dx / dist : 1;
+        const nz = dist > 1e-4 ? dz / dist : 0;
+        const push = (JOSTLE_GAP - dist) / 2;
+        a.shove.x -= nx * push;
+        a.shove.z -= nz * push;
+        b.shove.x += nx * push;
+        b.shove.z += nz * push;
+      }
+    }
+
+    const k = ease(JOSTLE_RATE, dt);
+    for (const rig of rigs) {
+      rig.nudge.x += (rig.shove.x - rig.nudge.x) * k;
+      rig.nudge.z += (rig.shove.z - rig.nudge.z) * k;
+      rig.root.position.set(rig.at.x + rig.nudge.x, 0, rig.at.z + rig.nudge.z);
     }
   }
 
@@ -149,9 +218,11 @@ export class PeopleViews {
       }
     }
 
-    const x = lerp(player.prevPos.x, player.pos.x, alpha);
-    const z = lerp(player.prevPos.y, player.pos.y, alpha);
-    chef.root.position.set(x, 0, z);
+    // Placed here, moved by `jostle` afterwards: two chefs in one spot are
+    // slid apart in the drawing, and only in the drawing.
+    chef.at.x = lerp(player.prevPos.x, player.pos.x, alpha);
+    chef.at.z = lerp(player.prevPos.y, player.pos.y, alpha);
+    chef.root.position.set(chef.at.x, 0, chef.at.z);
     chef.root.rotation.y = Math.atan2(player.facing.x, player.facing.y);
 
     const speed = strideSpeed(player.pos, player.prevPos, PLAYER_SPEED);

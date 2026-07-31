@@ -7,6 +7,17 @@ const DEADZONE = 0.18;
  * Free movement on a tile-aligned grid: the player is a circle, every solid
  * tile is a unit AABB. Axes are resolved separately so sliding along counters
  * feels smooth (the Overcooked/PlateUp feel).
+ *
+ * **Chefs do not collide with each other**, and that is a netcode decision
+ * rather than a design one. Your own chef is simulated *now*; everybody else
+ * is drawn on the playout clock, a broadcast and half a round trip in the
+ * past. A shove resolved against a body that is not where we think it is is a
+ * guess that is wrong every single frame, so pressing against a team-mate used
+ * to drag your own chef around by their ping — half a tile of correction on a
+ * 180ms link, a fifth of one on a perfect link (`latency.test.ts`).
+ * Two chefs standing in the same spot is only a *looking* problem, and it is
+ * solved where looking happens: `render/people-views.ts` slides the drawn
+ * bodies apart.
  */
 export function movementSystem(world: World, inputs: Inputs, dt: number): void {
   for (const player of world.players) {
@@ -42,9 +53,7 @@ export function movementSystem(world: World, inputs: Inputs, dt: number): void {
     moveAxis(world, player, 0, my * PLAYER_SPEED * dt);
   }
 
-  separatePlayers(world);
-
-  // Insurance: separation could in principle nudge someone into geometry.
+  // Insurance: a save, a spawn or a shoved appliance could put someone out.
   for (const player of world.players) {
     player.pos.x = clamp(player.pos.x, PLAYER_RADIUS, world.width - PLAYER_RADIUS);
     player.pos.y = clamp(player.pos.y, PLAYER_RADIUS, world.height - PLAYER_RADIUS);
@@ -93,28 +102,5 @@ function moveAxis(world: World, player: Player, dx: number, dy: number): void {
     if (!isSolid(world, tx, ty)) continue;
     player.pos.y = dy > 0 ? ty - r : ty + 1 + r;
     return;
-  }
-}
-
-/** Soft push-apart so chefs jostle instead of overlapping. */
-function separatePlayers(world: World): void {
-  const players = world.players;
-  const minDist = PLAYER_RADIUS * 2;
-  for (let i = 0; i < players.length; i++) {
-    for (let j = i + 1; j < players.length; j++) {
-      const a = players[i]!;
-      const b = players[j]!;
-      const dx = b.pos.x - a.pos.x;
-      const dy = b.pos.y - a.pos.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist >= minDist || dist === 0) continue;
-      const push = (minDist - dist) / 2;
-      const nx = dx / dist;
-      const ny = dy / dist;
-      a.pos.x -= nx * push;
-      a.pos.y -= ny * push;
-      b.pos.x += nx * push;
-      b.pos.y += ny * push;
-    }
   }
 }

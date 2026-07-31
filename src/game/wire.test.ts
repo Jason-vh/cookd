@@ -35,9 +35,9 @@ function layoutWith(kind: string, x: number, y: number) {
 describe("input is parsed, not trusted", () => {
   test("NaN never reaches the simulation", () => {
     // The original blocker. NaN slips past `movementSystem`'s deadzone (every
-    // comparison against NaN is false), becomes the chef's position, survives
-    // `clamp` for the same reason, and is then pushed into everyone nearby by
-    // `separatePlayers`. One message, whole room, permanently.
+    // comparison against NaN is false), becomes the chef's position, and
+    // survives `clamp` for the same reason. One message, one chef, and it never
+    // comes back.
     expect(parseInput({ ...INPUT, move: { x: NaN, y: 0 } })).toBeNull();
     expect(parseInput({ ...INPUT, move: { x: 0, y: NaN } })).toBeNull();
   });

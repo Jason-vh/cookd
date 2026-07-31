@@ -329,6 +329,19 @@ export class NetGame implements Game {
     this.reconciler.show(this.localIds);
   }
 
+  /**
+   * How far this chef's prediction was from the server's answer, in tiles.
+   *
+   * The honest measure of desync: comparing the drawn chef against the server's
+   * chef says nothing, because prediction runs half a round trip *ahead* on
+   * purpose. What a player feels is the part we got wrong and are sliding back
+   * off. Read by `latency.test.ts`.
+   */
+  correctionOf(id: number): number {
+    const error = this.reconciler.errorOf(id);
+    return Math.hypot(error.x, error.y);
+  }
+
   // --- shell actions ----------------------------------------------------------
 
   addLocalPlayer(name: string): number | null {

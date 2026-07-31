@@ -24,10 +24,9 @@ import type {
  *
  * `movementSystem` compares NaN against its deadzone, every comparison is
  * false, and the chef's position becomes NaN. `clamp` cannot recover it because
- * `NaN < min` and `NaN > max` are both false, and `separatePlayers` then pushes
- * the NaN into everyone standing nearby — a player who sent nothing at all is
- * `{x: null, y: null}` on the same tick, and stays that way until the room is
- * evicted ten minutes later. One message, whole room, permanently.
+ * `NaN < min` and `NaN > max` are both false, so the chef is `{x: null, y:
+ * null}` on the wire from that tick on and stays that way until the room is
+ * evicted ten minutes later. One message, one chef, permanently.
  *
  * So: **parse, don't cast.** These functions take `unknown` and return either a
  * value the rest of the program can rely on completely, or `null`. There is no

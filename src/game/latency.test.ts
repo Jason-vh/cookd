@@ -880,6 +880,75 @@ function cues(link: Link, kind: Effect["kind"]): number {
   return link.game.world.effects.filter((cue) => cue.kind === kind).length;
 }
 
+/**
+ * Two chefs walking into each other, and how far the drawn one is from the
+ * truth while they do it.
+ *
+ * Bodies are the one thing a client cannot predict: our own chef is simulated
+ * *now*, everybody else is drawn on the playout clock a broadcast and half a
+ * round trip in the past. So a shove resolved against a chef who is not
+ * standing where we think produces a correction every single frame — which is
+ * what "we desync when we walk through each other" is a description of.
+ */
+function shoving(rtt: number): { peak: number; mean: number } {
+  const link = new Link(rtt);
+  const bea = link.join("Bea", rtt);
+  link.advance(rtt + 400);
+  link.server.host.menu("startDay");
+
+  // Facing each other down an empty aisle, three tiles apart.
+  const world = link.server.host.world;
+  const places = [
+    { x: 13.5, y: 6.5 },
+    { x: 16.5, y: 6.5 },
+  ];
+  link.peers.forEach((peer, i) => {
+    const player = playerById(world, peer.id)!;
+    player.pos = { ...places[i]! };
+    player.prevPos = { ...places[i]! };
+  });
+  link.advance(rtt + 400);
+
+  link.first.press({ move: { x: 1, y: 0 } });
+  bea.press({ move: { x: -1, y: 0 } });
+
+  let peak = 0;
+  let total = 0;
+  let samples = 0;
+  for (let i = 0; i < 2000; i++) {
+    link.advance(1);
+    for (const peer of link.peers) {
+      const off = peer.game.correctionOf(peer.id);
+      peak = Math.max(peak, off);
+      total += off;
+      samples++;
+    }
+  }
+  link.dispose();
+  return { peak, mean: total / Math.max(1, samples) };
+}
+
+describe("walking into each other", () => {
+  test("a shove does not put the drawn chef somewhere else", () => {
+    const rows = LADDER.map((rtt) => [rtt, shoving(rtt)] as const);
+    console.log(
+      `\nchef pressed against chef  (correction carried, tiles)\n${rows
+        .map(
+          ([rtt, e]) =>
+            `  ${String(rtt).padStart(3)}ms link -> mean ${e.mean.toFixed(3)}, worst ${e.peak.toFixed(3)}`,
+        )
+        .join("\n")}\n`,
+    );
+    for (const [, error] of rows) {
+      // Nothing to walk off at all. While chefs shoved each other in the
+      // simulation this was 0.21 tiles on a perfect link and 0.47 — one and a
+      // half body widths — from another country, every frame the two of them
+      // were touching.
+      expect(error.peak).toBeLessThan(0.05);
+    }
+  });
+});
+
 describe("the server's input queue", () => {
   test("dropped client frames no longer pile up in it", () => {
     // Read at exactly the rate it is written, a queue can only shrink by

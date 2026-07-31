@@ -112,6 +112,18 @@ that call site does.
   them, and the edge is the place — `input/` rotates by the shared yaw in
   `orientation.ts` before anything is quantised, so the sim stays ignorant of the
   camera and the wire still carries a plain vector.
+- **Only simulate what the client can see the truth of.** Chefs pushed each
+  other apart in the simulation, which is a rule about two bodies — and a client
+  only knows where *one* of them is right now. The other is drawn on the playout
+  clock, a broadcast and half a round trip in the past, so every frame two chefs
+  touched produced a correction to the chef the player was steering: "we desync
+  when we walk through each other", straight from playtest. Predicting the shove
+  was wrong (half a tile at 180ms) and leaving it to the server alone was worse
+  (over a tile). What fixed it was noticing that the collision **decided
+  nothing** — you interact with the tile you face, not the space you occupy — so
+  it was never a rule, only a picture, and the renderer can draw that picture by
+  itself. *Before adding a rule to `sim/`, ask what the client would have to
+  know to predict it.*
 - **Never `world.players[id]`.** Use `playerById()`. Ids stopped being array
   positions when players could leave, and the two only disagree *after someone
   disconnects* — which no test covered, because tests join players in order from
@@ -188,7 +200,8 @@ Several of these are no longer only advice:
 | A round trip needs a latch | `input.test.ts`, "a pending online join is asked for once" |
 | A connected gamepad is not a player | `input.test.ts`, "a connected but untouched pad does not create a player" |
 | A buffer cleared on read belongs to one reader | `input.test.ts`, "press buffers" |
-| Controls belong to the camera | `camera.test.ts`, "screen-relative controls"; `input.test.ts`, "movement is screen-relative" |
+| Controls belong to the camera, from every corner | `camera.test.ts`, "screen-relative controls"; `input.test.ts`, "movement is screen-relative" |
+| Chefs do not shove each other | `latency.test.ts`, "a shove does not put the drawn chef somewhere else" |
 | Never `world.players[id]` | `playerById` is the only lookup; ids are never array positions |
 | Optional parameters in the middle of a signature | `AdvanceOptions`, a named object |
 | Don't trust what arrives over a socket | `game/wire.ts` and `wire.test.ts` |
