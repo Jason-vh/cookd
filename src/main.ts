@@ -321,12 +321,17 @@ function frame(now: number): void {
   // every poll, so polling once per frame silently eats quick taps.
   const poll = (): Inputs => {
     const inputs = menuControl.filter(input.poll(game.localIds), game.localIds);
-    // Confirm folds away the end-of-day report. It is a *shell* concern, so it
-    // is read here rather than in the simulation: one player putting the card
-    // down must not put it down on everybody else's screen, and the kitchen has
-    // no business knowing what is drawn over it.
-    if (game.world.phase === "build" && Object.values(inputs).some((i) => i?.grab || i?.start)) {
-      hud.dismissSummary(game.world);
+    // Confirm folds away the end-of-day report, and moving shrinks the morning
+    // banner to a line. Both are *shell* concerns, so they are read here rather
+    // than in the simulation: one player putting the card down must not put it
+    // down on everybody else's screen, and the kitchen has no business knowing
+    // what is drawn over it.
+    if (game.world.phase === "build") {
+      const ours = Object.values(inputs);
+      if (ours.some((i) => i?.grab || i?.start)) hud.dismissSummary(game.world);
+      else if (ours.some((i) => i && (i.move.x !== 0 || i.move.y !== 0))) {
+        hud.settleBanner(game.world);
+      }
     }
     return inputs;
   };

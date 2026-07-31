@@ -37,10 +37,23 @@ the one before.
 There is exactly one phase either way — close, build, open is one loop. A second
 phase kind for "morning" would have been two states describing one thing.
 
-The banner carries the only tutorial the game has: **"Press Start to open."** A
-solo player on day one is standing in a kitchen that will not start until they
-press something, and that is the single most important sentence in the product.
-It is spent on prominence, not on a new screen.
+The banner carries the only tutorial the game has: **"Press Enter to open"** —
+named after whatever that player has actually bound it to. A solo player on day
+one is standing in a kitchen that will not start until they press something, and
+that is the single most important sentence in the product. It is spent on
+prominence, not on a new screen.
+
+Prominence is not the same as permanence, though, and the banner used to be both:
+a full card sitting over the room for the whole morning, which is the half of the
+game that is *about* looking at the room. So it has two forms. It arrives as the
+card — report, day, instruction — and shrinks to a pill at the top edge once the
+player has answered it, by confirming or simply by walking off. The instruction
+never actually leaves, because the day still cannot start without it; it stops
+being the biggest thing on screen, and drops the day and the pad hint, both of
+which the stats panel is already saying.
+
+Movement only settles the banner when there is no report left on it: a report is
+something to read, and reading it is not a reason to lose it.
 
 ## The stall
 

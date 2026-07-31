@@ -49,6 +49,16 @@ export class Hud {
    * next morning's card comes back on its own.
    */
   private dismissed = 0;
+  /**
+   * The morning the banner has already stepped aside for.
+   *
+   * The card is the game's only tutorial, so it arrives loud — and then the
+   * build phase is the half of the game where you most want to see the room it
+   * is standing in front of. Once the player has answered it, or simply walked
+   * off, it shrinks to a line. Shell state and keyed by day, like `dismissed`:
+   * the next morning's card comes back on its own.
+   */
+  private settled = 0;
   /** What to call the key that opens the next day — the player may have moved it. */
   private startKey = "Enter";
 
@@ -115,7 +125,7 @@ export class Hud {
   /** The keys changed: say the new one rather than the one this was written with. */
   setStartKey(label: string): void {
     this.startKey = label;
-    this.setBanner("start-key", label);
+    this.setBanner("open", `Press ${label} to open`);
   }
 
   private syncConnection(connection?: Connection): void {
@@ -184,6 +194,16 @@ export class Hud {
    */
   dismissSummary(world: World): void {
     this.dismissed = world.day;
+    this.settled = world.day;
+  }
+
+  /**
+   * The player is getting on with their morning, so the banner gets out of the
+   * way. Movement only — a report still on screen is something to read, and
+   * reading it is not a reason to lose it.
+   */
+  settleBanner(world: World): void {
+    this.settled = world.day;
   }
 
   /**
@@ -195,6 +215,12 @@ export class Hud {
    * hardest — a player alone in a kitchen that will not start until they press
    * something. That instruction is the entire tutorial budget, so it is spent
    * on prominence rather than on a new screen.
+   *
+   * Prominence is not permanence: once it has been answered the whole thing
+   * becomes a pill at the top edge carrying the sentence and nothing else. The
+   * morning is the half of the game that is about *looking at the room*, and a
+   * card parked in front of it all morning was the wrong price for a tutorial
+   * that has already been read.
    *
    * Built once and updated by `textContent`, rather than rebuilt as an HTML
    * string every frame. Reading `card.innerHTML` to compare forced the browser
@@ -213,10 +239,12 @@ export class Hud {
     // say and should not pretend otherwise.
     const hasReport = closed.day < world.day && this.dismissed !== world.day;
     this.bannerCard.classList.toggle("with-report", hasReport);
+    // A report is the one thing worth a whole card. Everything else the morning
+    // has to say fits on one line.
+    this.banner.classList.toggle("slim", !hasReport && this.settled === world.day);
 
     this.setBanner("title", `Day ${world.day} \u2014 morning`);
-    this.setBanner("open", "Press Start to open");
-    this.setBanner("balance", `Balance $${world.money}`);
+    this.setBanner("open", `Press ${this.startKey} to open`);
     if (hasReport) this.setReport(closed, world.money);
   }
 
@@ -252,19 +280,15 @@ export class Hud {
     const open = document.createElement("p");
     open.dataset.banner = "open";
     open.className = "banner-open";
-    const balance = document.createElement("p");
-    balance.dataset.banner = "balance";
 
+    // The keyboard's key is in the instruction itself, so this row is what the
+    // instruction cannot say: the other ways in. It goes with the card.
     const keys = document.createElement("p");
     keys.className = "banner-keys";
-    for (const key of [this.startKey, "Y"]) {
-      const span = document.createElement("span");
-      span.textContent = key;
-      if (key === this.startKey) span.dataset.banner = "start-key";
-      keys.append(span, " ");
-    }
-    keys.append("or the pause menu");
-    this.bannerCard.replaceChildren(reportTitle, report, service, title, open, balance, keys);
+    const pad = document.createElement("span");
+    pad.textContent = "Y";
+    keys.append(pad, " on a pad, or the pause menu");
+    this.bannerCard.replaceChildren(reportTitle, report, service, title, open, keys);
   }
 
   private setBanner(key: string, value: string): void {

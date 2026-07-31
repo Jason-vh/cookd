@@ -144,6 +144,12 @@ body {
   place-items: start center;
   padding-top: 88px;
   pointer-events: none;
+  transition: padding-top 0.2s ease;
+}
+
+/* Answered, so it steps aside: up to the top edge and down to one line. */
+#banner.slim {
+  padding-top: 14px;
 }
 
 #banner.show {
@@ -154,7 +160,10 @@ body {
   background: var(--panel-solid);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 22px 34px;
+  padding: 20px 30px;
+  transition:
+    padding 0.2s ease,
+    border-radius 0.2s ease;
   text-align: center;
   box-shadow: var(--shadow);
   backdrop-filter: blur(10px);
@@ -162,10 +171,45 @@ body {
 }
 
 #banner h1 {
-  margin: 0 0 8px;
-  font-size: 28px;
+  margin: 0 0 6px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.02em;
+}
+
+/*
+ * The slim form: one sentence, in a pill at the top edge.
+ *
+ * Not a second banner — the card is what the morning says when it arrives, and
+ * this is what it goes on saying while you build. The day still cannot start
+ * without a keypress, so the instruction never actually leaves; it stops being
+ * the biggest thing on the screen.
+ */
+#banner.slim .card {
+  padding: 7px 18px;
+  border-radius: 999px;
+  animation: none;
+}
+
+/* Two classes, so this beats `#banner p.banner-open` below it: that rule is the
+   loud form, and a tie would be settled by whichever came last in the file. */
+#banner.slim p.banner-open {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+/*
+ * The day and the other ways in are the card's business.
+ *
+ * `Day 4 — morning` is already in the corner of the screen as `Day 4` and
+ * `Preparing`; a strip that exists to be small should not spend half its width
+ * saying it a third time.
+ */
+#banner.slim h1,
+#banner.slim .banner-keys {
+  display: none;
 }
 
 #banner p {
@@ -208,7 +252,7 @@ body {
  * be allowed to miss. It is the whole tutorial, so it gets to be loud.
  */
 #banner p.banner-open {
-  margin: 10px 0 4px;
+  margin: 8px 0 2px;
   font-size: 19px;
   font-weight: 700;
   color: var(--text);
