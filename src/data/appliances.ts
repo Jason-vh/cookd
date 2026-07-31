@@ -34,6 +34,15 @@ export type ApplianceDef = {
    * save. See `snapshot` and `restore`.
    */
   movable: boolean;
+  /**
+   * Does it hang on the wall rather than stand on the floor?
+   *
+   * A mounted appliance owns its tile without occupying it: the square under
+   * the sign is floor a chef walks over, the same way the dividing wall stopped
+   * being a column of squares when walls moved onto the seams. Nothing may be
+   * built there — that is `placeable`, and a separate fact.
+   */
+  mounted: boolean;
   /** List price at the stall. Sells back for half of it — see `data/economy.ts`. */
   price: number;
 };
@@ -59,7 +68,7 @@ export type ApplianceDef = {
  * opinion still wins — and so "this one is plain" stays the thing you do not
  * have to write down.
  */
-const PLAIN = { patience: 1, upgrades: null } as const;
+const PLAIN = { patience: 1, upgrades: null, mounted: false } as const;
 
 // prettier-ignore
 const DEFS = {
@@ -73,7 +82,7 @@ const DEFS = {
   // The sign in the door: the third piece of level furniture, and the one that
   // decides when the day happens. Opening used to be a keypress with no object
   // in the room behind it — see `sim/systems/sign.ts`.
-  sign: { ...PLAIN, stations: [], speed: 1, label: "Sign", color: 0x7d5b3a, height: 1.15, acceptsItems: false, movable: false, price: 0 },
+  sign: { ...PLAIN, stations: [], speed: 1, label: "Sign", color: 0x7d5b3a, height: 1.15, acceptsItems: false, movable: false, mounted: true, price: 0 },
   counter: { ...PLAIN, stations: ["prep"], speed: 1, label: "Counter", color: 0x9a7b58, height: 0.62, acceptsItems: true, movable: true, price: 20 },
   board: { ...PLAIN, stations: ["prep"], speed: 1.75, label: "Chopping board", color: 0xc9a06a, height: 0.66, acceptsItems: true, movable: true, price: 40 },
   // The upgrades. A steel board is the cheap one on purpose: prep is what a

@@ -15,6 +15,7 @@ import {
 } from "./queries";
 import { isDirty, isPlate, makeItem, specKey } from "./items";
 import { seatsAround } from "./pathing";
+import { across, edgeSeam, wallBetween } from "./walls";
 import { LANE_QUEUE, laneCars, laneSpot } from "./lane";
 import { snapshot } from "../save";
 import { plateCount, platesInWorld } from "./plates";
@@ -1011,6 +1012,24 @@ describe("the sign by the door", () => {
     expect(world.day).toBe(2);
   });
 
+  test("you can stand under it, and turning it is what standing there is for", () => {
+    // Walking up to the sign means ending up on its tile facing the wall it
+    // hangs on: the square in front is then out on the patio, and pointing at
+    // nothing there would refuse the one approach anybody takes.
+    const world = createWorld(LEVEL, 1);
+    const player = world.players[0]!;
+    player.pos = { x: SIGN[0] + 1.5, y: SIGN[1] + 0.5 };
+    player.prevPos = { ...player.pos };
+
+    const inputs = idle();
+    inputs[0]!.move = { x: -1, y: 0 };
+    for (let i = 0; i < 60; i++) step(world, inputs);
+    expect(Math.floor(player.pos.x)).toBe(SIGN[0]);
+
+    press(world, "grab");
+    expect(world.phase).toBe("service");
+  });
+
   test("it is furniture of the place: immovable, and never saved", () => {
     // The same contract as the stall and the card stand. A sign a player could
     // pick up and sell is a kitchen that can lose the ability to open.
@@ -1026,11 +1045,16 @@ describe("the sign by the door", () => {
     expect(snapshot(world).appliances.some((a) => a.kind === "sign")).toBe(false);
   });
 
-  test("it stands in the wall, so the building is not a hole with a sign in it", () => {
+  test("it hangs on the wall, so the wall plugs the hole and the sign takes no floor", () => {
     const world = createWorld(LEVEL, 1);
     const sign = [...world.appliances.values()].find((a) => a.kind === "sign")!;
 
-    expect(isSolid(world, sign.tile.x, sign.tile.y)).toBe(true);
+    // The shell behind it is unbroken — that is what stops the building being a
+    // hole with a sign in it, and it was never the sign's job.
+    const seam = edgeSeam(world.room, sign.tile);
+    expect(wallBetween(world, sign.tile, across(seam, sign.tile))).toBe(true);
+    // So its square is ordinary floor: walk over it, build nothing on it.
+    expect(isSolid(world, sign.tile.x, sign.tile.y)).toBe(false);
     expect(canPlace(world, sign.tile.x, sign.tile.y)).toBe(false);
     // ...and it is beside the door, which is the only reason a player finds it.
     const away = Math.abs(sign.tile.x - world.door.x) + Math.abs(sign.tile.y - world.door.y);

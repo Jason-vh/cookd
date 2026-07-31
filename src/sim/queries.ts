@@ -8,7 +8,7 @@ import { reachableFrom, seatsAround } from "./pathing";
 import { customerSpeed, eatTime, LAST_ORDERS } from "./systems/customers";
 import type { Appliance, Customer, Item, Player, Station, Vec2, World } from "./types";
 import { canReach } from "./walls";
-import { applianceAtTile, inBounds, tileIndex } from "./world";
+import { applianceAtTile, inBounds, mountedAt, tileIndex } from "./world";
 
 /**
  * Read-only questions about the world.
@@ -51,11 +51,19 @@ export function targetTile(player: Player): Vec2 {
  * acts on what is faced goes through here; `targetTile` stays as it was, for
  * the highlight and the placement ghost, which want to know where the square
  * *is* before deciding whether to draw it.
+ *
+ * The square **underfoot** is the answer when the faced one cannot be touched,
+ * and only then. Walking up to the sign to turn it means standing under it and
+ * facing its wall, at which point the square in front is out on the patio; a
+ * chef stood there pointing at nothing would be the sign refusing the one
+ * approach anybody takes to it. It is unambiguous because a mounted appliance
+ * is the only kind whose tile can be stood on at all.
  */
 export function reachedTile(world: World, player: Player): Vec2 | null {
   const tile = targetTile(player);
   const from = { x: Math.floor(player.pos.x), y: Math.floor(player.pos.y) };
-  return canReach(world, from, tile) ? tile : null;
+  if (canReach(world, from, tile)) return tile;
+  return mountedAt(world, from.x, from.y) ? from : null;
 }
 
 export function targetAppliance(world: World, player: Player): Appliance | null {

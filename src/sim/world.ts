@@ -68,10 +68,21 @@ export function applianceAtTile(world: World, x: number, y: number): Appliance |
  * the whole of the change that put them on the seams between tiles: a wall is
  * not something a tile *is*, so it cannot be answered for one. Whether a wall
  * stands in the way is a question about a **step** — see `sim/walls.ts`.
+ *
+ * And not even every appliance: one that hangs on the wall is standing on the
+ * wall's line rather than on the square, so the square is floor. Owning a tile
+ * and filling it came apart the moment the first thing was screwed to a wall.
  */
 export function isSolid(world: World, x: number, y: number): boolean {
   if (!inBounds(world, x, y)) return true;
-  return (world.applianceAt[tileIndex(world, x, y)] ?? 0) !== 0;
+  const appliance = applianceAtTile(world, x, y);
+  return appliance !== null && !applianceDef(appliance.kind).mounted;
+}
+
+/** What hangs on the wall here, over floor anybody may walk on. */
+export function mountedAt(world: World, x: number, y: number): Appliance | null {
+  const appliance = applianceAtTile(world, x, y);
+  return appliance && applianceDef(appliance.kind).mounted ? appliance : null;
 }
 
 /**

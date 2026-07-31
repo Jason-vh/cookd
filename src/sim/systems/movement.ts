@@ -88,7 +88,10 @@ function clamp(value: number, min: number, max: number): number {
  * is for. A chef resting flush against a wall is a whole body's width inside
  * the square before it, so on the frame they turn around the seam behind their
  * new leading edge is the wall they were leaning on — never crossed, and
- * resolving to it would have posted them through to the other side.
+ * resolving to it would have posted them through to the other side. It is
+ * checked with EPSILON either way for the same reason the tile lookups shrink
+ * by it: resting flush means `2.32 - 0.32`, which is a rounding error short of
+ * the seam and would read as already past it.
  */
 const EPSILON = 1e-6;
 
@@ -102,7 +105,7 @@ function moveAxis(world: World, player: Player, dx: number, dy: number): void {
   if (dx !== 0) {
     const tx = Math.floor(dx > 0 ? player.pos.x + r - EPSILON : player.pos.x - r + EPSILON);
     const seam = dx > 0 ? tx : tx + 1;
-    const crossed = dx > 0 ? was <= seam : was >= seam;
+    const crossed = dx > 0 ? was <= seam + EPSILON : was >= seam - EPSILON;
     const minY = Math.floor(player.pos.y - r + EPSILON);
     const maxY = Math.floor(player.pos.y + r - EPSILON);
     for (let ty = minY; ty <= maxY; ty++) {
@@ -115,7 +118,7 @@ function moveAxis(world: World, player: Player, dx: number, dy: number): void {
 
   const ty = Math.floor(dy > 0 ? player.pos.y + r - EPSILON : player.pos.y - r + EPSILON);
   const seam = dy > 0 ? ty : ty + 1;
-  const crossed = dy > 0 ? was <= seam : was >= seam;
+  const crossed = dy > 0 ? was <= seam + EPSILON : was >= seam - EPSILON;
   const minX = Math.floor(player.pos.x - r + EPSILON);
   const maxX = Math.floor(player.pos.x + r - EPSILON);
   for (let tx = minX; tx <= maxX; tx++) {
