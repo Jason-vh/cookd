@@ -81,6 +81,14 @@ export const PALETTE = {
   signOpen: 0x4e8a5c,
   signClosed: 0xa8483f,
   ceramic: 0xf1ece0,
+  /**
+   * The recessed base every appliance stands on.
+   *
+   * One colour for all of them, warm and dark: a toe-kick is read as the shadow
+   * under the thing rather than as part of it, so it must not argue with the
+   * body above it — a plinth painted to match would just make the box taller.
+   */
+  plinth: 0x4c453c,
   bin: 0x4a453e,
   brass: 0xc9a86b,
   // Scuffed stainless, and the one pool of water in the kitchen. The suds are

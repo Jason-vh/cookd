@@ -4,8 +4,17 @@ import { ingredient } from "../data/ingredients";
 import type { Appliance } from "../sim/types";
 import { buildIngredientSample, buildProduceHeap } from "./models";
 import { PALETTE, type SurfaceName } from "./palette";
-import { dHandle, facing, grip, rim, SIDES } from "./parts";
-import { cylinder, lathe, mesh, roundedBox, shellMesh, sphere, sweep } from "./primitives";
+import { CORNERS, dHandle, facing, grip, plinth, rim, SIDES, TOE_KICK } from "./parts";
+import {
+  cylinder,
+  lathe,
+  mesh,
+  roundedBox,
+  roundedCylinder,
+  shellMesh,
+  sphere,
+  sweep,
+} from "./primitives";
 import { makeLabel } from "./sprites";
 import { cssHex, textTexture } from "./text";
 
@@ -115,9 +124,15 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   } else if (appliance.kind === "table") {
     buildTable(root, h);
   } else {
-    const body = mesh(roundedBox(w, h, w, 0.07), look.body[0], look.body[1]);
-    body.position.y = h / 2;
+    // Standing on a recessed plinth rather than on its own bottom face. The
+    // body loses exactly what the plinth gains, so `height` still means the
+    // height of the appliance and every top, item and label sits where it did.
+    const stand = look.grounded ? 0 : TOE_KICK;
+    const bodyH = h - stand;
+    const body = mesh(roundedBox(w, bodyH, w, 0.07), look.body[0], look.body[1]);
+    body.position.y = stand + bodyH / 2;
     root.add(body);
+    if (stand > 0) root.add(plinth(w, stand));
 
     if (look.top) {
       const slab = mesh(roundedBox(w * 0.9, 0.08, w * 0.9, 0.03), look.top[0], look.top[1]);
@@ -369,16 +384,17 @@ export function paintSign(faces: THREE.MeshStandardMaterial[], face: SignFace): 
  * come later without needing them to exist yet.
  */
 function buildTable(group: THREE.Group, h: number): void {
-  const top = mesh(cylinder(0.42, 0.4, 0.07), PALETTE.woodTop, "wood");
-  top.position.y = h;
+  const top = mesh(roundedCylinder(0.42, 0.07, 0.022), PALETTE.woodTop, "wood");
+  top.position.y = h - 0.035;
   group.add(top);
 
   const stem = mesh(cylinder(0.07, 0.09, h), PALETTE.steelDark, "paintedMetal");
   stem.position.y = h / 2;
   group.add(stem);
 
-  const foot = mesh(cylinder(0.24, 0.26, 0.05), PALETTE.steelDark, "paintedMetal");
-  foot.position.y = 0.025;
+  // A weighted base, filleted where it meets the floor: the pedestal is the one
+  // thing holding the whole table up and it should look like it could.
+  const foot = mesh(roundedCylinder(0.26, 0.055, 0.018), PALETTE.steelDark, "paintedMetal");
   group.add(foot);
 
   // One chair per side, tucked under the overhang so they never spill into a
@@ -397,14 +413,9 @@ function buildTable(group: THREE.Group, h: number): void {
     back.position.set(0, h * 0.62 + 0.13, 0.11);
     chair.add(back);
 
-    for (const [lx, lz] of [
-      [-0.1, -0.1],
-      [0.1, -0.1],
-      [-0.1, 0.1],
-      [0.1, 0.1],
-    ] as const) {
-      const leg = mesh(cylinder(0.017, 0.017, h * 0.62), PALETTE.crateTrim, "wood");
-      leg.position.set(lx, (h * 0.62) / 2, lz);
+    for (const [lx, lz] of CORNERS) {
+      const leg = mesh(roundedCylinder(0.018, h * 0.62, 0.008, 10), PALETTE.crateTrim, "wood");
+      leg.position.set(lx * 0.1, 0, lz * 0.1);
       chair.add(leg);
     }
     group.add(chair);
@@ -432,6 +443,8 @@ type Look = {
    * need to introduce itself. Crates override this with what they dispense.
    */
   label?: string;
+  /** Meets the floor on its own terms, so no plinth is put under it. */
+  grounded?: true;
 };
 
 const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
@@ -473,7 +486,14 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // The serving hatch: a steel sill in a hole in the wall. Enamel and a steel
   // top rather than the timber of the counters beside it, so the one tile you
   // hand food through is the one tile that does not look like a worktop.
-  hatch: { body: [PALETTE.sinkBody, "enamel"], top: [PALETTE.steel, "metal"], label: "Hatch" },
+  // The one body that is not standing on the floor: it fills a hole in a wall,
+  // and a plinth under it would be a plinth inside the wall.
+  hatch: {
+    body: [PALETTE.sinkBody, "enamel"],
+    top: [PALETTE.steel, "metal"],
+    label: "Hatch",
+    grounded: true,
+  },
 };
 
 /** Small silhouette details: this is what stops every appliance reading as a box. */
@@ -669,12 +689,7 @@ function buildCrate(parts: ApplianceParts, h: number): void {
   inner.position.y = (bedY + 0.09) / 2;
   group.add(inner);
 
-  for (const [x, z] of [
-    [-1, -1],
-    [1, -1],
-    [-1, 1],
-    [1, 1],
-  ] as const) {
+  for (const [x, z] of CORNERS) {
     const stile = mesh(roundedBox(0.13, h, 0.13, 0.035), PALETTE.crateTrim, "wood");
     stile.position.set(x * 0.4, h / 2, z * 0.4);
     group.add(stile);
@@ -737,6 +752,11 @@ function buildBin(parts: ApplianceParts, h: number): THREE.Object3D {
   const lip = rim(0.44, 0.035);
   lip.position.y = bodyH;
   bin.add(lip);
+
+  // A base ring, so the taper meets the floor on a foot rather than dying into
+  // it. The one place the bin was still extruded tile.
+  const base = mesh(roundedCylinder(0.36, 0.04, 0.012, 20), PALETTE.steelDark, "metal");
+  bin.add(base);
 
   // Lid hinged at the back so it can flip open. Pivot sits on the rim.
   const lid = new THREE.Group();
