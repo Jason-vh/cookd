@@ -1,10 +1,11 @@
 import { specKey } from "../sim/items";
 import type { ItemSpec } from "../sim/types";
-import { APPLIANCES, APPLIANCE_KINDS, isApplianceKind } from "./appliances";
+import { APPLIANCES, APPLIANCE_KINDS, isApplianceKind, type ApplianceKind } from "./appliances";
 import { CUSTOMER_KINDS, DEFAULT_CUSTOMER_KIND } from "./customers";
 import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
-import { LEVELS } from "./level";
+import { LEVELS, runTiles, type LevelDef, type Rect } from "./level";
+import { createWorld, isSolid } from "../sim/world";
 import { BACKFILL_RECIPES, CARD_SLOTS, STARTING_RECIPES, TIER_WEIGHT } from "./progression";
 import { COMBINES, RAW_INGREDIENTS, RECIPES, RECIPE_NEEDS, TRANSFORMS } from "./recipes";
 
@@ -206,58 +207,134 @@ export function validateContent(): string[] {
   // --- levels ---
   for (const [id, level] of Object.entries(LEVELS)) {
     if (level.id !== id) problems.push(`level "${id}": registered under a different id`);
-    if (level.spawns.length === 0) problems.push(`level "${id}": no spawn points`);
-    if (level.dayLength <= 0) problems.push(`level "${id}": dayLength must be positive`);
-    if (!level.rows.some((row) => row.includes("D"))) {
-      problems.push(`level "${id}": no door, so no customer can ever arrive`);
-    }
-    if (!level.rows.some((row) => row.includes("T"))) {
-      problems.push(`level "${id}": no table, so no customer can ever sit`);
-    }
-    // Plates are finite and conserved, so the two appliances the plate economy
-    // runs on are not optional scenery: without a stack there is nowhere for
-    // the kitchen's plates to start, and without a sink the first six dirty
-    // ones end the run.
-    const tiles = level.rows.join("");
-    if (!tiles.includes("P")) problems.push(`level "${id}": no plate stack, so no plates`);
-    if (!tiles.includes("S")) {
-      problems.push(`level "${id}": no sink, so a dirty plate can never be used again`);
-    }
-    const tables = tiles.split("T").length - 1;
-    if (level.plates < tables) {
-      problems.push(`level "${id}": ${level.plates} plates for ${tables} tables`);
-    }
-    // The stall is how a kitchen grows, and a kitchen that cannot grow is one
-    // where money has nothing to be for. The count matters as much as the
-    // presence: `STALL_SLOTS` is what the stock roll fills, so a level with
-    // two `$` tiles would silently be a two-slot shop that every tuning note
-    // in `data/economy.ts` describes wrongly.
-    const slots = tiles.split("$").length - 1;
-    if (slots !== STALL_SLOTS) {
-      problems.push(`level "${id}": ${slots} stall slots, expected ${STALL_SLOTS}`);
-    }
-    // A stall standing where nobody can face it is a shop that does not exist.
-    if (slots > 0 && !level.rows.some((row) => row.includes(","))) {
-      problems.push(`level "${id}": a stall, but no patio to stand it on`);
-    }
-    // The card stand is the only way a menu grows, and `restockCards` fills
-    // exactly the tiles the level puts down: a level with one `?` would be a
-    // stand that offers no choice, which is the one thing it is for.
-    const stands = tiles.split("?").length - 1;
-    if (stands !== CARD_SLOTS) {
-      problems.push(`level "${id}": ${stands} card stands, expected ${CARD_SLOTS}`);
-    }
-    // The sign is the only way into service, so a kitchen without one is a
-    // kitchen that can never open — the most complete failure a level can ship,
-    // and the least visible in ASCII. Exactly one: two signs is two answers to
-    // "is the restaurant open".
-    const signs = tiles.split("!").length - 1;
-    if (signs !== 1) {
-      problems.push(`level "${id}": ${signs} signs, expected exactly 1 — no way to open the day`);
-    }
+    problems.push(...levelProblems(level));
   }
 
   return problems;
+}
+
+/**
+ * What is wrong with a level, asked of the world it builds.
+ *
+ * These checks used to search the level's ASCII — `rows.join("").split("$")` to
+ * count stall slots, `rows.some(row => row.includes("T"))` for a table. That
+ * was a picture being interrogated about its contents, and it could only ever
+ * ask about characters. A level is a list of placements now, so the questions
+ * can be asked of the kitchen those placements actually produce.
+ *
+ * Exported for its own test: these are the checks that replaced *looking at the
+ * picture*, so they are worth pointing at a broken level to prove they fire.
+ */
+export function levelProblems(level: LevelDef): string[] {
+  const problems: string[] = [];
+  const say = (text: string): number => problems.push(`level "${level.id}": ${text}`);
+
+  if (level.spawns.length === 0) say("no spawn points");
+  if (level.dayLength <= 0) say("dayLength must be positive");
+
+  // Geometry first, because everything below stands on it and `createWorld`
+  // writes tiles by index: a room hanging off the edge of the grid would be a
+  // building with pieces missing rather than an error.
+  const { room, size } = level;
+  if (room.width <= 0 || room.height <= 0) say("a room with no floor in it");
+  // Inflated by two: one for the shell, and one so there is patio outside it.
+  // The stall stands on that ring, and a shop nobody can walk to is no shop.
+  if (room.x < 2 || room.y < 2) say("no patio between the building and the grid's edge");
+  if (room.x + room.width + 2 > size.width || room.y + room.height + 2 > size.height) {
+    say("no patio between the building and the grid's edge");
+  }
+  for (const line of level.walls) {
+    if (line.from.x !== line.to.x && line.from.y !== line.to.y) say("a diagonal wall");
+    for (const tile of runTiles(line)) {
+      if (!within(room, tile.x, tile.y)) say(`a wall outside the building at ${tile.x},${tile.y}`);
+    }
+  }
+  // The door is a hole in the shell, so it has to be *in* the shell: one tile
+  // off and it is a walkable square in the patio and the dining room is sealed.
+  const onShell =
+    (level.door.x === room.x - 1 || level.door.x === room.x + room.width) !==
+    (level.door.y === room.y - 1 || level.door.y === room.y + room.height);
+  if (!onShell || !within(inflate(room, 1), level.door.x, level.door.y)) {
+    say("the door is not in the building's wall, so no customer can ever arrive");
+  }
+
+  const seen = new Set<string>();
+  for (const placement of level.appliances) {
+    const { x, y } = placement.at;
+    const key = `${x},${y}`;
+    // Two appliances on one tile leaves the second in the map (so drawn, and
+    // sent in every layout message) but not on the grid — a solid-looking oven
+    // players walk straight through.
+    if (seen.has(key)) say(`two appliances on ${key}`);
+    seen.add(key);
+    if (x < 0 || y < 0 || x >= size.width || y >= size.height) say(`${key} is off the grid`);
+    // Movable things belong indoors. Immovable ones are furniture of the place
+    // — the stall on the patio, the sign in the wall — and place themselves.
+    else if (APPLIANCES[placement.kind].movable && !within(room, x, y)) {
+      say(`a ${placement.kind} outside the building at ${key}`);
+    }
+  }
+
+  // The coordinates have to make sense before the kitchen they describe can be
+  // asked anything. `createWorld` writes tiles by index, so a room hanging off
+  // the grid scribbles past the end of the array rather than failing, and every
+  // count below would be noise around the real problem.
+  if (problems.length > 0) return problems;
+
+  const world = createWorld(level, 0);
+  const count = (kind: ApplianceKind): number =>
+    [...world.appliances.values()].filter((appliance) => appliance.kind === kind).length;
+
+  for (const spawn of level.spawns) {
+    if (isSolid(world, spawn.x, spawn.y))
+      say(`a chef spawns inside something at ${spawn.x},${spawn.y}`);
+  }
+
+  if (count("table") === 0) say("no table, so no customer can ever sit");
+  // Plates are finite and conserved, so the two appliances the plate economy
+  // runs on are not optional scenery: without a stack there is nowhere for the
+  // kitchen's plates to start, and without a sink the first six dirty ones end
+  // the run.
+  if (count("plates") === 0) say("no plate stack, so no plates");
+  if (count("sink") === 0) say("no sink, so a dirty plate can never be used again");
+  if (level.plates < count("table")) {
+    say(`${level.plates} plates for ${count("table")} tables`);
+  }
+  // The stall is how a kitchen grows, and a kitchen that cannot grow is one
+  // where money has nothing to be for. The count matters as much as the
+  // presence: `STALL_SLOTS` is what the stock roll fills, so a level with two
+  // stall tiles would silently be a two-slot shop that every tuning note in
+  // `data/economy.ts` describes wrongly.
+  if (count("stall") !== STALL_SLOTS) {
+    say(`${count("stall")} stall slots, expected ${STALL_SLOTS}`);
+  }
+  // The card stand is the only way a menu grows, and `restockCards` fills
+  // exactly the tiles the level puts down: a level with one stand would offer
+  // no choice, which is the one thing it is for.
+  if (count("cards") !== CARD_SLOTS) {
+    say(`${count("cards")} card stands, expected ${CARD_SLOTS}`);
+  }
+  // The sign is the only way into service, so a kitchen without one can never
+  // open — the most complete failure a level can ship. Exactly one: two signs
+  // is two answers to "is the restaurant open".
+  if (count("sign") !== 1) {
+    say(`${count("sign")} signs, expected exactly 1 — no way to open the day`);
+  }
+
+  return problems;
+}
+
+function within(rect: Rect, x: number, y: number): boolean {
+  return x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
+}
+
+function inflate(rect: Rect, by: number): Rect {
+  return {
+    x: rect.x - by,
+    y: rect.y - by,
+    width: rect.width + by * 2,
+    height: rect.height + by * 2,
+  };
 }
 
 /** Throw if the content is incoherent. Called at startup in development. */

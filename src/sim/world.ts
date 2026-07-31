@@ -1,5 +1,5 @@
 import { applianceDef } from "../data/appliances";
-import { LEGEND, type LevelDef } from "../data/level";
+import { runTiles, wallRuns, type LevelDef } from "../data/level";
 import { STARTING_RECIPES } from "../data/progression";
 import { plateCount, stockPlates } from "./plates";
 import { nextRandom } from "./random";
@@ -123,8 +123,7 @@ export function emptyLedger(day: number): Ledger {
  * moves a counter, and *then* opens.
  */
 export function createWorld(level: LevelDef, playerCount: number, seed = 1): World {
-  const height = level.rows.length;
-  const width = Math.max(...level.rows.map((r) => r.length));
+  const { width, height } = level.size;
 
   const world: World = {
     tick: 0,
@@ -135,17 +134,21 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     seed,
     width,
     height,
+    // Patio until the room says otherwise: walkable, and nothing may be built
+    // on it. The ring is what makes "outside" a place rather than a painted
+    // backdrop — the tiles collision allows and the paving a player can see are
+    // the same thing.
     tiles: Array.from({ length: width * height }, () => ({
       wall: false,
       door: false,
-      placeable: true,
+      placeable: false,
     })),
     applianceAt: Array.from({ length: width * height }, () => 0),
     appliances: new Map(),
     layoutVersion: 0,
     players: [],
     customers: [],
-    door: { x: 0, y: Math.floor(height / 2) },
+    door: { x: level.door.x, y: level.door.y },
     phase: "build",
     day: 1,
     dayTime: 0,
@@ -163,36 +166,14 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     effects: [],
   };
 
-  for (let y = 0; y < height; y++) {
-    const row = level.rows[y] ?? "";
-    for (let x = 0; x < width; x++) {
-      const ch = row[x] ?? ".";
-      const spec = LEGEND[ch];
-      if (!spec) throw new Error(`Unknown level char "${ch}" at ${x},${y}`);
-      const idx = tileIndex(world, x, y);
-      if (spec.kind === "wall") {
-        world.tiles[idx] = { wall: true, door: false, placeable: false };
-      } else if (spec.kind === "door") {
-        world.tiles[idx] = { wall: false, door: true, placeable: true };
-        world.door = { x, y };
-      } else if (spec.kind === "patio") {
-        world.tiles[idx] = { wall: false, door: false, placeable: false };
-      } else if (spec.kind === "appliance") {
-        // The sign hangs *in* the wall, so its tile is a wall tile that happens
-        // to carry an appliance: solid, and part of the shell the renderer
-        // bakes. Anything else would leave a hole in the building.
-        if (spec.wall) {
-          world.tiles[idx] = { wall: true, door: false, placeable: false };
-        } else if (!applianceDef(spec.appliance).movable) {
-          // The stall stands on the patio, so its tile has to be unplaceable for
-          // the same reason the paving around it is: nothing may be built there.
-          // Read from the ASCII rather than inferred, so a stall inside a kitchen
-          // would behave the same way.
-          world.tiles[idx] = { wall: false, door: false, placeable: false };
-        }
-        spawnAppliance(world, spec.appliance, { x, y }, spec.source ?? null);
-      }
-    }
+  buildRoom(world, level);
+  for (const placement of level.appliances) {
+    const tile = world.tiles[tileIndex(world, placement.at.x, placement.at.y)];
+    // An immovable appliance owns the tile it stands on: nothing may be built
+    // there, for the same reason nothing may be built on the paving around the
+    // stall. A wall tile keeps everything it already is — the sign hangs in one.
+    if (tile && !tile.wall && !applianceDef(placement.kind).movable) tile.placeable = false;
+    spawnAppliance(world, placement.kind, placement.at, placement.source ?? null);
   }
 
   // The kitchen's plates, clean and on the stack. Everything after this moves
@@ -210,10 +191,40 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
 }
 
 /**
+ * Stamp the level's geometry: floor inside the room, walls around and through
+ * it, and the one hole customers arrive by.
+ *
+ * The door is written last on purpose. It stands in the shell, and describing
+ * it as a gap the wall run works around would be two facts that have to agree;
+ * this way there is one, and it wins.
+ */
+function buildRoom(world: World, level: LevelDef): void {
+  for (let y = level.room.y; y < level.room.y + level.room.height; y++) {
+    for (let x = level.room.x; x < level.room.x + level.room.width; x++) {
+      world.tiles[tileIndex(world, x, y)] = { wall: false, door: false, placeable: true };
+    }
+  }
+  for (const line of wallRuns(level)) {
+    for (const tile of runTiles(line)) {
+      world.tiles[tileIndex(world, tile.x, tile.y)] = {
+        wall: true,
+        door: false,
+        placeable: false,
+      };
+    }
+  }
+  world.tiles[tileIndex(world, level.door.x, level.door.y)] = {
+    wall: false,
+    door: true,
+    placeable: true,
+  };
+}
+
+/**
  * Put a new appliance on the grid.
  *
  * The one place an appliance comes into existence, so building a kitchen from
- * ASCII, restoring one from a save and topping one up after a content update
+ * a level, restoring one from a save and topping one up after a content update
  * cannot drift into three subtly different `Appliance` literals.
  */
 export function spawnAppliance(

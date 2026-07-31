@@ -135,7 +135,7 @@ game, and none of it is worth resuming.
 
 **Immovable appliances are not stored at all.** Walls and the market stall are
 furniture of the *place*, not of anybody's build, so `restore` rebuilds them from
-the level's ASCII. Storing them would mean every save carrying a copy of the
+the level itself. Storing them would mean every save carrying a copy of the
 level — and a save written before a stall existed describing a kitchen with none.
 
 The stall's *stock* is not stored either, because it is a pure function of the

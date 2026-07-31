@@ -621,7 +621,7 @@ function customer(id: number, recipeId: string): Customer {
  *
  * Found rather than hard-coded: which wall tile a level hangs its sign on is
  * that level's business, and a test that knew the coordinate would be testing
- * the ASCII art.
+ * the level file.
  */
 function faceSign(world: World, player: Player): void {
   const sign = [...world.appliances.values()].find((a) => a.kind === "sign")!;

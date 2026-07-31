@@ -13,8 +13,8 @@ import { specKey } from "../sim/items";
 import { reachableFrom, seatsAround } from "../sim/pathing";
 import { kitchenWarnings, unreachableAppliances, unreachableTables } from "../sim/queries";
 import { createWorld, tileIndex } from "../sim/world";
-import { LEVELS } from "./level";
-import { validateContent } from "./validate";
+import { at, LEVELS, PARK_KITCHEN, wall, type LevelDef } from "./level";
+import { levelProblems, validateContent } from "./validate";
 
 /** Every tier-1 recipe, by id, in a stable order. */
 function tierOne(list: typeof RECIPES): string[] {
@@ -49,6 +49,58 @@ describe("every level ships a kitchen that works", () => {
       }
     });
   }
+});
+
+/** The park kitchen, with one thing about it made wrong. */
+function broken(change: Partial<LevelDef>): string[] {
+  return levelProblems({ ...PARK_KITCHEN, ...change });
+}
+
+describe("a level that does not work is caught before it ships", () => {
+  // A level used to be a picture, and a picture is checked by looking at it.
+  // These are the checks that replaced looking, so each one is pointed at a
+  // broken kitchen to prove it fires — a validator that never says no is
+  // indistinguishable from no validator at all.
+  test("a door that is not in the wall", () => {
+    // One tile west and it is a walkable square out in the patio, with the
+    // dining room sealed behind an unbroken shell. The corner is no way in
+    // either.
+    expect(broken({ door: { x: 1, y: 6 } })[0]).toContain("the door is not in the");
+    expect(broken({ door: { x: 2, y: 2 } })[0]).toContain("the door is not in the");
+  });
+
+  test("a building with no patio around it", () => {
+    expect(broken({ room: { x: 0, y: 3, width: 18, height: 7 } })[0]).toContain("no patio");
+    expect(broken({ size: { width: 22, height: 13 } })[0]).toContain("no patio");
+  });
+
+  test("a wall outside the building it divides", () => {
+    expect(broken({ walls: [wall(30, 3, 30, 4)] })[0]).toContain("a wall outside the building");
+    expect(broken({ walls: [wall(9, 3, 10, 4)] })[0]).toContain("a diagonal wall");
+  });
+
+  test("two appliances on one tile, which draws one and collides with neither", () => {
+    const appliances = [...PARK_KITCHEN.appliances, at("bin", 4, 4)];
+    expect(broken({ appliances })[0]).toContain("two appliances on 4,4");
+  });
+
+  test("a chef spawning inside the furniture", () => {
+    expect(broken({ spawns: [{ x: 12, y: 5 }] })[0]).toContain("spawns inside something");
+  });
+
+  test("a kitchen missing the things a day cannot start without", () => {
+    expect(broken({ appliances: [at("table", 4, 4)] })).toEqual([
+      `level "park-kitchen-2": no plate stack, so no plates`,
+      `level "park-kitchen-2": no sink, so a dirty plate can never be used again`,
+      `level "park-kitchen-2": 0 stall slots, expected 3`,
+      `level "park-kitchen-2": 0 card stands, expected 2`,
+      `level "park-kitchen-2": 0 signs, expected exactly 1 — no way to open the day`,
+    ]);
+  });
+
+  test("more tables than the kitchen has plates to serve them on", () => {
+    expect(broken({ plates: 1 })[0]).toContain("1 plates for 2 tables");
+  });
 });
 
 describe("the content the game actually ships", () => {

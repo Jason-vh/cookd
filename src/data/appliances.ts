@@ -30,7 +30,7 @@ export type ApplianceDef = {
    *
    * Doubles as the line between what the *level* owns and what a *player*
    * owns: immovable appliances are furniture of the place (walls, the market
-   * stall), so they are rebuilt from the level's ASCII and never written to a
+   * stall), so they are rebuilt from the level itself and never written to a
    * save. See `snapshot` and `restore`.
    */
   movable: boolean;

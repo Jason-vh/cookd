@@ -287,29 +287,38 @@ opinion about the content that goes stale the day somebody changes a step.
 
 ## Levels
 
-Kitchens are authored as ASCII so layouts stay readable and diffable
-(`data/level.ts`):
+Kitchens are structured data (`data/level.ts`): a rectangle for the building, a
+list of walls, and a list of what stands where.
 
-```
-,,,,,,,,,,,,,,,,,,,,,,,,
-,,,,,,,,,,,,,,,,,,,,,,,,
-,,####################,,
-$,#......#tl....PS==X#,,
-$,#.T....#...........#,,
-$,#........=B=.......#,,
-,,D......=...........#,,
-?,#......=...........#,,
-?,#.T....#.===.......#,,
-,,#......#...........#,,
-,,####################,,
-,,,,,,,,,,,,,,,,,,,,,,,,
-,,,,,,,,,,,,,,,,,,,,,,,,
+```ts
+size: { width: 24, height: 13 },
+room: { x: 3, y: 3, width: 18, height: 7 },
+door: { x: 2, y: 6 },
+walls: [wall(9, 3, 9, 4), wall(9, 8, 9, 9)],
+appliances: [
+  ...run("stall", 0, 3, 3, "y"),
+  at("sign", 2, 5),
+  crate("tomato", 10, 3),
+  at("plates", 16, 3),
+  at("sink", 17, 3),
+  ...run("counter", 18, 3, 2),
+  at("table", 4, 4),
+  ...
+],
 ```
 
-`#` wall · `.` floor · `,` patio · `D` door · `$` stall · `?` card stand ·
-`T` table · `=` counter · `B` board · `F` fryer · `O` oven · `P` plate stack ·
-`S` sink · `X` bin · `t l c f w p` ingredient crates (tomato, lettuce, cheese,
-flour, water, potato).
+The shell comes from `room` and `door` punches its one hole, so the only walls
+worth writing down are the interior ones — here, the divider either side of the
+walk-through gap at `(9,5)`.
+
+They **used to be ASCII pictures**, and a picture is a lovely thing to read
+right up until it has to say something that is not one-thing-per-cell.
+Everything that was not a cell got bolted on: a flag so the sign could live in a
+wall, six characters for crates that differ only by what is in them, and content
+checks that counted `$` in the source text because the grid could not be asked
+how many stall slots it had. `data/validate.ts` now builds the world and asks
+*it* — which is also how a spawn point inside a counter, or two appliances on one
+tile, became things a level cannot ship with.
 
 The dining room is the western half of the **same grid** — one rectangle, one
 collision system, no new concepts. So is the **patio ring** around the outside:
@@ -325,30 +334,14 @@ second board or a third table comes from [the stall](the-shop.md). Both are the
 same idea: a shop nobody needs to visit teaches nothing, and a kitchen nobody
 chose is the same kitchen in every room.
 
-`F`, `O` and the other crate characters are still in the legend — they describe
-what a level *may* contain, and saves written against the older, richer park
-kitchen keep every appliance they had.
+Saves written against the older, richer park kitchen keep every appliance they
+had: a level says what a *new* room gets.
 
 ### The Beach Shack
 
-The second kitchen, and the reason the level registry exists:
-
-```
-,,,,,,,,,,,,,,,,,,,,
-,,################,,
-,,#.......#tl===X#,,
-$,#..T....=......#,,
-$,#.......#..B...#,,
-$,#.....T........#,,
-,,D.......#......#,,
-?,#..T....=......#,,
-?,#.......#......#,,
-,,#.......#PS===.#,,
-,,################,,
-,,,,,,,,,,,,,,,,,,,,
-```
-
-Same rules, opposite bargain: **a big deck and a small galley.** Three tables
+The second kitchen, and the reason the level registry exists: a fourteen by
+eight room with the galley east of a divider at `x = 10`, and the same rules to
+an opposite bargain — **a big deck and a small galley.** Three tables
 standing in the open against six columns of kitchen, where the park has two
 tables and eleven columns. Seats pull customers in, so the shack is busier from
 day one and has less floor to solve it with — the dials the shop hands a player,
@@ -363,9 +356,9 @@ rides the handshake, an existing room keeps the level in its save, and a guest
 who picked something else quietly loads the room's own. A level id is also what
 makes a save portable — see [the roadmap](roadmap.md#saving).
 
-**The pass is a place, not an appliance.** Those two `=` tiles at `x = 9` are
-ordinary counters that happen to stand in the dividing wall, and the gap beside
-them at `(9,5)` is how a chef walks round. There *was* a `serving` kind: it made
+**The pass is a place, not an appliance.** Those two counters at `x = 9` are
+ordinary ones that happen to stand in the dividing wall, and the gap beside them
+at `(9,5)` is how a chef walks round. There *was* a `serving` kind: it made
 sense when food vanished through a hatch, and when that stopped being true it
 was left describing nothing — a counter you could not chop on and could not
 move, painted a special colour that promised a rule which no longer existed.

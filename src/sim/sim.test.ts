@@ -58,9 +58,8 @@ function makeWorld(): World {
  * The park kitchen is a **starting point** now: salad only, two crates, and no
  * heat. Everything else arrives on a recipe card, which delivers it (see
  * `sim/cards.ts`). These tests are about the cooking rules rather than about
- * progression, so they equip the kitchen directly — on the tiles the level's
- * ASCII used to put these things on, so every coordinate below still means what
- * it says. The menu is opened up for the same reason: a customer cannot order a
+ * progression, so they equip the kitchen directly — on the tiles the level used
+ * to put these things on, so every coordinate below still means what it says. The menu is opened up for the same reason: a customer cannot order a
  * pizza the room has never unlocked, and half of these tests are about pizza.
  */
 function equip(world: World): void {

@@ -1,5 +1,5 @@
 import { APPLIANCES, ESSENTIAL, applianceDef } from "./data/appliances";
-import { LEGEND, LEVEL, type LevelDef } from "./data/level";
+import { LEVEL, type LevelDef } from "./data/level";
 import { BACKFILL_RECIPES } from "./data/progression";
 import { restockCards, setUnlocked } from "./sim/cards";
 import { MAX_PLATES, platesInWorld, stockPlates } from "./sim/plates";
@@ -126,8 +126,8 @@ function takenSlots(world: World): number[] {
  * of anybody's build: the walls, and the market stall on the patio. Storing
  * them would mean every save carrying a copy of the level, and a save written
  * before a stall existed describing a kitchen that has none. `restore` rebuilds
- * them from the level's own ASCII instead, which is where they came from and
- * the only place that can still be right after the level changes.
+ * them from the level itself instead, which is where they came from and the
+ * only place that can still be right after the level changes.
  */
 export function snapshot(world: World, levelId: string = LEVEL.id): Save {
   const appliances: SavedAppliance[] = [];
@@ -328,7 +328,7 @@ export type RestoreResult = { ok: true } | { ok: false; reason: "schema" | "leve
 /**
  * Rebuild a saved layout into a freshly created world.
  *
- * The world arrives already built from the level ASCII; we clear the appliance
+ * The world arrives already built from the level; we clear the appliance
  * map and tile index, then replay the save. Appliances an old save doesn't
  * mention simply don't exist — that's the point, the player moved or sold them.
  *
@@ -425,14 +425,7 @@ function topUp(world: World, level: LevelDef): void {
   }
 }
 
-/** Where the level's own ASCII puts this kind of appliance, if it does. */
+/** Where the level itself puts this kind of appliance, if it does. */
 function levelTileFor(level: LevelDef, kind: ApplianceKind): Vec2 | null {
-  for (let y = 0; y < level.rows.length; y++) {
-    const row = level.rows[y] ?? "";
-    for (let x = 0; x < row.length; x++) {
-      const spec = LEGEND[row[x] ?? ""];
-      if (spec?.kind === "appliance" && spec.appliance === kind) return { x, y };
-    }
-  }
-  return null;
+  return level.appliances.find((placement) => placement.kind === kind)?.at ?? null;
 }
