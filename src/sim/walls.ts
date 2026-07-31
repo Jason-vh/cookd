@@ -63,6 +63,23 @@ export function edgeSeam(room: Rect, tile: Vec2): Seam {
   return { axis: "horizontal", x: tile.x, y: room.y + room.height };
 }
 
+/**
+ * Which way a tile standing against the shell faces into the room.
+ *
+ * Anything mounted on a wall has to know which wall it is on, and that is a
+ * fact about the building rather than about the camera — the sign used to spin
+ * to face whoever was looking at it, which is what a billboard does and not
+ * what a sign screwed to a wall does.
+ *
+ * Built on `edgeSeam` for the same reason the doorway is: the tile decides,
+ * once, and everything that needs to know asks the same function.
+ */
+export function inward(room: Rect, tile: Vec2): Vec2 {
+  const seam = edgeSeam(room, tile);
+  if (seam.axis === "vertical") return { x: seam.x === tile.x ? 1 : -1, y: 0 };
+  return { x: 0, y: seam.y === tile.y ? 1 : -1 };
+}
+
 /** Take a seam out of the shell, so the two tiles either side of it meet. */
 export function openSeam(world: World, seam: Seam): void {
   if (seam.axis === "vertical") setVerticalWall(world, seam.x, seam.y, false);

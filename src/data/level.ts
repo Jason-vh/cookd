@@ -190,10 +190,10 @@ export const PARK_KITCHEN: LevelDef = {
     // build: the stall on the west apron, the card stand below it.
     ...run("stall", 0, 2, 3, "y"),
     ...run("cards", 0, 6, 2, "y"),
-    // The sign stands against the wall beside the door, on the first tile
-    // inside it: a wall is a line between squares now, so there is nothing to
-    // hang it *in* — and a chef opening the day is somebody walking to the door
-    // either way.
+    // The sign hangs on the wall beside the door, on the first tile inside it,
+    // so opening the day is somebody walking to the door. It has to be against
+    // the shell and not in a corner — that is the wall it is screwed to, and
+    // `validate.ts` refuses a sign with nothing behind it.
     at("sign", 2, 4),
     // The back run: crates, then wash-up.
     crate("tomato", 9, 2),
@@ -317,7 +317,7 @@ export const HIGHWAY_STOP: LevelDef = {
   lane: { entry: { x: 19, y: 8 }, exit: { x: 0, y: 8 } },
   appliances: [
     // The apron furniture, as every kitchen has it: the stall, the card stand,
-    // and the sign on the first tile inside the door.
+    // and the sign on the wall inside the door.
     ...run("stall", 0, 2, 3, "y"),
     ...run("cards", 0, 6, 2, "y"),
     at("sign", 2, 5),

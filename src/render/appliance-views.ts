@@ -3,6 +3,7 @@ import { applianceDef } from "../data/appliances";
 import { RECIPE_BY_ID } from "../data/recipes";
 import type { Appliance, Offer, Recipe, World } from "../sim/types";
 import { playerById } from "../sim/world";
+import { inward } from "../sim/walls";
 import { deliveryLabel, missingFor } from "../sim/cards";
 import {
   canPlace,
@@ -156,7 +157,7 @@ export class ApplianceViews {
       this.syncDial(appliance, visual, dt, time);
       if (appliance.kind === "stall") this.syncStall(world, appliance, visual, dt);
       if (appliance.kind === "cards") this.syncCards(world, appliance, visual, dt, time);
-      if (appliance.kind === "sign") this.syncSign(world, visual, dt);
+      if (appliance.kind === "sign") this.syncSign(world, appliance, visual, dt);
     }
   }
 
@@ -266,15 +267,18 @@ export class ApplianceViews {
   }
 
   /** Turn the sign over when the restaurant does. See `signFaceOf`. */
-  private syncSign(world: World, visual: Visual, dt: number): void {
-    // Faces whoever is looking at it, exactly as the card stand does and for the
-    // same reason: it is the one other object in the game with a *face*, and a
-    // sign showing the camera its edge is a sign nobody can read.
-    visual.root.rotation.y = this.viewingAngle();
+  private syncSign(world: World, appliance: Appliance, visual: Visual, dt: number): void {
+    // Faces into the room off the wall it is bolted to, and stays there. It used
+    // to turn to face the camera like the card stand does — but a card stand is
+    // a thing on an easel that somebody could reasonably have swivelled, and a
+    // sign screwed to a wall is not. It can hold still because both of its faces
+    // say the same thing, so there is no angle it becomes unreadable from.
+    const face = inward(world.room, appliance.tile);
+    visual.root.rotation.y = Math.atan2(face.x, face.y);
 
-    const face = signFaceOf(world);
-    if (face !== visual.signFace) {
-      visual.signFace = face;
+    const showing = signFaceOf(world);
+    if (showing !== visual.signFace) {
+      visual.signFace = showing;
       visual.signTurn = 1;
     }
     if (visual.signTurn <= 0) return;
@@ -285,9 +289,16 @@ export class ApplianceViews {
     // the swap cannot be seen. A sign whose face changes in full view is a
     // sticker being replaced, not a sign being turned.
     if (before > 0.5 && visual.signTurn <= 0.5 && visual.boardFaces) {
-      paintSign(visual.boardFaces, face);
+      paintSign(visual.boardFaces, showing);
     }
-    if (visual.board) visual.board.rotation.y = visual.signTurn * Math.PI;
+    // Flat on a wall, a board cannot swing about its middle without half of it
+    // passing through the masonry — so the turn is drawn as its *width*: edge-on
+    // at the halfway point, which is where the paint changes, and open again on
+    // the far side. From any corner the camera can stand at, that is the picture
+    // a rotation would have drawn anyway.
+    if (visual.board) {
+      visual.board.scale.x = Math.max(0.02, Math.abs(Math.cos(visual.signTurn * Math.PI)));
+    }
   }
 
   /** Put a recipe on the card: its dish, and everything the card promises. */

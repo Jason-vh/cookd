@@ -5,7 +5,7 @@ import { CUSTOMER_KINDS, DEFAULT_CUSTOMER_KIND } from "./customers";
 import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
 import { LEVELS, runSeams, type LevelDef } from "./level";
-import type { Rect, World } from "../sim/types";
+import type { Rect, Vec2, World } from "../sim/types";
 import { hatchOf, servingSpot } from "../sim/lane";
 import { canReach } from "../sim/walls";
 import { createWorld, isSolid } from "../sim/world";
@@ -259,15 +259,29 @@ export function levelProblems(level: LevelDef): string[] {
       }
     }
   }
+  // Standing against exactly one wall of the shell. A corner touches two and
+  // answers neither, which is the case `edgeSeam` cannot decide — so it is the
+  // case that is refused here, once, for everything that asks it.
+  const againstShell = (tile: Vec2): boolean =>
+    within(room, tile.x, tile.y) &&
+    (tile.x === room.x || tile.x === room.x + room.width - 1) !==
+      (tile.y === room.y || tile.y === room.y + room.height - 1);
+
   // The door is the tile behind the hole in the shell, so it has to be against
   // the shell: one tile in and there is no wall for it to pierce, one tile out
-  // and it is a square of patio with the dining room sealed off behind it. A
-  // corner is two walls and no answer, so it is not a door either.
-  const onEdge =
-    (level.door.x === room.x || level.door.x === room.x + room.width - 1) !==
-    (level.door.y === room.y || level.door.y === room.y + room.height - 1);
-  if (!onEdge || !within(room, level.door.x, level.door.y)) {
+  // and it is a square of patio with the dining room sealed off behind it.
+  if (!againstShell(level.door)) {
     say("the door is not against the building's wall, so no customer can ever arrive");
+  }
+
+  // And the sign hangs on that wall, so it needs one to hang on. Two things
+  // depend on it: `inward` decides which way the sign faces from the seam it
+  // stands against, and `buildWalls` leaves that seam at full height so the
+  // board is never screwed to a wall the camera has cut away.
+  for (const placement of level.appliances) {
+    if (placement.kind === "sign" && !againstShell(placement.at)) {
+      say(`a sign at ${placement.at.x},${placement.at.y} with no wall to hang on`);
+    }
   }
 
   const seen = new Set<string>();

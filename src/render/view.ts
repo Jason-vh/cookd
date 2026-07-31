@@ -205,11 +205,29 @@ export class View {
     const nearX = Math.sin(yaw) > 0 ? room.x + room.width : room.x;
     const nearY = Math.cos(yaw) > 0 ? room.y + room.height : room.y;
 
+    // ...with one exception: the seam a sign hangs on is never cut. A sign is
+    // screwed to a wall, and a wall that is only there from two of the four
+    // corners is a sign hanging in mid-air from the other two. One tile of
+    // full-height masonry is a far cheaper price than that, and it reads as
+    // what it is — the piece of wall the sign is on.
+    const mounted = new Set<string>();
+    for (const appliance of world.appliances.values()) {
+      if (appliance.kind !== "sign") continue;
+      const seam = edgeSeam(room, appliance.tile);
+      mounted.add(`${seam.axis},${seam.x},${seam.y}`);
+    }
+    const height = (
+      axis: "vertical" | "horizontal",
+      x: number,
+      y: number,
+      near: boolean,
+    ): number => (near && !mounted.has(`${axis},${x},${y}`) ? 0.26 : 1.1);
+
     const group = new THREE.Group();
     for (let y = 0; y < world.height; y++) {
       for (let x = 0; x <= world.width; x++) {
         if (!verticalWall(world, x, y)) continue;
-        const wall = buildWall(x === nearX ? 0.26 : 1.1, "vertical");
+        const wall = buildWall(height("vertical", x, y, x === nearX), "vertical");
         wall.position.set(x, 0, y + 0.5);
         group.add(wall);
       }
@@ -217,7 +235,7 @@ export class View {
     for (let y = 0; y <= world.height; y++) {
       for (let x = 0; x < world.width; x++) {
         if (!horizontalWall(world, x, y)) continue;
-        const wall = buildWall(y === nearY ? 0.26 : 1.1, "horizontal");
+        const wall = buildWall(height("horizontal", x, y, y === nearY), "horizontal");
         wall.position.set(x + 0.5, 0, y);
         group.add(wall);
       }

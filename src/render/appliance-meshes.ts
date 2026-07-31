@@ -27,6 +27,7 @@ import {
   shellMesh,
   sphere,
   sweep,
+  torus,
 } from "./primitives";
 import { makeLabel } from "./sprites";
 import { jitter, type Jitter } from "./wobble";
@@ -324,8 +325,7 @@ export const SIGN_FACES = {
 export type SignFace = keyof typeof SIGN_FACES;
 
 /**
- * The sign hanging in the doorway: a painted board on a hook, and the whole of
- * opening a restaurant.
+ * The sign on the wall by the door: a bracket, and a board swinging off it.
  *
  * **Both faces say the same thing**, which is not how a real shop sign works
  * and is the right call here: the camera turns to any of four corners, so half
@@ -333,26 +333,33 @@ export type SignFace = keyof typeof SIGN_FACES;
  * opposite of the truth. The turn is the animation; the state is on both sides
  * of it.
  *
- * It stands on its own post rather than being screwed to the wall behind it,
- * because that wall is a **26cm stub** whenever the camera is on its side of
- * the building — a board fixed to it would hang in mid-air from two of the four
- * corners.
+ * It used to stand on a post in the middle of its tile and spin to face the
+ * camera. Both halves of that were wrong: a lamp post is not what a shop sign
+ * is, and a sign that turns to follow you is a billboard. It hangs flat on the
+ * wall by the door now, on two hooks, and holds still — `appliance-views.ts`
+ * turns it to face into the room, which is a fact about the building rather
+ * than about where anybody is standing. See `inward`.
+ *
+ * The wall it hangs on is the one wall the renderer never cuts down to a lip;
+ * see `buildWalls`. Nothing here has to carry itself, which is why there is no
+ * bracket and no post.
+ *
+ * Local axes: the wall is at -z, the room is at +z.
  */
 function buildSign(parts: ApplianceParts, h: number): void {
   const group = parts.root;
 
-  const post = mesh(roundedBox(0.12, h, 0.12, 0.04), PALETTE.woodDark, "wood");
-  post.position.y = h / 2;
-  group.add(post);
+  // Two hooks, just proud of the wall face, and the board hanging off them.
+  for (const x of [-0.26, 0.26]) {
+    const hook = mesh(torus(0.03, 0.01), PALETTE.signHook, "metal");
+    hook.position.set(x, h - 0.14, -0.36);
+    group.add(hook);
+  }
 
-  const arm = mesh(roundedBox(0.5, 0.08, 0.1, 0.03), PALETTE.signHook, "metal");
-  arm.position.set(0, h - 0.06, 0);
-  group.add(arm);
-
-  // The board hangs from the arm and turns about the post. Its own group, so
-  // `appliance-views.ts` can spin it without touching the ironmongery.
+  // Its own group, so `appliance-views.ts` can turn it over without touching
+  // the hooks it hangs from.
   const board = new THREE.Group();
-  board.position.y = h - 0.42;
+  board.position.set(0, h - 0.44, -0.36);
   group.add(board);
   parts.board = board;
 

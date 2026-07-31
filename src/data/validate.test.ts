@@ -56,6 +56,13 @@ function broken(change: Partial<LevelDef>): string[] {
   return levelProblems({ ...PARK_KITCHEN, ...change });
 }
 
+/** The park kitchen's appliances, with its sign moved somewhere else. */
+function signAt(x: number, y: number): Partial<LevelDef> {
+  return {
+    appliances: [...PARK_KITCHEN.appliances.filter((p) => p.kind !== "sign"), at("sign", x, y)],
+  };
+}
+
 describe("a level that does not work is caught before it ships", () => {
   // A level used to be a picture, and a picture is checked by looking at it.
   // These are the checks that replaced looking, so each one is pointed at a
@@ -68,6 +75,14 @@ describe("a level that does not work is caught before it ships", () => {
     expect(broken({ door: { x: 1, y: 5 } })[0]).toContain("the door is not against");
     expect(broken({ door: { x: 3, y: 5 } })[0]).toContain("the door is not against");
     expect(broken({ door: { x: 2, y: 2 } })[0]).toContain("the door is not against");
+  });
+
+  test("a sign with no wall to hang on", () => {
+    // One tile in off the wall and there is nothing behind it; a corner touches
+    // two walls and answers neither, which is the case `edgeSeam` cannot decide.
+    expect(broken(signAt(3, 4))[0]).toContain("no wall to hang on");
+    expect(broken(signAt(2, 2))[0]).toContain("no wall to hang on");
+    expect(levelProblems({ ...PARK_KITCHEN, ...signAt(2, 4) })).toEqual([]);
   });
 
   test("a building with no patio around it", () => {
