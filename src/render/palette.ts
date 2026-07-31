@@ -54,6 +54,8 @@ export const PALETTE = {
   crate: 0x9c7a52,
   crateTop: 0x87683f,
   crateTrim: 0x765a37,
+  /** Behind the slats: dark enough that the gaps read as a shadowed inside. */
+  crateInner: 0x4f3b25,
   // The market stall: painted timber and a striped canvas awning. Warmer and
   // more saturated than anything inside the kitchen, because it is *not* the
   // kitchen — it should read as somewhere you go out to, from across the patio.

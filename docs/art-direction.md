@@ -48,7 +48,9 @@ Supporting decisions:
 - **Ingredients are modelled, not symbolised.** See below.
 - **Silhouette over labels.** Each appliance carries a small identifying detail
   (a knife on the board, an oil basin on the fryer, a glass door on the oven, a
-  a lid on the bin), and crates show a 3D sample of their ingredient.
+  a lid on the bin), and crates are slatted boxes heaped with 3D samples of the
+  ingredient they hold — the gaps between the boards, and stock standing proud
+  of the rim, are what say "take from here" rather than "put down here".
   Text labels are **contextual** — only the appliance a chef is facing is named.
   A world full of floating text destroys the diorama illusion.
 - **Animation beats geometry.** The chef is simple shapes with clear

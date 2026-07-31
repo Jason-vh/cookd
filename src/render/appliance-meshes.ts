@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
 import { ingredient } from "../data/ingredients";
 import type { Appliance } from "../sim/types";
-import { buildIngredientSample } from "./models";
+import { buildIngredientSample, buildProduceHeap } from "./models";
 import { PALETTE, type SurfaceName } from "./palette";
 import { cylinder, mesh, roundedBox, sphere, torus } from "./primitives";
 import { makeLabel } from "./sprites";
@@ -76,6 +76,8 @@ export type ApplianceParts = {
   lid?: THREE.Object3D;
   /** Stall: where the goods stand, restocked by `appliance-views.ts`. */
   counter?: THREE.Object3D;
+  /** Crate: the mouth of it, where the heap of stock sits. */
+  produce?: THREE.Object3D;
   /** Stall: dropped over the goods while the kitchen is in service. */
   shutter?: THREE.Object3D;
   /** Card stand: the card itself — hidden on ordinary mornings, lifted when armed. */
@@ -107,6 +109,8 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
     buildCardStand(parts, h);
   } else if (appliance.kind === "sign") {
     buildSign(parts, h);
+  } else if (appliance.kind === "crate") {
+    buildCrate(parts, h);
   } else if (appliance.kind === "table") {
     buildTable(root, h);
   } else {
@@ -123,10 +127,14 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   }
 
   if (appliance.source) {
-    // Crates show an actual sample of what they dispense.
-    const marker = buildIngredientSample(appliance.source.base);
-    marker.position.y = h + 0.06;
-    root.add(marker);
+    // A crate is stacked, so its stock is a heap sunk into the mouth of it.
+    // Anything else with a source shows a single sample, standing on top.
+    const nest = parts.produce;
+    const stock = nest
+      ? buildProduceHeap(appliance.source.base)
+      : buildIngredientSample(appliance.source.base);
+    if (!nest) stock.position.y = h + 0.06;
+    (nest ?? root).add(stock);
   }
 
   // Labels are contextual: hidden until a chef looks at the appliance. Keeping
@@ -451,7 +459,8 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
     top: [PALETTE.brass, "metal"],
     label: "Bell oven",
   },
-  crate: { body: [PALETTE.crate, "wood"], top: [PALETTE.crateTop, "wood"] },
+  // Built by `buildCrate`, which is slats and gaps rather than a box with a top.
+  crate: { body: [PALETTE.crate, "wood"] },
   // No top slab and no decorative crockery: what the stack is holding is drawn
   // by `item-views.ts`, because it is now a real, countable pile. An empty
   // plate stack has to *look* empty — that is the moment the whole feature
@@ -537,14 +546,6 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
       parts.knife = knife;
       break;
     }
-    case "crate": {
-      for (const y of [h * 0.32, h * 0.72]) {
-        const slat = mesh(roundedBox(0.98, 0.07, 0.98, 0.02), PALETTE.crateTrim, "wood");
-        slat.position.y = y;
-        group.add(slat);
-      }
-      break;
-    }
     case "plates": {
       // A shallow lip, so plates put back on it look put *away* rather than
       // balanced on a box.
@@ -586,6 +587,86 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
     default:
       break;
   }
+}
+
+/** The four sides of a square, as an offset direction and the turn that faces it. */
+const SIDES = [
+  [0, 1, 0],
+  [0, -1, 0],
+  [1, 0, Math.PI / 2],
+  [-1, 0, Math.PI / 2],
+] as const;
+
+/**
+ * A slatted produce crate, open at the top and stacked with what it dispenses.
+ *
+ * The old crate was the counter's box with two bands round it and a single
+ * sample balanced on the lid, which made the one appliance you take things *out
+ * of* look like somewhere to put things down. A real crate is defined by its
+ * gaps: corner stiles, boards with daylight between them, and pallet runners
+ * holding it off the floor.
+ *
+ * The interior is a solid dark block rather than nothing. Without it the gaps
+ * look straight through to the tiles on the far side and the crate reads as a
+ * lantern; with it they read as shadow, and the heap standing proud of the rim
+ * reads as a crate that is full.
+ */
+function buildCrate(parts: ApplianceParts, h: number): void {
+  const group = parts.root;
+
+  // Runners, so the crate stands on the tile rather than growing out of it.
+  for (const z of [-0.28, 0.28]) {
+    const runner = mesh(roundedBox(0.84, 0.06, 0.14, 0.02), PALETTE.crateTrim, "wood");
+    runner.position.set(0, 0.03, z);
+    group.add(runner);
+  }
+
+  const floor = mesh(roundedBox(0.88, 0.06, 0.88, 0.02), PALETTE.crateTop, "wood");
+  floor.position.y = 0.09;
+  group.add(floor);
+
+  const bedY = h * 0.84;
+  const inner = mesh(roundedBox(0.8, bedY - 0.09, 0.8, 0.02), PALETTE.crateInner, "wood");
+  inner.position.y = (bedY + 0.09) / 2;
+  group.add(inner);
+
+  for (const [x, z] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ] as const) {
+    const stile = mesh(roundedBox(0.13, h, 0.13, 0.035), PALETTE.crateTrim, "wood");
+    stile.position.set(x * 0.4, h / 2, z * 0.4);
+    group.add(stile);
+  }
+
+  // Three boards a side. The gaps are the point, so the slat is deliberately
+  // thinner than the pitch between the rows.
+  for (const t of [0.22, 0.5, 0.78]) {
+    for (const [x, z, ry] of SIDES) {
+      const slat = mesh(roundedBox(0.84, h * 0.17, 0.055, 0.02), PALETTE.crate, "wood");
+      slat.position.set(x * 0.44, h * t, z * 0.44);
+      slat.rotation.y = ry;
+      group.add(slat);
+    }
+  }
+
+  // A rail round the mouth: it caps the stiles and gives the top edge the one
+  // continuous line the slats never make.
+  for (const [x, z, ry] of SIDES) {
+    const rail = mesh(roundedBox(0.96, 0.08, 0.11, 0.03), PALETTE.crateTop, "wood");
+    rail.position.set(x * 0.42, h - 0.04, z * 0.42);
+    rail.rotation.y = ry;
+    group.add(rail);
+  }
+
+  // Where the stock heaps up, filled in by `buildAppliance` once it knows what
+  // this crate holds.
+  const stock = new THREE.Group();
+  stock.position.y = bedY;
+  group.add(stock);
+  parts.produce = stock;
 }
 
 /**

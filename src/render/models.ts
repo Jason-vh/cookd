@@ -774,3 +774,32 @@ export function buildIngredientSample(base: IngredientId): THREE.Object3D {
   model.scale.setScalar(0.85);
   return model;
 }
+
+/** Where the three items in a heap sit, before jitter. */
+const HEAP_SPOTS: readonly [number, number, number][] = [
+  [-0.14, 0, -0.06],
+  [0.15, 0.01, -0.02],
+  [0, 0.07, 0.13],
+];
+
+/**
+ * A crate's worth of an ingredient: a heap of it, not one sample balanced on a
+ * lid. Three is the smallest number that reads as "loose stock" rather than as
+ * "the display model", and the front one rides up on the other two.
+ *
+ * Jitter is deterministic from the ingredient id, like every other wobble in
+ * this file: online, two clients drawing the same crate differently is two
+ * clients drawing different rooms.
+ */
+export function buildProduceHeap(base: IngredientId): THREE.Object3D {
+  const group = new THREE.Group();
+  const seed = base.length * 7 + base.charCodeAt(0);
+  HEAP_SPOTS.forEach(([x, y, z], i) => {
+    const sample = buildIngredientSample(base);
+    sample.scale.setScalar(0.72 + wobble(seed, i) * 0.08);
+    sample.position.set(x + wobble(seed + 1, i) * 0.05, y, z + wobble(seed + 2, i) * 0.05);
+    sample.rotation.y = wobble(seed + 3, i) * Math.PI;
+    group.add(sample);
+  });
+  return group;
+}
