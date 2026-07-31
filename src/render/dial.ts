@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { LAYER, setLayer } from "./layers";
+import { markUI } from "./layers";
 import { PALETTE } from "./palette";
 
 /**
@@ -121,7 +121,7 @@ export class Dial {
       }),
     );
     this.object.renderOrder = 12;
-    setLayer(this.object, LAYER.UI);
+    markUI(this.object);
   }
 
   /**

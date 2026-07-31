@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { LAYER, setLayer } from "./layers";
+import { markUI } from "./layers";
 
 /**
  * Text as a texture, and text as a sprite, in one place.
@@ -91,7 +91,7 @@ export function textSprite(
   const sprite = new THREE.Sprite(material);
   sprite.scale.set(height * textTexture(text, style).aspect, height, 1);
   sprite.renderOrder = order;
-  setLayer(sprite, LAYER.UI);
+  markUI(sprite);
   return sprite;
 }
 

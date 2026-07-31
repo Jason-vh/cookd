@@ -4,7 +4,7 @@ import type { Customer, Item } from "../sim/types";
 import { ease } from "./anim";
 import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";
-import { LAYER, setLayer } from "./layers";
+import { markUI } from "./layers";
 import { buildItemModel } from "./models";
 import { PALETTE } from "./palette";
 
@@ -41,7 +41,7 @@ export class Bubble {
     this.object.add(this.dial.object, this.dish);
     this.object.position.y = HEIGHT;
     this.object.visible = false;
-    setLayer(this.dish, LAYER.UI);
+    markUI(this.dish);
   }
 
   /**
@@ -112,7 +112,7 @@ export class Bubble {
     // Models are built to sit on a surface; centre it in the ring instead.
     model.position.y = -0.06;
     this.dish.add(model);
-    setLayer(this.dish, LAYER.UI);
+    markUI(this.dish);
   }
 
   /**

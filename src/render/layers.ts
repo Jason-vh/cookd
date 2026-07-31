@@ -11,13 +11,8 @@ import type * as THREE from "three";
  * The split is about which passes are allowed to see UI, not about when it is
  * drawn.
  *
- * What it buys today is the shadow map. A light's shadow camera only ever sees
- * layer 0 (`WebGLShadowMap` tests `object.layers.test(camera.layers)`), so
- * nothing on `UI` can cast a shadow — a floating label has no business darkening
- * the counter under it.
- *
- * It was introduced for a second reason that no longer applies, and the history
- * is worth keeping because the trap is easy to walk back into. Screen-space
+ * It was introduced for a reason that no longer applies, and the history is
+ * worth keeping because the trap is easy to walk back into. Screen-space
  * effects that rebuild the scene through an override material draw sprites
  * un-billboarded, as phantom geometry — `GTAOPass` skips Points and Lines for
  * exactly this reason but not Sprites, which hung a large dark rectangle of
@@ -27,13 +22,32 @@ import type * as THREE from "three";
  *
  * Any future pass that rebuilds the scene rather than sampling it should
  * restrict itself to `WORLD` the same way.
+ *
+ * The layer does **not**, on its own, keep UI out of the shadow map — which it
+ * was believed to, in a comment, for as long as it took a low sun to make the
+ * shadows long enough to notice. `WebGLShadowMap` tests each object against the
+ * *view* camera's layers, not the shadow camera's, so that things the player
+ * cannot see cast nothing; and the view camera enables `UI` precisely so the UI
+ * is visible. A floating order bubble therefore cast a salad-shaped shadow onto
+ * the dining room floor. Shadows are switched off explicitly below, in the same
+ * place the layer is set, so the two cannot drift apart again.
  */
 export const LAYER = {
   WORLD: 0,
   UI: 1,
 } as const;
 
-/** Move an object and everything under it onto a layer. */
-export function setLayer(object: THREE.Object3D, layer: number): void {
-  object.traverse((child) => child.layers.set(layer));
+/**
+ * Move an object and everything under it onto the UI layer: drawn with the
+ * world, lit by nothing, and casting and receiving no shadow.
+ *
+ * Call it *after* the parts are added — a model swapped into a bubble later is
+ * a new child, and traversal only reaches what is there at the time.
+ */
+export function markUI(object: THREE.Object3D): void {
+  object.traverse((child) => {
+    child.layers.set(LAYER.UI);
+    child.castShadow = false;
+    child.receiveShadow = false;
+  });
 }

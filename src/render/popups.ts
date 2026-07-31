@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { LAYER, setLayer } from "./layers";
+import { markUI } from "./layers";
 import { cssHex, spriteMaterial, textTexture, type TextStyle } from "./text";
 
 /**
@@ -92,7 +92,7 @@ export class Popups {
     // per popup, so a shared one would make every live popup fade together.
     const sprite = new THREE.Sprite(spriteMaterial(EMPTY));
     sprite.renderOrder = 20;
-    setLayer(sprite, LAYER.UI);
+    markUI(sprite);
     return sprite;
   }
 

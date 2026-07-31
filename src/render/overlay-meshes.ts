@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { LAYER, setLayer } from "./layers";
+import { markUI } from "./layers";
 import { PALETTE } from "./palette";
 import { cylinder, mesh } from "./primitives";
 import { canvas2d, roundRect } from "./text";
@@ -76,6 +76,6 @@ export function buildHighlight(color: number): THREE.Mesh {
   );
   object.rotation.x = -Math.PI / 2;
   object.renderOrder = 4;
-  setLayer(object, LAYER.UI);
+  markUI(object);
   return object;
 }
