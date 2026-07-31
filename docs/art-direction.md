@@ -53,6 +53,13 @@ Supporting decisions:
   of the rim, are what say "take from here" rather than "put down here".
   Text labels are **contextual** — only the appliance a chef is facing is named.
   A world full of floating text destroys the diorama illusion.
+- **Nothing is square to anything else.** The food was built with `wobble()`
+  from the start and the furniture was not, so the ingredients looked handmade
+  and the kitchen looked like CAD. Every appliance is now a little out of true —
+  crate slats a degree off each other, chairs pushed back and turned, a chopping
+  block put down at whatever angle the hand let go at — seeded from the
+  appliance id, because a random wobble would twitch every time a mesh was
+  rebuilt and would differ between two clients in the same kitchen.
 - **Animation beats geometry.** The chef is simple shapes with clear
   articulation points: a walk cycle, a forward lean proportional to speed, and a
   squash-and-stretch pop whenever what they're holding changes. All of it is

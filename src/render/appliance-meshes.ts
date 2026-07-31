@@ -28,6 +28,7 @@ import {
   sweep,
 } from "./primitives";
 import { makeLabel } from "./sprites";
+import { jitter, type Jitter } from "./wobble";
 import { cssHex, textTexture } from "./text";
 
 /**
@@ -118,6 +119,9 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   const parts: ApplianceParts = { root };
   const h = def.height;
   const w = 0.94;
+  // Every appliance is a little out of true, and always the same little. See
+  // `wobble.ts` for why this is not `Math.random()`.
+  const nudge = jitter(appliance.id);
 
   const look = APPLIANCE_LOOK[appliance.kind];
 
@@ -132,9 +136,9 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   } else if (appliance.kind === "sign") {
     buildSign(parts, h);
   } else if (appliance.kind === "crate") {
-    buildCrate(parts, h);
+    buildCrate(parts, h, nudge);
   } else if (appliance.kind === "table") {
-    buildTable(root, h);
+    buildTable(root, h, nudge);
   } else {
     // Standing on a recessed plinth rather than on its own bottom face. The
     // body loses exactly what the plinth gains, so `height` still means the
@@ -153,9 +157,12 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
       // Its upper face stays at h + 0.05, where items are placed.
       const slab = mesh(roundedBox(w + 0.04, 0.06, w + 0.04, 0.025), look.top[0], look.top[1]);
       slab.position.y = h + 0.02;
+      // A worktop laid a fraction out of square with its cabinet. Tiny: a run of
+      // counters must still read as one continuous surface.
+      slab.rotation.y = nudge(1, 0.02);
       root.add(slab);
     }
-    addDetails(parts, appliance, h);
+    addDetails(parts, appliance, h, nudge);
   }
 
   if (appliance.source) {
@@ -163,7 +170,7 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
     // Anything else with a source shows a single sample, standing on top.
     const nest = parts.produce;
     const stock = nest
-      ? buildProduceHeap(appliance.source.base)
+      ? buildProduceHeap(appliance.source.base, appliance.id)
       : buildIngredientSample(appliance.source.base);
     if (!nest) stock.position.y = h + 0.06;
     (nest ?? root).add(stock);
@@ -399,7 +406,7 @@ export function paintSign(faces: THREE.MeshStandardMaterial[], face: SignFace): 
  * capacity from across the room. Four of them also promise the parties that
  * come later without needing them to exist yet.
  */
-function buildTable(group: THREE.Group, h: number): void {
+function buildTable(group: THREE.Group, h: number, nudge: Jitter): void {
   const top = mesh(roundedCylinder(0.42, 0.07, 0.022), PALETTE.woodTop, "wood");
   top.position.y = h - 0.035;
   group.add(top);
@@ -418,8 +425,11 @@ function buildTable(group: THREE.Group, h: number): void {
   for (let i = 0; i < 4; i++) {
     const angle = (i * Math.PI) / 2;
     const chair = new THREE.Group();
-    chair.position.set(Math.sin(angle) * 0.42, 0, Math.cos(angle) * 0.42);
-    chair.rotation.y = angle;
+    // Pushed back and turned a little, the way a chair that has been sat in is.
+    // The four of them square to the table was the tell that nobody ever had.
+    const out = 0.42 + nudge(i, 0.05);
+    chair.position.set(Math.sin(angle) * out, 0, Math.cos(angle) * out);
+    chair.rotation.y = angle + nudge(i + 4, 0.3);
 
     const seat = mesh(roundedBox(0.26, 0.05, 0.26, 0.02), PALETTE.wood, "wood");
     seat.position.y = h * 0.62;
@@ -518,7 +528,7 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
 };
 
 /** Small silhouette details: this is what stops every appliance reading as a box. */
-function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): void {
+function addDetails(parts: ApplianceParts, appliance: Appliance, h: number, nudge: Jitter): void {
   const group = parts.root;
   switch (appliance.kind) {
     case "bell_oven":
@@ -633,14 +643,16 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
         steel ? "metal" : "wood",
       );
       block.rotation.x = -Math.PI / 2;
-      block.position.y = h + 0.03;
+      block.position.set(nudge(2, 0.05), h + 0.03, nudge(3, 0.05));
+      // Put down at whatever angle the hand let go at.
+      block.rotation.z = nudge(4, 0.16);
       group.add(block);
 
       // A little knife resting on the board reads instantly as "chop here".
       // It hangs off a pivot at the handle so it can be swung when chopping.
       const knife = new THREE.Group();
-      knife.position.set(-0.24, h + 0.09, 0.22);
-      knife.rotation.y = 0.25;
+      knife.position.set(-0.24 + nudge(5, 0.04), h + 0.09, 0.22 + nudge(6, 0.04));
+      knife.rotation.y = 0.25 + nudge(7, 0.3);
 
       const blade = mesh(roundedBox(0.34, 0.02, 0.09, 0.008), PALETTE.steel, "metal");
       blade.position.set(0.3, 0, 0.06);
@@ -728,7 +740,7 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
  * lantern; with it they read as shadow, and the heap standing proud of the rim
  * reads as a crate that is full.
  */
-function buildCrate(parts: ApplianceParts, h: number): void {
+function buildCrate(parts: ApplianceParts, h: number, nudge: Jitter): void {
   const group = parts.root;
 
   // Runners, so the crate stands on the tile rather than growing out of it.
@@ -755,11 +767,15 @@ function buildCrate(parts: ApplianceParts, h: number): void {
 
   // Three boards a side. The gaps are the point, so the slat is deliberately
   // thinner than the pitch between the rows.
+  let slats = 0;
   for (const t of [0.22, 0.5, 0.78]) {
     for (const [x, z] of SIDES) {
       const slat = mesh(roundedBox(0.84, h * 0.17, 0.055, 0.02), PALETTE.crate, "wood");
-      slat.position.set(x * 0.44, h * t, z * 0.44);
-      slat.rotation.y = facing(x, z);
+      // Nailed on by hand: each board sits a fraction off its neighbours, which
+      // is most of the difference between a crate and a lattice.
+      const index = slats++;
+      slat.position.set(x * 0.44, h * t + nudge(index, 0.02), z * 0.44);
+      slat.rotation.set(nudge(index + 12, 0.03), facing(x, z), nudge(index + 24, 0.03));
       group.add(slat);
     }
   }

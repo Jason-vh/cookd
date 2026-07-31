@@ -97,6 +97,7 @@ src/
     overlay-meshes.ts     drawn over the kitchen: tile highlight, tip coins
     sprites.ts            name tags and appliance labels
     models.ts             sculpted models for every ingredient and dish
+    wobble.ts             deterministic jitter, so nothing is square to anything else
     primitives.ts         shared geometry/material factories and caches
     text.ts               text as a texture or a sprite, in one place
     palette.ts            every colour and surface finish in the game

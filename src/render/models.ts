@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { specKey } from "../sim/items";
 import type { IngredientId, Item, ItemSpec } from "../sim/types";
 import { PALETTE } from "./palette";
+import { wobble } from "./wobble";
 import {
   cylinder,
   extruded,
@@ -44,12 +45,6 @@ function put(
   object.position.set(x, y, z);
   parent.add(object);
   return object;
-}
-
-/** Deterministic pseudo-random so a given item always looks the same. */
-function wobble(seed: number, index: number): number {
-  const value = Math.sin(seed * 12.9898 + index * 78.233) * 43758.5453;
-  return value - Math.floor(value) - 0.5;
 }
 
 // --- whole ingredients -------------------------------------------------------
@@ -794,13 +789,15 @@ const HEAP_SPOTS: readonly [number, number, number][] = [
  * lid. Three is the smallest number that reads as "loose stock" rather than as
  * "the display model", and the front one rides up on the other two.
  *
- * Jitter is deterministic from the ingredient id, like every other wobble in
- * this file: online, two clients drawing the same crate differently is two
- * clients drawing different rooms.
+ * Jitter is deterministic, like every other wobble in this file: online, two
+ * clients drawing the same crate differently is two clients drawing different
+ * rooms.
  */
-export function buildProduceHeap(base: IngredientId): THREE.Object3D {
+export function buildProduceHeap(base: IngredientId, of = 0): THREE.Object3D {
   const group = new THREE.Group();
-  const seed = base.length * 7 + base.charCodeAt(0);
+  // The ingredient decides the shape of the heap and the crate decides how it
+  // fell, so two tomato crates in one kitchen are not the same photograph.
+  const seed = base.length * 7 + base.charCodeAt(0) + of * 13;
   HEAP_SPOTS.forEach(([x, y, z], i) => {
     const sample = buildIngredientSample(base);
     sample.scale.setScalar(0.72 + wobble(seed, i) * 0.08);
