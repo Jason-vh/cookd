@@ -383,6 +383,47 @@ body {
   letter-spacing: 0.14em;
 }
 
+/* One question at a time: making a kitchen, or walking into one. */
+.join-card [data-pane] {
+  display: none;
+}
+.join-card[data-mode="create"] [data-pane="create"],
+.join-card[data-mode="join"] [data-pane="join"] {
+  display: block;
+}
+/* Arrived by link: the code is shown, not asked for. */
+.join-card .join-code {
+  display: none;
+}
+.join-card.linked .join-code {
+  display: block;
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: #e8e6e1;
+}
+.join-card.linked [data-code-entry] {
+  display: none;
+}
+
+/* Beats `.join-card button` on specificity: this one is a link, not a button. */
+.join-card .join-switch {
+  margin-top: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: #8d8f9c;
+  font-weight: 400;
+  font-size: 12px;
+  text-decoration: underline;
+}
+.join-card .join-switch:hover {
+  filter: none;
+  color: #e8e6e1;
+}
+
 .join-actions {
   display: flex;
   gap: 8px;

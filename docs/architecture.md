@@ -103,7 +103,7 @@ src/
     hud.ts                DOM HUD (stats, event log, build banner — no order list)
     menu.ts               the pause menu
     menu-controller.ts    the menu's dealings with the controls, and the latches
-    join.ts               the join screen: name, kitchen code, offline
+    join.ts               the join screen: start a kitchen, or join one by code
     style.css
   main.ts                 the shell: input in, pixels out; owns no rules
 server/

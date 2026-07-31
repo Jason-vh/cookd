@@ -81,9 +81,21 @@ function useGame(next: Game): void {
 let onlineSince = 0;
 let wantedPlayers = 1;
 
-function goOnline(room: string, name: string, level = wantedLevel): void {
+/**
+ * `creating` means this kitchen does not exist yet as far as we know, so the
+ * level is a *request*. Joining sends no opinion at all: the room already has
+ * an answer, and carrying a stale preference into someone else's kitchen is the
+ * ghost control the join screen just stopped showing.
+ */
+function goOnline(room: string, name: string, level = wantedLevel, creating = false): void {
   wantedLevel = level;
-  saveIdentity({ ...identity, name, room, level: level.id });
+  identity.name = name;
+  identity.room = room;
+  if (creating) identity.level = level.id;
+  // Written back into `identity` rather than saved past it: the mute toggle
+  // also saves, and building its payload from a stale object used to undo the
+  // room you had just joined.
+  saveIdentity(identity);
   if (location.hash.replace("#", "") !== room) history.replaceState(null, "", `#${room}`);
   // Always one chef to start with. More join by pressing `P` or picking up a
   // controller, which is how a second player actually turns up.
@@ -111,6 +123,7 @@ function goOnline(room: string, name: string, level = wantedLevel): void {
       },
       level,
       {
+        creating,
         // The room exists and it is somewhere else. A room code is an
         // invitation to *their* restaurant, so we load theirs rather than
         // telling the guest they picked the wrong place — which means a whole
@@ -153,18 +166,21 @@ function fallbackIfUnreachable(now: number): void {
 const join = new JoinScreen(document.querySelector<HTMLElement>("#join")!, {
   identity,
   room: roomFromUrl,
-  offline: forceLocal,
   onPlayLocal: (id) => {
     // The click that starts the game is the gesture the audio hardware needs;
     // there is no earlier one, and without it the first sound is swallowed.
     audio.unlock();
     wantedLevel = levelById(id) ?? LEVEL;
-    saveIdentity({ ...identity, level: wantedLevel.id });
+    identity.level = wantedLevel.id;
+    saveIdentity(identity);
     useGame(new LocalGame(null, 1, wantedLevel));
   },
+  // An empty level means "joining": we load our best guess so there is
+  // something to predict against, and the server corrects us if the kitchen
+  // turns out to stand somewhere else.
   onPlayOnline: (room, name, id) => {
     audio.unlock();
-    goOnline(room, name, levelById(id) ?? wantedLevel);
+    goOnline(room, name, levelById(id) ?? wantedLevel, id !== "");
   },
 });
 
@@ -254,9 +270,9 @@ function frame(now: number): void {
   }
 
   if (input.consumeMuteRequest()) {
-    const muted = audio.toggleMute();
-    saveIdentity({ ...identity, muted });
-    identity.muted = muted;
+    identity.muted = audio.toggleMute();
+    saveIdentity(identity);
+    const muted = identity.muted;
     hud.notify(muted ? "Sound off" : "Sound on");
   }
 

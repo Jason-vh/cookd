@@ -19,6 +19,20 @@ the URL hash, so sharing the link is the entire invite flow. A room is created
 the moment someone uses its code and is kept warm for ten minutes after the last
 person leaves, so refreshing your browser doesn't wipe the kitchen.
 
+The join screen asks one question at a time, and the URL picks which. **Starting**
+a kitchen asks where it is and mints a fresh code; **joining** one asks nothing
+but your name, because a kitchen's level is fixed the day it is built. A link
+with a room in it therefore shows the code rather than a field to type it into.
+The two used to be one form behind one button, so "Where" was heeded or silently
+ignored depending on whether the code you typed happened to be taken already.
+
+The wire follows: `hello.level` is sent only by someone *making* a kitchen. A
+joining client sends no opinion, so the server's answer — the room's save, else
+the default — cannot be second-guessed by a stale preference in somebody's
+localStorage. A joining client still has to build *some* world to predict
+against, so it loads its last kitchen as a guess; if the room turns out to stand
+somewhere else, `welcome` says so and the shell loads theirs.
+
 Any number of players can share one browser — gamepads and the two keyboard
 schemes work exactly as they do offline. You join with one chef; more appear by
 pressing `P` or **pressing a button on another controller**, which is how couch

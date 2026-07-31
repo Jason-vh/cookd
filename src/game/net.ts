@@ -69,6 +69,13 @@ export type NetWiring = {
    * and a new view, not a patch to this one.
    */
   onLevel?: (id: string) => void;
+  /**
+   * We are *making* this kitchen, so our level is a request rather than a
+   * guess. Joining an existing room sends no opinion: the room's own save is
+   * the answer, and a preference that can only ever be ignored should not be
+   * on the wire.
+   */
+  creating?: boolean;
 };
 
 function definedInputs(inputs: Inputs): Record<number, PlayerInput> {
@@ -113,6 +120,9 @@ export class NetGame implements Game {
   /** Told when the room turns out to be a different kitchen. See `NetWiring`. */
   private readonly onLevel?: (id: string) => void;
 
+  /** See `NetWiring.creating`. */
+  private readonly creating: boolean;
+
   constructor(
     url: string,
     room: string,
@@ -130,6 +140,7 @@ export class NetGame implements Game {
     this.level = level;
     this.wantedPlayers = Math.max(1, players);
     this.onLevel = wiring.onLevel;
+    this.creating = wiring.creating ?? false;
     this.now = wiring.now ?? (() => performance.now());
     this.reconciler = new Reconciler(level);
     this.world = this.reconciler.prediction;
@@ -149,7 +160,7 @@ export class NetGame implements Game {
           token: this.token,
           // Only heeded when this room does not exist yet: a kitchen that has
           // been played keeps its own level, and we load whatever it says.
-          level: this.level.id,
+          level: this.creating ? this.level.id : "",
         }),
         hadFrames: () => this.snapshots.size > 0,
       },
