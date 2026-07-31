@@ -70,6 +70,14 @@ export const PALETTE = {
   cardFace: 0xf4ead6,
   cardEdge: 0xd9c49a,
   cardEasel: 0x8a6a45,
+  // The sign hanging in the door. Painted board on a brass hook, and the two
+  // faces of the day: a green that means come in, and a red that means not yet.
+  // Saturated on purpose — it is the one thing in the room whose whole job is to
+  // be read from the other side of it.
+  signBoard: 0x6b4a30,
+  signHook: 0xc9a86b,
+  signOpen: 0x4e8a5c,
+  signClosed: 0xa8483f,
   ceramic: 0xf1ece0,
   bin: 0x4a453e,
   brass: 0xc9a86b,

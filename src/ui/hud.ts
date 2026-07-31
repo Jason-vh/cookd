@@ -59,8 +59,8 @@ export class Hud {
    * the next morning's card comes back on its own.
    */
   private settled = 0;
-  /** What to call the key that opens the next day — the player may have moved it. */
-  private startKey = "Enter";
+  /** What to call the key that works the sign — the player may have moved it. */
+  private grabKey = "Space";
 
   constructor(root: HTMLElement) {
     root.innerHTML = `
@@ -123,9 +123,9 @@ export class Hud {
    * offline there is nothing to say and a permanent "local" badge is noise.
    */
   /** The keys changed: say the new one rather than the one this was written with. */
-  setStartKey(label: string): void {
-    this.startKey = label;
-    this.setBanner("open", `Press ${label} to open`);
+  setGrabKey(label: string): void {
+    this.grabKey = label;
+    this.setBanner("keys", `${label} facing it, or A on a pad`);
   }
 
   private syncConnection(connection?: Connection): void {
@@ -244,7 +244,11 @@ export class Hud {
     this.banner.classList.toggle("slim", !hasReport && this.settled === world.day);
 
     this.setBanner("title", `Day ${world.day} \u2014 morning`);
-    this.setBanner("open", `Press ${this.startKey} to open`);
+    // Where, not which button. The day is opened by turning the sign in the
+    // doorway, so the instruction names a *place in the room* — which is the
+    // whole reason the sign exists. See `sim/systems/sign.ts`.
+    this.setBanner("open", "Turn the sign by the door to open");
+    this.setBanner("keys", `${this.grabKey} facing it, or A on a pad`);
     if (hasReport) this.setReport(closed, world.money);
   }
 
@@ -281,13 +285,11 @@ export class Hud {
     open.dataset.banner = "open";
     open.className = "banner-open";
 
-    // The keyboard's key is in the instruction itself, so this row is what the
-    // instruction cannot say: the other ways in. It goes with the card.
+    // How to work it, under where to find it. Only on the card: by the time the
+    // banner is a strip the player has already used a grab to get there.
     const keys = document.createElement("p");
     keys.className = "banner-keys";
-    const pad = document.createElement("span");
-    pad.textContent = "Y";
-    keys.append(pad, " on a pad, or the pause menu");
+    keys.dataset.banner = "keys";
     this.bannerCard.replaceChildren(reportTitle, report, service, title, open, keys);
   }
 

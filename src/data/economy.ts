@@ -63,6 +63,7 @@ export const STOCK_WEIGHT: Record<ApplianceKind, number> = {
   wall: 0,
   stall: 0,
   cards: 0,
+  sign: 0,
 
   // Staples.
   counter: 5,

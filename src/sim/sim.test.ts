@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { applianceDef } from "../data/appliances";
 import { CUSTOMER_KINDS, customerKind } from "../data/customers";
 import { LEVEL } from "../data/level";
 import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
-import { DT, endDay, restartDay, step } from "./step";
+import { endDay, restartDay } from "./day";
+import { DT, step } from "./step";
 import {
   canPlace,
   customerSpeed,
@@ -12,6 +14,7 @@ import {
   unreachableTables,
 } from "./queries";
 import { isDirty, specKey } from "./items";
+import { snapshot } from "../save";
 import { plateCount, platesInWorld } from "./plates";
 import type { Appliance, ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
 import { DOOR_QUEUE, DOOR_WAIT, eatTime } from "./systems/customers";
@@ -134,6 +137,20 @@ const TABLE = [4, 4] as const;
 const TABLE2 = [4, 8] as const;
 /** The middle slot of the market stall, faced from the patio beside it. */
 const STALL = [0, 4] as const;
+/** The sign, hanging in the wall beside the door and faced from inside. */
+const SIGN = [2, 5] as const;
+
+/**
+ * Turn the sign: the only way in or out of service a player has.
+ *
+ * The verb is a plain `Grab` at a tile, which is the entire point of the sign
+ * existing — opening the restaurant is a chef walking somewhere and doing
+ * something, like every other rule in the game.
+ */
+function flipSign(world: World): void {
+  face(world.players[0]!, SIGN[0], SIGN[1], -1, 0);
+  press(world, "grab");
+}
 
 /**
  * Sit somebody at a table with an order already placed — the state the delivery
@@ -730,7 +747,11 @@ describe("plates", () => {
     // in somebody's hands, that wipe had nowhere to put the plates and the
     // kitchen came back with none. It also strands the holder: there is no way
     // to put an appliance down during service.
-    step(world, [{ ...emptyInput(), start: true }]);
+    //
+    // Note the sign is turned *while carrying the plate stack*, which is a
+    // thing a player can now do: refusing has to be the day's rule, not an
+    // accident of not being able to reach the sign with your hands full.
+    flipSign(world);
     restartDay(world);
     expect(world.phase).toBe("build");
     expect(player.carriedAppliance).not.toBeNull();
@@ -894,7 +915,7 @@ describe("day loop", () => {
     press(world, "grab");
     expect(applianceAtTile(world, 15, 5)!.id).toBe(board.id);
 
-    press(world, "start");
+    flipSign(world);
     expect(world.phase).toBe("service");
   });
 
@@ -907,7 +928,7 @@ describe("day loop", () => {
     expect(world.phase).toBe("build");
     expect(world.day).toBe(1);
 
-    press(world, "start");
+    flipSign(world);
     expect(world.phase).toBe("service");
     expect(world.day).toBe(1); // still day one — opening does not advance it
 
@@ -928,6 +949,90 @@ describe("day loop", () => {
 
     expect(world.money).toBe(10);
     expect(world.phase).toBe("build");
+  });
+});
+
+/**
+ * The sign in the door — the whole of opening and closing a restaurant.
+ *
+ * It is here rather than beside the stall tests because it is the *day loop*
+ * seen from the room: the same two transitions the phase system used to make on
+ * a keypress, now made by a chef standing in front of an object.
+ */
+describe("the sign by the door", () => {
+  test("turning it opens the day", () => {
+    const world = createWorld(LEVEL, 1);
+    world.nextArrivalIn = Infinity;
+
+    flipSign(world);
+    expect(world.phase).toBe("service");
+    expect(world.dayTime).toBeGreaterThan(0);
+  });
+
+  test("...and only from in front of it", () => {
+    // It is an object in a room, so it obeys the rule every other object does:
+    // you have to be there. Standing one tile short of the sign, facing it.
+    const world = createWorld(LEVEL, 1);
+    face(world.players[0]!, 3, 5, -1, 0);
+    press(world, "grab");
+
+    expect(world.phase).toBe("build");
+  });
+
+  test("turning it during service calls last orders rather than clearing the room", () => {
+    // The difference that makes this a sign and not a stop button. The dining
+    // room is full of people who have ordered; closing up cannot mean sweeping
+    // them out, so the clock runs out early and the closing beat every ordinary
+    // day ends with takes over from there.
+    const world = makeWorld();
+    const diner = seatCustomer(world, "salad");
+
+    flipSign(world);
+    expect(world.phase).toBe("service");
+    expect(world.dayTime).toBeLessThanOrEqual(0);
+    expect(world.customers).toContain(diner);
+
+    // Feed them and the day closes itself, exactly as it would at 0:00.
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+    hold(world, eatTime(diner) + 6, null);
+    expect(world.phase).toBe("build");
+  });
+
+  test("an empty room closes immediately", () => {
+    const world = makeWorld();
+    expect(world.customers).toHaveLength(0);
+
+    flipSign(world);
+    hold(world, 0.2, null);
+    expect(world.phase).toBe("build");
+    expect(world.day).toBe(2);
+  });
+
+  test("it is furniture of the place: immovable, and never saved", () => {
+    // The same contract as the stall and the card stand. A sign a player could
+    // pick up and sell is a kitchen that can lose the ability to open.
+    const world = createWorld(LEVEL, 1);
+    const sign = [...world.appliances.values()].find((a) => a.kind === "sign")!;
+    face(world.players[0]!, sign.tile.x, sign.tile.y, -1, 0);
+
+    // A grab at it opens the day rather than lifting it, so this is asked of
+    // the world it left behind: nobody is carrying anything.
+    press(world, "grab");
+    expect(world.players[0]!.carriedAppliance).toBeNull();
+    expect(applianceDef("sign").movable).toBe(false);
+    expect(snapshot(world).appliances.some((a) => a.kind === "sign")).toBe(false);
+  });
+
+  test("it stands in the wall, so the building is not a hole with a sign in it", () => {
+    const world = createWorld(LEVEL, 1);
+    const sign = [...world.appliances.values()].find((a) => a.kind === "sign")!;
+
+    expect(isSolid(world, sign.tile.x, sign.tile.y)).toBe(true);
+    expect(canPlace(world, sign.tile.x, sign.tile.y)).toBe(false);
+    // ...and it is beside the door, which is the only reason a player finds it.
+    const away = Math.abs(sign.tile.x - world.door.x) + Math.abs(sign.tile.y - world.door.y);
+    expect(away).toBe(1);
   });
 });
 

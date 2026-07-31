@@ -244,7 +244,12 @@ export type ClientMessage =
   | { t: "join"; name: string }
   | { t: "leave"; id: number }
   | { t: "input"; seq: number; inputs: Record<number, PlayerInput> }
-  | { t: "menu"; action: "startDay" | "endDay" | "restartDay" }
+  /**
+   * Opening and closing used to be menu actions on the wire. They are the sign
+   * by the door now, which arrives as an ordinary `input` — a grab, aimed at a
+   * tile — so the protocol has one fewer way to say the same thing.
+   */
+  | { t: "menu"; action: "restartDay" }
   | { t: "reset" }
   | { t: "ping"; sent: number };
 

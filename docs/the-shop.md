@@ -25,7 +25,7 @@ The build phase is the **morning of the day it precedes**, not the wreckage of
 the one before.
 
 - A fresh room and a loaded room both wake into it. Service starts when somebody
-  opens the day, with the verb that already existed (`Y` / `Enter` / `Start`).
+  **turns the sign by the door**, with the verb that already existed (`Grab`).
   The save has always discarded mid-day state, so this makes the resume point
   honest instead of papering over it.
 - `world.day` advances when service **ends**. The HUD therefore reads "Day 4 —
@@ -37,11 +37,47 @@ the one before.
 There is exactly one phase either way — close, build, open is one loop. A second
 phase kind for "morning" would have been two states describing one thing.
 
-The banner carries the only tutorial the game has: **"Press Enter to open"** —
-named after whatever that player has actually bound it to. A solo player on day
-one is standing in a kitchen that will not start until they press something, and
-that is the single most important sentence in the product. It is spent on
-prominence, not on a new screen.
+## The sign
+
+Opening the day used to be a keypress: `Start`, or a pause-menu item, watched
+for by the phase system. It was the only verb in the game that was not a chef
+doing something to an object — the stall's own lesson, *a shop is a place, not a
+menu*, applied to everything except the moment the restaurant opens.
+
+So it is a sign now, hung in the wall beside the door: level furniture like the
+stall and the card stand, immovable, never saved, answering a `Grab` on its own
+terms before any other rule can refuse it. **Zero new verbs.** The tile stays a
+wall tile — solid, unbuildable, part of the shell the renderer bakes — so the
+building is not a hole with a sign in it.
+
+It reads both ways round, which is why it is a sign and not a button:
+
+- **Morning.** It says CLOSED, and turning it opens the day. `beginDay` still
+  refuses out loud while somebody is carrying an appliance.
+- **Service.** It says OPEN, and turning it calls **last orders**: the clock is
+  run out early and the closing beat every ordinary day ends with takes over.
+  The room keeps the people in it, which is the whole difference between a sign
+  and the "close up early" menu item it replaced — that one emptied the dining
+  room mid-meal.
+
+Both faces of the board show the same word, which is not how a real shop sign
+works and is right here: the camera turns to any of four corners, so half the
+time a player would be reading the back of the board and being told the opposite
+of the truth. The turn is the animation; the state is on both sides of it. What
+the board shows is read from the *phase*, never from the keypress, so a refused
+open and a flip a predicted tick was not allowed to make both draw honestly.
+
+**A guess may not open a restaurant.** Service interaction is predicted on the
+client, so the sign checks `World.predicting` — the same idiom `log` and `effect`
+use. Without it a client would call last orders on every replayed tick, twenty
+times a second, on a kitchen the server still has open.
+
+The banner carries the only tutorial the game has: **"Turn the sign by the door
+to open"**, with the player's own grab key underneath it. A solo player on day
+one is standing in a kitchen that will not start until they do something, and
+that is the single most important sentence in the product. It now names a place
+in the room rather than a button, which is the point of the sign existing. It is
+spent on prominence, not on a new screen.
 
 Prominence is not the same as permanence, though, and the banner used to be both:
 a full card sitting over the room for the whole morning, which is the half of the

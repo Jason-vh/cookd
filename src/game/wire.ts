@@ -259,7 +259,7 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
     }
     case "menu": {
       const action = value.action;
-      if (action !== "startDay" && action !== "endDay" && action !== "restartDay") return null;
+      if (action !== "restartDay") return null;
       return { t: "menu", action };
     }
     case "reset":
@@ -331,6 +331,7 @@ const APPLIANCE_KINDS: Record<ApplianceKind, true> = {
   wall: true,
   stall: true,
   cards: true,
+  sign: true,
   counter: true,
   board: true,
   steel_board: true,

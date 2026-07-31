@@ -63,7 +63,7 @@ function compile(bindings: KeyBindings): Compiled {
 }
 
 // Standard gamepad mapping. Start opens the pause menu; the north face button
-// (Y / Triangle) confirms "open for business", so the two can never conflict.
+// (Y / Triangle) confirms a menu item, so the two can never conflict.
 // `back` (B / Circle) doubles as an alternate USE during play and as "close the
 // menu" while it is open — the two contexts are mutually exclusive, so they
 // cannot conflict.

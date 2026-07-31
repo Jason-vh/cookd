@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "../data/level";
 import { Host } from "./host";
+import { beginDay } from "../sim/day";
 import { encodeFrame, encodeLayout, PROTOCOL_VERSION } from "./protocol";
 import { decode, parseClientMessage, parseInput, parseServerMessage } from "./wire";
 
@@ -120,11 +121,14 @@ describe("client messages", () => {
   });
 
   test("menu actions are a closed set", () => {
-    expect(parseClientMessage({ t: "menu", action: "startDay" })).toEqual({
+    expect(parseClientMessage({ t: "menu", action: "restartDay" })).toEqual({
       t: "menu",
-      action: "startDay",
+      action: "restartDay",
     });
     expect(parseClientMessage({ t: "menu", action: "deleteEverything" })).toBeNull();
+    // Opening and closing left the menu for the sign by the door, so the words
+    // that used to work here are now exactly as unwelcome as any other.
+    expect(parseClientMessage({ t: "menu", action: "startDay" })).toBeNull();
   });
 
   test("one bad seat rejects the whole input message", () => {
@@ -250,7 +254,7 @@ describe("server messages", () => {
   test("a customer's kind travels, and an unfamiliar one is not a reason to drop them", () => {
     const host = new Host();
     host.join("Ann");
-    host.menu("startDay");
+    beginDay(host.world);
     host.world.nextArrivalIn = 0;
     for (let i = 0; i < 60; i++) host.advance(1 / 60);
     expect(host.world.customers.length).toBeGreaterThan(0);

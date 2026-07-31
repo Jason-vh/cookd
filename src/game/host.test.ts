@@ -3,10 +3,11 @@ import { Host, TARGET_QUEUE } from "./host";
 import { applyFrame, applyLayout, encodeFrame, encodeLayout, layoutVersion } from "./protocol";
 import { PLAYER_SPEED, addPlayer, createWorld, emptyInput, isIdleInput } from "../sim/world";
 import { predict, step } from "../sim/step";
+import { beginDay, endDay } from "../sim/day";
 import { platesInWorld, unshelvePlate } from "../sim/plates";
 import { LEVEL } from "../data/level";
 import { saveSignature } from "../save";
-import type { Customer, Inputs, PlayerInput } from "../sim/types";
+import type { Customer, Inputs, Player, PlayerInput, World } from "../sim/types";
 
 /**
  * These exercise the multiplayer machinery without a socket in sight. `Host` is
@@ -153,7 +154,7 @@ describe("protocol", () => {
     // assigning to `tile`, because the version is only correct if the code that
     // moves appliances is the code that bumps it — a test that pokes the field
     // directly would pass even if every real caller forgot.
-    host.menu("endDay");
+    endDay(host.world);
     const player = host.world.players[0]!;
     const board = [...host.world.appliances.values()].find((a) => a.kind === "board")!;
     player.pos = { x: board.tile.x + 0.5, y: board.tile.y - 0.5 };
@@ -188,7 +189,8 @@ describe("protocol", () => {
     for (let flip = 0; flip < 10; flip++) {
       const layout = JSON.stringify(encodeLayout(host.world));
       const version = layoutVersion(host.world);
-      host.menu(host.world.phase === "build" ? "startDay" : "endDay");
+      if (host.world.phase === "build") beginDay(host.world);
+      else endDay(host.world);
       if (JSON.stringify(encodeLayout(host.world)) === layout) continue;
       changes++;
       expect(layoutVersion(host.world)).not.toBe(version);
@@ -212,8 +214,8 @@ describe("protocol", () => {
     // morning and never during service — the same kind of fact as a counter.
     const host = new Host();
     while (host.world.day < 2) {
-      host.menu("startDay");
-      host.menu("endDay");
+      beginDay(host.world);
+      endDay(host.world);
     }
     host.world.unlocked = ["salad", "fries"];
     host.world.unlockedDay = 2;
@@ -573,7 +575,7 @@ describe("frames must not be shared between worlds", () => {
     const host = new Host();
     const id = host.join("Ann");
     // Open the day: rooms wake into the morning now, and nobody walks in then.
-    host.menu("startDay");
+    beginDay(host.world);
     const frame = encodeFrame(host.world, host.acks);
 
     const drawn = new Host().world;
@@ -614,20 +616,36 @@ function customer(id: number, recipeId: string): Customer {
   };
 }
 
+/**
+ * Stand a chef in front of the sign by the door, facing it.
+ *
+ * Found rather than hard-coded: which wall tile a level hangs its sign on is
+ * that level's business, and a test that knew the coordinate would be testing
+ * the ASCII art.
+ */
+function faceSign(world: World, player: Player): void {
+  const sign = [...world.appliances.values()].find((a) => a.kind === "sign")!;
+  player.pos = { x: sign.tile.x + 1.5, y: sign.tile.y + 0.5 };
+  player.prevPos = { ...player.pos };
+  player.facing = { x: -1, y: 0 };
+}
+
 describe("what a client is allowed to guess at", () => {
   test("prediction never changes the phase", () => {
-    // `step` runs `phaseSystem`, which fires on a local `start` press. Predicting
-    // one therefore flipped the *prediction* world into service while the server
-    // was still in build, and `interactionSystem` took the service branch for a
-    // round trip — so a grab held across the transition predicted an entirely
-    // different action, and `workingOn` is drawn.
+    // Opening the day is a grab at the sign by the door, and a predicted grab
+    // would otherwise flip the *prediction* world into service while the server
+    // was still in build — whereupon `interactionSystem` takes the service
+    // branch for a round trip, so a grab held across the transition predicts an
+    // entirely different action, and `workingOn` is drawn.
+    //
     // A world wakes in the build phase, which is exactly the state this is
     // about: the morning of day one, waiting for somebody to open it.
     const world = createWorld(LEVEL, 0);
-    const id = addPlayer(world, LEVEL, "Ann").id;
+    const player = addPlayer(world, LEVEL, "Ann");
     expect(world.phase).toBe("build");
+    faceSign(world, player);
 
-    const pressing: Inputs = { [id]: { ...emptyInput(), start: true } };
+    const pressing: Inputs = { [player.id]: { ...emptyInput(), grab: true } };
     for (let i = 0; i < 10; i++) predict(world, pressing);
     expect(world.phase).toBe("build");
     expect(world.day).toBe(1);
@@ -636,9 +654,34 @@ describe("what a client is allowed to guess at", () => {
     // the split: the server decides, the client draws. Released first, because
     // `predict` latched the held button — which is itself the behaviour the
     // third test below pins down.
-    step(world, { [id]: emptyInput() });
+    step(world, { [player.id]: emptyInput() });
     step(world, pressing);
     expect(world.phase).toBe("service");
+  });
+
+  test("...nor closes the kitchen out from under the server", () => {
+    // The same rule from the other side. Service *is* predicted, so the sign is
+    // the one thing in it a guess may not touch: a client replays every
+    // unacknowledged tick, so a predicted flip would call last orders twenty
+    // times a second on a kitchen the server still has open.
+    const world = createWorld(LEVEL, 0);
+    const player = addPlayer(world, LEVEL, "Ann");
+    beginDay(world);
+    faceSign(world, player);
+    const clock = world.dayTime;
+
+    // What a client's prediction world is: the same simulation, flagged as a
+    // guess. `predict` alone cannot express this one — service interaction *is*
+    // predicted, so the sign has to refuse on its own account.
+    world.predicting = true;
+    const pressing: Inputs = { [player.id]: { ...emptyInput(), grab: true } };
+    for (let i = 0; i < 10; i++) predict(world, pressing);
+    expect(world.dayTime).toBeCloseTo(clock, 5);
+
+    world.predicting = false;
+    step(world, { [player.id]: emptyInput() });
+    step(world, pressing);
+    expect(world.dayTime).toBeLessThanOrEqual(0);
   });
 
   test("prediction spawns no customers and burns no randomness", () => {

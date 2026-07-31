@@ -248,8 +248,8 @@ body {
 }
 
 /*
- * "Press Start to open" — the one instruction a solo player on day one cannot
- * be allowed to miss. It is the whole tutorial, so it gets to be loud.
+ * "Turn the sign by the door to open" — the one instruction a solo player on day
+ * one cannot be allowed to miss. It is the whole tutorial, so it gets to be loud.
  */
 #banner p.banner-open {
   margin: 8px 0 2px;
@@ -634,17 +634,6 @@ body {
   margin: 12px 0 0 !important;
   font-size: 12px;
   color: #7e808b;
-}
-
-.banner-keys span {
-  display: inline-block;
-  padding: 1px 6px;
-  margin-right: 2px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #a2a4ad;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 /* One key chip, wherever a key has to be named. */

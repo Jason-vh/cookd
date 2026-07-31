@@ -178,11 +178,16 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
       } else if (spec.kind === "patio") {
         world.tiles[idx] = { wall: false, door: false, placeable: false };
       } else if (spec.kind === "appliance") {
-        // The stall stands on the patio, so its tile has to be unplaceable for
-        // the same reason the paving around it is: nothing may be built there.
-        // Read from the ASCII rather than inferred, so a stall inside a kitchen
-        // would behave the same way.
-        if (!applianceDef(spec.appliance).movable) {
+        // The sign hangs *in* the wall, so its tile is a wall tile that happens
+        // to carry an appliance: solid, and part of the shell the renderer
+        // bakes. Anything else would leave a hole in the building.
+        if (spec.wall) {
+          world.tiles[idx] = { wall: true, door: false, placeable: false };
+        } else if (!applianceDef(spec.appliance).movable) {
+          // The stall stands on the patio, so its tile has to be unplaceable for
+          // the same reason the paving around it is: nothing may be built there.
+          // Read from the ASCII rather than inferred, so a stall inside a kitchen
+          // would behave the same way.
           world.tiles[idx] = { wall: false, door: false, placeable: false };
         }
         spawnAppliance(world, spec.appliance, { x, y }, spec.source ?? null);

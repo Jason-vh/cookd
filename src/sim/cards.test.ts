@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { applianceDef } from "../data/appliances";
 import { CARD_SLOTS, STARTING_RECIPES } from "../data/progression";
 import { LEVEL } from "../data/level";
 import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
 import { Host } from "../game/host";
 import { cardStands, isCardMorning, missingFor, restockCards, unlockedRecipes } from "./cards";
 import { canPlace } from "./queries";
-import { beginDay, endDay, step } from "./step";
+import { beginDay, endDay } from "./day";
+import { step } from "./step";
 import type { Appliance, ApplianceKind, PlayerInput, World } from "./types";
 import { createWorld, emptyInput } from "./world";
 
@@ -37,7 +39,7 @@ function idle(): PlayerInput[] {
   return [emptyInput()];
 }
 
-function press(world: World, button: "grab" | "start"): void {
+function press(world: World, button: "grab"): void {
   const inputs = idle();
   inputs[0]![button] = true;
   step(world, inputs);
@@ -209,10 +211,10 @@ describe("the stand", () => {
     for (let day = 1; day <= 10; day++) {
       expect(cardsOn(a.world)).toEqual(cardsOn(b.world));
       // Only one of them plays.
-      a.menu("startDay");
+      beginDay(a.world);
       for (let i = 0; i < 600; i++) step(a.world, {});
       endDay(a.world);
-      b.menu("startDay");
+      beginDay(b.world);
       endDay(b.world);
     }
     // ...and it was a real offer, not two empty stands agreeing.
@@ -335,7 +337,11 @@ describe("a card delivers what its dish needs", () => {
     // Never the door, never the patio: everything delivered is somewhere the
     // game is allowed to put things.
     for (const appliance of world.appliances.values()) {
-      if (appliance.kind === "stall" || appliance.kind === "cards") continue;
+      // Level furniture is exempt by definition — the stall and the card stand
+      // are on the patio and the sign is in a wall, which is precisely what
+      // being immovable means. Asked as a property rather than as a list of
+      // kinds, so the next piece of furniture does not have to edit this test.
+      if (!applianceDef(appliance.kind).movable) continue;
       const tile = world.tiles[appliance.tile.y * world.width + appliance.tile.x];
       expect(tile?.placeable).toBe(true);
       expect(tile?.door).toBe(false);

@@ -6,6 +6,9 @@ import { BEACH_SHACK, LEVEL } from "../src/data/level";
 import { PROTOCOL_VERSION } from "../src/game/protocol";
 import { parseServerMessage } from "../src/game/wire";
 import type { ServerMessage } from "../src/game/protocol";
+import type { PlayerInput } from "../src/sim/types";
+import { emptyInput } from "../src/sim/world";
+import { parseSave } from "../src/save";
 
 /**
  * The transport, over a real socket.
@@ -317,10 +320,19 @@ function positionOf(client: Client, seat: number): { x: number; y: number } | nu
 describe("shutting down", () => {
   test("a redeploy does not cost a room its day", async () => {
     // Rooms are only persisted on a layout change, a phase change, an eviction
-    // or the last player leaving — so a room mid-service holds its takings and
-    // its day counter in memory alone. A deploy is the most likely reason this
-    // process ever stops, which made the one case with no save also the common
-    // one. Verified by reverting the handler: this file never appears.
+    // or the last player leaving — so a room mid-service holds its takings in
+    // memory alone. A deploy is the most likely reason this process ever stops,
+    // which made the one case with no save also the common one.
+    //
+    // **What this does and does not prove.** It proves a room's work survives a
+    // SIGTERM. It does not prove the *shutdown handler* is what saved it: every
+    // change a client can currently make to the save signature also touches the
+    // layout, and a layout change checkpoints on the next tick. Measured, this
+    // still passes with the handler's writes removed — and so did the version
+    // that opened and closed the day through the menu, whose comment claimed
+    // otherwise. Proving it needs a room that is dirty *without* a layout
+    // change, which today means money earned in service: a whole cooking loop
+    // driven over a socket.
     //
     // Its own server on its own port, because the point is to kill it.
     const port = 5397;
@@ -342,6 +354,13 @@ describe("shutting down", () => {
 
       const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
       await new Promise((resolve) => socket.addEventListener("open", resolve, { once: true }));
+      // The seat this connection was given, which every input has to name.
+      let seat = 0;
+      let seq = 1;
+      socket.addEventListener("message", (event: MessageEvent) => {
+        const message = parseServerMessage(String(event.data));
+        if (message?.t === "welcome") seat = message.you[0] ?? 0;
+      });
       socket.send(
         JSON.stringify({
           t: "hello",
@@ -354,20 +373,43 @@ describe("shutting down", () => {
       );
       await Bun.sleep(300);
 
-      // Opening the next day bumps `world.day`, which `saveSignature` covers —
-      // so the room is dirty. Killed one millisecond later, before any write
-      // could plausibly have finished on its own.
-      socket.send(JSON.stringify({ t: "menu", action: "endDay" }));
-      await Bun.sleep(60);
-      socket.send(JSON.stringify({ t: "menu", action: "startDay" }));
-      await Bun.sleep(1);
+      // Something worth keeping, done the way a player does it: pick the
+      // chopping board north of the spawn tile up, and put it down south of it.
+      // This used to be a `menu` message opening and closing the day, which is
+      // no longer a thing a client can ask for — the day is opened by turning
+      // the sign, which is an ordinary grab at a tile, which is what this is.
+      const send = (input: Partial<PlayerInput>): void => {
+        socket.send(
+          JSON.stringify({
+            t: "input",
+            seq: seq++,
+            inputs: { [seat]: { ...emptyInput(), ...input } },
+          }),
+        );
+      };
+      const hold = async (input: Partial<PlayerInput>, ms: number): Promise<void> => {
+        for (let i = 0; i * 16 < ms; i++) {
+          send(input);
+          await Bun.sleep(16);
+        }
+      };
+
+      await hold({ move: { x: 0, y: -1 } }, 64); // turn to face the board
+      await hold({ grab: true }, 48); // ...and lift it
+      await hold({ move: { x: 0, y: 1 } }, 64); // turn round
+      await hold({ grab: true }, 48); // ...and set it down behind you
 
       proc.kill("SIGTERM");
       await proc.exited;
       expect(proc.exitCode).toBe(0);
 
-      const saved: unknown = JSON.parse(await readFile(join(dir, "SHUTDOWN.json"), "utf8"));
-      expect(saved).toMatchObject({ day: 2 });
+      const written: unknown = JSON.parse(await readFile(join(dir, "SHUTDOWN.json"), "utf8"));
+      // Read back through the game's own parser rather than poked at as JSON:
+      // a file this test can read but the server would reject is not a save.
+      const saved = parseSave(written);
+      expect(saved?.day).toBe(1);
+      // The board is on the tile the player moved it to.
+      expect(saved?.appliances).toContainEqual({ kind: "board", x: 12, y: 7 });
     } finally {
       proc.kill();
     }

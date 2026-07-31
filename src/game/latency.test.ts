@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "../data/level";
 import { DT } from "../sim/step";
+import { beginDay } from "../sim/day";
 import type { Appliance, Effect, Inputs, Player, PlayerInput, World } from "../sim/types";
 import { mintPlate } from "../sim/plates";
 import { emptyInput, playerById } from "../sim/world";
@@ -395,7 +396,7 @@ function ready(rtt: number, facing: (appliance: Appliance) => boolean = isCrate)
   link.advance(rtt + 200);
   expect(link.game.status).toBe("online");
 
-  link.server.host.menu("startDay");
+  beginDay(link.server.host.world);
   standFacing(link.server.host.world, link.theirs()!, facing, new Set());
 
   // Let the move and the phase reach the client, so the measurement that
@@ -512,7 +513,7 @@ describe("responding to a button", () => {
     // only wait is for the tick that reads the button.
     const game = new LocalGame(null, 1);
     const id = game.localIds[0]!;
-    game.menu("startDay");
+    beginDay(game.world);
     standFacing(game.world, playerById(game.world, id)!, isCrate, new Set());
 
     const grabbing: Inputs = { [id]: { ...emptyInput(), grab: true } };
@@ -557,7 +558,7 @@ function pair(rttA: number, rttB: number): { link: Link; ann: Peer; bea: Peer } 
   const slowest = Math.max(rttA, rttB);
   link.advance(slowest + 300);
 
-  link.server.host.menu("startDay");
+  beginDay(link.server.host.world);
   const taken = new Set<number>();
   for (const peer of link.peers) {
     standFacing(link.server.host.world, link.theirs(peer)!, isCrate, taken);
@@ -642,7 +643,7 @@ function kitchenOf(count: number): Link {
   const link = new Link(30);
   for (const name of ["Bea", "Cal", "Dev"].slice(0, count - 1)) link.join(name);
   link.advance(500);
-  link.server.host.menu("startDay");
+  beginDay(link.server.host.world);
 
   // A new kitchen owns two crates, so any more than two stand at counters.
   // Which is what four people in a one-dish kitchen actually do.
@@ -894,7 +895,7 @@ function shoving(rtt: number): { peak: number; mean: number } {
   const link = new Link(rtt);
   const bea = link.join("Bea", rtt);
   link.advance(rtt + 400);
-  link.server.host.menu("startDay");
+  beginDay(link.server.host.world);
 
   // Facing each other down an empty aisle, three tiles apart.
   const world = link.server.host.world;

@@ -10,7 +10,7 @@ import { chopLift, ease, workPhase } from "./anim";
 import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";
 import { setGhost, setGhostOpacity } from "./ghost";
-import { buildAppliance, type ApplianceParts } from "./appliance-meshes";
+import { buildAppliance, paintSign, type ApplianceParts, type SignFace } from "./appliance-meshes";
 import { buildIngredientSample, buildItemModel } from "./models";
 import { buildHighlight } from "./overlay-meshes";
 import { PALETTE } from "./palette";
@@ -52,6 +52,9 @@ type Visual = ApplianceParts & {
   cardKey: string;
   /** How far the card is lifted while somebody is considering it, 0..1. */
   armed: number;
+  /** Which way the sign is showing, and how far through turning it is. */
+  signFace: SignFace;
+  signTurn: number;
   /** A refused purchase, flashing the price red. 1..0. */
   refused: number;
   /** Ring shown when nobody can walk to this. Built the first time it is needed. */
@@ -131,7 +134,7 @@ export class ApplianceViews {
     for (const appliance of world.appliances.values()) {
       let visual = this.visuals.get(appliance.id);
       if (!visual) {
-        visual = this.create(appliance);
+        visual = this.create(appliance, world);
         this.visuals.set(appliance.id, visual);
       }
 
@@ -147,6 +150,7 @@ export class ApplianceViews {
       this.syncDial(appliance, visual, dt, time);
       if (appliance.kind === "stall") this.syncStall(world, appliance, visual, dt);
       if (appliance.kind === "cards") this.syncCards(world, appliance, visual, dt, time);
+      if (appliance.kind === "sign") this.syncSign(world, visual, dt);
     }
   }
 
@@ -255,6 +259,31 @@ export class ApplianceViews {
     }
   }
 
+  /** Turn the sign over when the restaurant does. See `signFaceOf`. */
+  private syncSign(world: World, visual: Visual, dt: number): void {
+    // Faces whoever is looking at it, exactly as the card stand does and for the
+    // same reason: it is the one other object in the game with a *face*, and a
+    // sign showing the camera its edge is a sign nobody can read.
+    visual.root.rotation.y = this.viewingAngle();
+
+    const face = signFaceOf(world);
+    if (face !== visual.signFace) {
+      visual.signFace = face;
+      visual.signTurn = 1;
+    }
+    if (visual.signTurn <= 0) return;
+
+    const before = visual.signTurn;
+    visual.signTurn = Math.max(0, before - dt * 2.4);
+    // Repainted as it passes the halfway point, where the board is edge-on and
+    // the swap cannot be seen. A sign whose face changes in full view is a
+    // sticker being replaced, not a sign being turned.
+    if (before > 0.5 && visual.signTurn <= 0.5 && visual.boardFaces) {
+      paintSign(visual.boardFaces, face);
+    }
+    if (visual.board) visual.board.rotation.y = visual.signTurn * Math.PI;
+  }
+
   /** Put a recipe on the card: its dish, and everything the card promises. */
   private dressCard(
     appliance: Appliance,
@@ -300,8 +329,12 @@ export class ApplianceViews {
     visual.label = label;
   }
 
-  private create(appliance: Appliance): Visual {
+  private create(appliance: Appliance, world: World): Visual {
     const parts = buildAppliance(appliance);
+    // A sign is built closed, so a kitchen joined mid-service would otherwise
+    // play its opening turn as a welcome to somebody who has arrived late.
+    const signFace = signFaceOf(world);
+    if (parts.boardFaces && signFace === "open") paintSign(parts.boardFaces, signFace);
     const dial = new Dial(this.camera);
     dial.object.position.y = applianceDef(appliance.kind).height + 0.72;
     parts.root.add(dial.object);
@@ -316,6 +349,8 @@ export class ApplianceViews {
       cardKey: "",
       armed: 0,
       refused: 0,
+      signFace,
+      signTurn: 0,
       ghost: { alpha: 0, x: 0, z: 0, pop: 0, held: false },
     };
   }
@@ -554,6 +589,23 @@ export class ApplianceViews {
 }
 
 /** What a slot is showing, as one string. Changes exactly when the goods do. */
+/**
+ * Which way the sign should be showing.
+ *
+ * Read from the world rather than remembered from the grab that changed it: the
+ * simulation is the only thing that knows whether a flip was *allowed* — an
+ * open refused because somebody is holding an oven, a close a predicted tick
+ * was not permitted to make — and a board animated from the keypress would tell
+ * that lie for a round trip.
+ *
+ * `dayTime` is in the answer as well as the phase, so the sign turns itself
+ * back over at closing time: the day the clock runs out is the day the room
+ * stops taking customers, and the object that says so should say so.
+ */
+function signFaceOf(world: World): SignFace {
+  return world.phase === "service" && world.dayTime > 0 ? "open" : "closed";
+}
+
 function offerKeyOf(offer: Offer): string {
   return offer.good === "plate" ? "plate" : `${offer.kind}:${offer.source?.base ?? ""}`;
 }

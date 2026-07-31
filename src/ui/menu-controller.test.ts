@@ -109,14 +109,14 @@ describe("opening and closing", () => {
 describe("controls that mean two things", () => {
   test("the button that confirmed a menu item does not then grab", () => {
     // Bug 2. `Enter` confirms *and* is `start`; the pad's `A` confirms *and*
-    // grabs. "Close up early" closed the menu into the build phase and the
-    // still-held key read as a fresh `start`, opening the next day — so the
-    // menu item looked like it had done nothing at all.
-    const { control, state, acted } = controller("endDay");
+    // grabs — which is also how the sign by the door is turned. "Close up
+    // early" closed the menu and the still-held key read as a fresh press in
+    // the kitchen, so the menu item looked like it had done nothing at all.
+    const { control, state, acted } = controller("restartDay");
     play(control, { menu: true });
     nav(control, {}); // release the key that opened it
     nav(control, { confirm: true });
-    expect(acted).toEqual(["endDay"]);
+    expect(acted).toEqual(["restartDay"]);
     expect(state.open).toBe(false);
 
     // Six frames of the key still being down, which is how long a press lasts.

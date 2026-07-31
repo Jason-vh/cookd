@@ -1,7 +1,8 @@
 import { LEVEL, type LevelDef } from "../data/level";
 import { restockCards, setUnlocked } from "../sim/cards";
 import { restockStall } from "../sim/shop";
-import { DT, beginDay, endDay, restartDay, step } from "../sim/step";
+import { DT, step } from "../sim/step";
+import { restartDay } from "../sim/day";
 import type { Inputs, PlayerInput, World } from "../sim/types";
 import { addPlayer, createWorld, emptyInput, log, playerById, removePlayer } from "../sim/world";
 import { restore, type RestoreResult, type Save } from "../save";
@@ -50,7 +51,14 @@ const MAX_QUEUE = 20;
  */
 export const TARGET_QUEUE = 1;
 
-export type MenuAction = "startDay" | "endDay" | "restartDay";
+/**
+ * What the pause menu can do to a room.
+ *
+ * Opening and closing used to be here too. They are the sign by the door now —
+ * a menu item that opens the restaurant is the same keypress-with-nothing-
+ * behind-it the sign replaced, one layer further away from the room.
+ */
+export type MenuAction = "restartDay";
 
 /**
  * Options rather than positional arguments: `advance(elapsed, 8)` used to mean
@@ -301,9 +309,7 @@ export class Host {
   // --- shell actions ---------------------------------------------------------
 
   menu(action: MenuAction): void {
-    if (action === "endDay") endDay(this.world);
-    else if (action === "restartDay") restartDay(this.world);
-    else if (action === "startDay") beginDay(this.world);
+    if (action === "restartDay") restartDay(this.world);
   }
 
   /**

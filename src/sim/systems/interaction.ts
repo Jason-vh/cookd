@@ -28,6 +28,7 @@ import {
 } from "../world";
 import { serveTable } from "./customers";
 import { useCardStand } from "./cards";
+import { useSign } from "./sign";
 import { canPlace, itemLabel, targetAppliance, targetTile } from "../queries";
 
 export function interactionSystem(world: World, inputs: Inputs): void {
@@ -56,6 +57,16 @@ function serviceGrab(world: World, player: Player): void {
   const appliance = targetAppliance(world, player);
   if (!appliance) return;
   const def = applianceDef(appliance.kind);
+
+  // The sign answers a grab on its own terms in either phase — here it calls
+  // last orders. It holds nothing and accepts nothing, so every rule below
+  // would refuse it in silence, and it is the one appliance a chef may use with
+  // their hands full: closing up is not something you should have to put the
+  // washing-up down for.
+  if (appliance.kind === "sign") {
+    useSign(world, player);
+    return;
+  }
 
   // The plate stack answers a grab entirely on its own terms, in both
   // directions, so it is handled before anything else can get a word in. That
@@ -404,6 +415,13 @@ function buildGrab(world: World, player: Player): void {
   // every rule below would refuse it silently.
   if (faced?.kind === "cards") {
     useCardStand(world, player, faced);
+    return;
+  }
+  // And the sign, which is how the morning ends. Before the carry rules below
+  // rather than after: `beginDay` is the thing that refuses a held appliance,
+  // and it says so out loud instead of letting the grab fall through in silence.
+  if (faced?.kind === "sign") {
+    useSign(world, player);
     return;
   }
 

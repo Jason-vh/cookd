@@ -10,7 +10,16 @@ import type { World } from "../sim/types";
  * world cannot stop just because one client opened a menu).
  */
 
-export type MenuAction = "resume" | "startDay" | "endDay" | "restartDay" | "resetKitchen";
+/**
+ * Opening and closing are not in here.
+ *
+ * They were, twice over: "Open for day 4" and "Close up early" were the pause
+ * menu's copy of a keypress that had nothing in the room behind it. Both are
+ * the sign by the door now — see `sim/systems/sign.ts`. What is left is the
+ * three things that are genuinely *about the session* rather than about the
+ * restaurant: leaving the menu, running the day again, and starting over.
+ */
+export type MenuAction = "resume" | "restartDay" | "resetKitchen";
 
 type MenuItem = { action: MenuAction; label: string; hint?: string };
 
@@ -119,8 +128,11 @@ export class PauseMenu {
     const items: MenuItem[] =
       world.phase === "build"
         ? [
-            { action: "startDay", label: `Open for day ${world.day + 1}`, hint: "Start service" },
-            { action: "resume", label: "Keep building", hint: "Back to the kitchen" },
+            {
+              action: "resume",
+              label: "Keep building",
+              hint: "Open up at the sign by the door",
+            },
             this.armed === "resetKitchen"
               ? {
                   action: "resetKitchen" as const,
@@ -135,7 +147,6 @@ export class PauseMenu {
           ]
         : [
             { action: "resume", label: "Resume", hint: `Day ${world.day} in progress` },
-            { action: "endDay", label: "Close up early", hint: "Skip to rearranging" },
             { action: "restartDay", label: "Restart day", hint: "Empty the room and start over" },
           ];
 

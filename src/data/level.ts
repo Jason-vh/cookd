@@ -9,6 +9,7 @@ import type { ApplianceKind, ItemSpec, Vec2 } from "../sim/types";
  *   D  door            t/l/c/p  crates: tomato / lettuce / cheese / potato
  *   f/w                crates: flour / water
  *   ,  patio           $  market stall   ?  recipe card stand
+ *   !  the sign        — hung in the wall beside the door; opens the day
  *
  * One grid, one collision system: the dining room is simply the western half
  * of the same rectangle, and the **patio ring** around the outside is more of
@@ -68,7 +69,20 @@ export type TileSpec =
   | { kind: "door" }
   /** Walkable paving outside the walls. Nothing may be built on it. */
   | { kind: "patio" }
-  | { kind: "appliance"; appliance: ApplianceKind; source?: ItemSpec };
+  | {
+      kind: "appliance";
+      appliance: ApplianceKind;
+      source?: ItemSpec;
+      /**
+       * Standing *in* the wall rather than against it.
+       *
+       * The tile keeps every property a wall tile has — solid, unbuildable, and
+       * drawn as part of the shell — and carries an appliance as well. Without
+       * it the sign by the door would be a one-tile hole in the building that
+       * happened to have a sign in it.
+       */
+      wall?: boolean;
+    };
 
 const crate = (base: string): TileSpec => ({
   kind: "appliance",
@@ -87,6 +101,10 @@ export const LEGEND: Record<string, TileSpec> = {
   // Same deal, one apron along: where the menu grows is a property of the
   // place, not of anybody's build. Bare on most mornings — see `sim/cards.ts`.
   "?": { kind: "appliance", appliance: "cards" },
+  // And the same again for the sign, which is how a day opens. It hangs in the
+  // wall beside the door — the one wall tile every restaurant hangs one on, and
+  // the one place a player is already looking when they think about opening.
+  "!": { kind: "appliance", appliance: "sign", wall: true },
   "=": { kind: "appliance", appliance: "counter" },
   B: { kind: "appliance", appliance: "board" },
   F: { kind: "appliance", appliance: "fryer" },
@@ -144,7 +162,7 @@ export const PARK_KITCHEN: LevelDef = {
     ",,####################,,",
     "$,#......#tl....PS==X#,,",
     "$,#.T....#...........#,,",
-    "$,#........=B=.......#,,",
+    "$,!........=B=.......#,,",
     ",,D......=...........#,,",
     "?,#......=...........#,,",
     "?,#.T....#.===.......#,,",
@@ -184,7 +202,7 @@ export const BEACH_SHACK: LevelDef = {
     ",,#.......#tl===X#,,",
     "$,#..T....=......#,,",
     "$,#.......#..B...#,,",
-    "$,#.....T........#,,",
+    "$,!.....T........#,,",
     ",,D.......#......#,,",
     "?,#..T....=......#,,",
     "?,#.......#......#,,",

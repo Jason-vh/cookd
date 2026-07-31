@@ -167,16 +167,14 @@ export class MenuController {
   private run(): void {
     const chosen = this.menu.confirm();
     // Held across the boundary: `Enter` confirms *and* is `start`, and the
-    // gamepad's `A` confirms *and* grabs. "Close up early" once closed the menu
-    // into the build phase and then, still held, read as a fresh `start` and
-    // opened the next day — so the menu item looked like it did nothing at all.
+    // gamepad's `A` confirms *and* grabs — which is now also how the sign by the
+    // door is turned. A confirm still held as the menu closes would otherwise
+    // reach the kitchen as a fresh grab at whatever the chef is facing.
     this.confirm.arm();
     switch (chosen) {
       case "resume":
         this.close();
         return;
-      case "startDay":
-      case "endDay":
       case "restartDay":
         this.act(chosen);
         this.close();

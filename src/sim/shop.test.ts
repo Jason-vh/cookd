@@ -7,7 +7,8 @@ import { Host } from "../game/host";
 import { platesInWorld } from "./plates";
 import { canPlace } from "./queries";
 import { offerPrice, restockStall, stallSlots } from "./shop";
-import { endDay, step } from "./step";
+import { beginDay, endDay } from "./day";
+import { step } from "./step";
 import type { Appliance, ApplianceKind, PlayerInput, World } from "./types";
 import {
   applianceAtTile,
@@ -38,7 +39,7 @@ function idle(): PlayerInput[] {
   return [emptyInput()];
 }
 
-function press(world: World, button: "grab" | "start"): void {
+function press(world: World, button: "grab"): void {
   const inputs = idle();
   inputs[0]![button] = true;
   step(world, inputs);
@@ -205,7 +206,7 @@ describe("the stall", () => {
     // that changed no number.
     const world = morning();
     world.money = 5;
-    press(world, "start");
+    beginDay(world);
     world.dayTime = 0.05;
     for (let i = 0; i < 20; i++) step(world, idle());
 
@@ -282,7 +283,7 @@ describe("the stall", () => {
     const world = morning();
     world.money = 100;
     stock(world, 0, "counter");
-    press(world, "start");
+    beginDay(world);
     expect(world.phase).toBe("service");
 
     useSlot(world, 0);
@@ -310,12 +311,12 @@ describe("plates are the one thing the game will make", () => {
 
     // Through service, closing time and into the next morning. Closing counts
     // plates out and counts them back in, so a miscount shows up here.
-    press(world, "start");
+    beginDay(world);
     for (let i = 0; i < 120; i++) step(world, idle());
     endDay(world);
     expect(platesInWorld(world)).toBe(LEVEL.plates + 1);
 
-    press(world, "start");
+    beginDay(world);
     endDay(world);
     expect(platesInWorld(world)).toBe(LEVEL.plates + 1);
   });
@@ -333,10 +334,10 @@ describe("the stock is the same shop for everybody", () => {
 
       // Only one of them plays: the roll must not depend on the live RNG
       // stream, which arrivals and seating consume at their own pace.
-      a.menu("startDay");
+      beginDay(a.world);
       for (let i = 0; i < 600; i++) step(a.world, {});
       endDay(a.world);
-      b.menu("startDay");
+      beginDay(b.world);
       endDay(b.world);
       expect(a.world.day).toBe(b.world.day);
     }

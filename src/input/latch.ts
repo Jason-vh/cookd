@@ -15,6 +15,8 @@
  *  2. Picking "Close up early" closed the menu into the build phase, and the
  *     still-held `Enter` read as a fresh `start` and opened the next day. The
  *     menu item looked like it did nothing; the only trace was the day counter.
+ *     (Both menu items have since become the sign by the door; the latch is
+ *     what stops the confirm that closed the menu turning it.)
  *  3. The one-frame swallow written to fix (2) was not enough — a key is held
  *     for about six frames.
  *  4. On a gamepad, `B` is both *back* (closes the menu) and an alternate

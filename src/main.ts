@@ -44,11 +44,11 @@ const controls = new ControlsPanel(menu.controlsRoot, {
   onChange: (keys) => {
     identity.keys = keys;
     input.setBindings(keys);
-    hud.setStartKey(promptKey(keys, "start"));
+    hud.setGrabKey(promptKey(keys, "grab"));
     saveIdentity(identity);
   },
 });
-hud.setStartKey(promptKey(identity.keys, "start"));
+hud.setGrabKey(promptKey(identity.keys, "grab"));
 // A rebind left half-finished when the menu closed would otherwise eat the
 // next key pressed in the kitchen.
 menu.onHide = () => controls.stopCapturing();

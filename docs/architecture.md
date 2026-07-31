@@ -27,9 +27,10 @@ src/
     plates.ts             the crockery, and the promise that none of it is ever destroyed
     shop.ts               the stall's stock: rolled from the seed and the day, not from play
     cards.ts              the menu: what a room has unlocked, and the stand that grows it
+    day.ts                opening, closing and restarting a day, and what closing up clears
     pathing.ts            BFS over walkable tiles: customer routes and reachability
     random.ts             the one PRNG — deterministic, shared with the scenery
-    step.ts               fixed-timestep tick: runs the systems in order
+    step.ts               fixed-timestep tick: runs the systems in order, and the service clock
     queries.ts            read-only questions about the world; safe for the renderer
     systems/
       movement.ts         circle-vs-tile collision (chefs pass through each other)
@@ -37,6 +38,7 @@ src/
       appliances.ts       transforms (chop/fry/bake) and burning
       customers.ts        arrivals, the door queue, seating, patience, eating, tips
       cards.ts            arming and taking a recipe card
+      sign.ts             the sign by the door: opening the day, and last orders
   data/                   content — plain data, no logic
     ingredients.ts        what exists and what it is called
     appliances.ts         appliance definitions, prices, and the ApplianceKind union

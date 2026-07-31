@@ -86,9 +86,12 @@ export const ACTION_LABELS: Record<Action, string> = {
   down: "Move down",
   left: "Move left",
   right: "Move right",
-  grab: "Grab / place / serve",
+  grab: "Grab / place / serve / open up",
   use: "Hold to prep",
-  start: "Open the next day",
+  // It opened the day until the sign by the door took that over. What is left
+  // is the job it always also had: saying yes to a menu, and putting down the
+  // end-of-day report.
+  start: "Confirm",
   menu: "Pause menu",
   addPlayer: "Add a local player",
   dropPlayer: "Remove a local player",

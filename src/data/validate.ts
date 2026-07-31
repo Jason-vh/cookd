@@ -247,6 +247,14 @@ export function validateContent(): string[] {
     if (stands !== CARD_SLOTS) {
       problems.push(`level "${id}": ${stands} card stands, expected ${CARD_SLOTS}`);
     }
+    // The sign is the only way into service, so a kitchen without one is a
+    // kitchen that can never open — the most complete failure a level can ship,
+    // and the least visible in ASCII. Exactly one: two signs is two answers to
+    // "is the restaurant open".
+    const signs = tiles.split("!").length - 1;
+    if (signs !== 1) {
+      problems.push(`level "${id}": ${signs} signs, expected exactly 1 — no way to open the day`);
+    }
   }
 
   return problems;

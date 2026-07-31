@@ -48,9 +48,9 @@ installs the hooks.
 | Action | Gamepad | Player 1 keyboard | Player 2 keyboard |
 | --- | --- | --- | --- |
 | Move | Left stick / D-pad | `W A S D` | Arrow keys |
-| Grab / place / deliver / bus | `A` (south) | `Space` or `E` | `,` |
+| Grab / place / deliver / bus / **open up** | `A` (south) | `Space` or `E` | `,` |
 | Use (hold to prep) | `X` (west) or `B` | `F` or `Left Shift` | `.` |
-| Open the next day | `Y` (north) | `Enter` | `Enter` |
+| Confirm a menu, put down the report | `Y` (north) | `Enter` | `Enter` |
 | Turn the kitchen | `L1` / `R1` | `[` / `]` | `[` / `]` |
 | Pause menu | `Start` | `Esc` | `Esc` |
 | Close the menu | `B` (east) or `Start` | `Esc` or `Backspace` | — |
@@ -124,13 +124,19 @@ The white square in front of your chef is what you'll interact with.
 
    Ruined a dish? The **bin scrapes it** — the food goes and you keep the plate,
    dirty. There is no way to throw a plate away, and no way to get another one.
-9. When the day timer hits zero — or you pick **Close up early** from the pause
-   menu — you wake into the next day's **morning**, with the day's takings
+9. When the day timer hits zero — or somebody turns the sign to **Closed** — you
+   wake into the next day's **morning**, with the day's takings
    still in the till. Face any appliance and `Grab` to pick it up. A **ghost** of it
    appears on the tile you're facing, showing exactly where it will land;
    `Grab` again to put it there. Drop it onto another appliance and the two
    **swap**. Tables are appliances too, so where the dining room goes is your
-   decision. `Start` opens the day when the room is ready.
+   decision.
+
+   **The sign hangs in the wall beside the door**, and it is how a day begins
+   and ends. Face it, `Grab`, and the restaurant is open — there is no button
+   and no menu item for it. Turning it back over mid-service is **last orders**:
+   nobody new comes in, and the day ends once the room has emptied, so closing
+   early never takes a plate off somebody's table.
 10. **Go shopping.** Out of the door and to the left, three slots of a market
     stall are stocked fresh each morning. Face one and `Grab`: the price comes
     out of the till and the thing appears as a ghost in your hands, ready to

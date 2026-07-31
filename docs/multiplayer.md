@@ -411,8 +411,10 @@ So the menu does not pause anything. It **zeroes your inputs**: your chef stands
 still, everyone can see it, and the kitchen carries on burning without you. That
 is the honest behaviour online, so it is the behaviour offline too rather than
 pause meaning two different things in two places. The menu's actions
-(`resume`, `startDay`, `restartDay`) go back through ordinary simulation entry
-points.
+(`resume`, `restartDay`) go back through ordinary simulation entry points — and
+there are two of them rather than four because opening and closing the day left
+the menu for the sign by the door, which is an ordinary grab and therefore
+ordinary input.
 
 ## The game loop
 

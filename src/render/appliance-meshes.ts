@@ -6,6 +6,7 @@ import { buildIngredientSample } from "./models";
 import { PALETTE, type SurfaceName } from "./palette";
 import { cylinder, mesh, roundedBox, sphere, torus } from "./primitives";
 import { makeLabel } from "./sprites";
+import { cssHex, textTexture } from "./text";
 
 /**
  * The appliances themselves: bodies, tops, and the small details that stop each
@@ -81,6 +82,10 @@ export type ApplianceParts = {
   card?: THREE.Object3D;
   /** Card stand: where the dish model stands, dressed by `appliance-views.ts`. */
   cardArt?: THREE.Object3D;
+  /** Sign: the board that turns over. */
+  board?: THREE.Object3D;
+  /** Sign: both faces of the board, repainted when the day opens or closes. */
+  boardFaces?: THREE.MeshStandardMaterial[];
 };
 
 export function buildAppliance(appliance: Appliance): ApplianceParts {
@@ -100,6 +105,8 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
     buildStall(parts, h);
   } else if (appliance.kind === "cards") {
     buildCardStand(parts, h);
+  } else if (appliance.kind === "sign") {
+    buildSign(parts, h);
   } else if (appliance.kind === "table") {
     buildTable(root, h);
   } else {
@@ -129,7 +136,12 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   // is the recipe on the card, so both change with their stock and are (re)built
   // by `appliance-views.ts` instead.
   const label = appliance.source ? ingredient(appliance.source.base).name : look.label;
-  if (label && appliance.kind !== "stall" && appliance.kind !== "cards") {
+  if (
+    label &&
+    appliance.kind !== "stall" &&
+    appliance.kind !== "cards" &&
+    appliance.kind !== "sign"
+  ) {
     const sprite = makeLabel(label);
     // Just above the progress bar. depthTest is off, so it draws over a chef
     // standing in front rather than fighting them for space.
@@ -254,6 +266,90 @@ function buildCardStand(parts: ApplianceParts, h: number): void {
   parts.cardArt = art;
 }
 
+/** What the board says, and the colour it says it in. */
+export const SIGN_FACES = {
+  open: { text: "OPEN", color: PALETTE.signOpen },
+  closed: { text: "CLOSED", color: PALETTE.signClosed },
+} as const;
+
+export type SignFace = keyof typeof SIGN_FACES;
+
+/**
+ * The sign hanging in the doorway: a painted board on a hook, and the whole of
+ * opening a restaurant.
+ *
+ * **Both faces say the same thing**, which is not how a real shop sign works
+ * and is the right call here: the camera turns to any of four corners, so half
+ * the time a player would be reading the back of the board and being told the
+ * opposite of the truth. The turn is the animation; the state is on both sides
+ * of it.
+ *
+ * It stands on its own post rather than being screwed to the wall behind it,
+ * because that wall is a **26cm stub** whenever the camera is on its side of
+ * the building — a board fixed to it would hang in mid-air from two of the four
+ * corners.
+ */
+function buildSign(parts: ApplianceParts, h: number): void {
+  const group = parts.root;
+
+  const post = mesh(roundedBox(0.12, h, 0.12, 0.04), PALETTE.signBoard, "wood");
+  post.position.y = h / 2;
+  group.add(post);
+
+  const arm = mesh(roundedBox(0.5, 0.08, 0.1, 0.03), PALETTE.signHook, "metal");
+  arm.position.set(0, h - 0.06, 0);
+  group.add(arm);
+
+  // The board hangs from the arm and turns about the post. Its own group, so
+  // `appliance-views.ts` can spin it without touching the ironmongery.
+  const board = new THREE.Group();
+  board.position.y = h - 0.42;
+  group.add(board);
+  parts.board = board;
+
+  const frame = mesh(roundedBox(0.74, 0.56, 0.05, 0.03), PALETTE.signBoard, "wood");
+  board.add(frame);
+
+  // One material per face, both repainted together: the two faces exist so the
+  // board has thickness, not so they can disagree.
+  const faces: THREE.MeshStandardMaterial[] = [];
+  for (const z of [0.031, -0.031]) {
+    const face = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.66, 0.48),
+      new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 }),
+    );
+    face.position.z = z;
+    face.rotation.y = z > 0 ? 0 : Math.PI;
+    board.add(face);
+    faces.push(face.material);
+  }
+  parts.boardFaces = faces;
+  paintSign(faces, "closed");
+}
+
+/**
+ * Repaint both faces of a sign.
+ *
+ * The word is baked into the texture rather than hung in front of the board as
+ * a sprite: a sprite always faces the camera, and a sign that turns has to be
+ * able to show you its back.
+ */
+export function paintSign(faces: THREE.MeshStandardMaterial[], face: SignFace): void {
+  const { text, color } = SIGN_FACES[face];
+  const texture = textTexture(text, {
+    font: "800 34px system-ui, sans-serif",
+    color: "#f6f1e6",
+    backing: { kind: "pill", color: cssHex(color) },
+    padding: 30,
+    supersample: 2,
+  }).texture;
+  for (const material of faces) {
+    material.map = texture;
+    material.color.setHex(color);
+    material.needsUpdate = true;
+  }
+}
+
 /**
  * A round cafe table with four chairs, replacing the body a generic appliance
  * would otherwise get.
@@ -336,6 +432,9 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   stall: { body: [PALETTE.stallBody, "wood"] },
   // Built by `buildCardStand`, and labelled with whatever is on the card.
   cards: { body: [PALETTE.cardEasel, "wood"] },
+  // Built by `buildSign`. No contextual label: a sign that needs a label to say
+  // what it is has failed at the only job it has.
+  sign: { body: [PALETTE.signBoard, "wood"] },
   counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"] },
   board: { body: [PALETTE.wood, "wood"], top: [PALETTE.boardTop, "wood"], label: "Chop" },
   // An upgrade has to be tellable from its plain twin across the kitchen, so

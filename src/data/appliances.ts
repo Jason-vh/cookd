@@ -71,6 +71,10 @@ const DEFS = {
   // furniture, immovable, never saved, and it does its whole job through
   // `Grab`. What it sells is days rather than money — see `sim/cards.ts`.
   cards: { ...PLAIN, stations: [], speed: 1, label: "Recipe card", color: 0xd9c9a8, height: 0.62, acceptsItems: false, movable: false, price: 0 },
+  // The sign in the door: the third piece of level furniture, and the one that
+  // decides when the day happens. Opening used to be a keypress with no object
+  // in the room behind it — see `sim/systems/sign.ts`.
+  sign: { ...PLAIN, stations: [], speed: 1, label: "Sign", color: 0x7d5b3a, height: 1.15, acceptsItems: false, movable: false, price: 0 },
   counter: { ...PLAIN, stations: ["prep"], speed: 1, label: "Counter", color: 0x9a7b58, height: 0.62, acceptsItems: true, movable: true, price: 20 },
   board: { ...PLAIN, stations: ["prep"], speed: 1.75, label: "Chopping board", color: 0xc9a06a, height: 0.66, acceptsItems: true, movable: true, price: 40 },
   // The upgrades. A steel board is the cheap one on purpose: prep is what a
