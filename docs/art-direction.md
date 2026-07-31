@@ -233,8 +233,12 @@ live in [lessons.md](lessons.md).
 
 - **Full metalness renders black.** A `metalness: 1` surface *is* its
   reflections, and against a dark backdrop there is nothing to reflect. Steel
-  details turned into black smears. Stylised scenes want semi-metals
-  (`metalness` around 0.15–0.35) — see `SURFACE` in `palette.ts`.
+  details turned into black smears, so metalness was capped around 0.3. The
+  corollary is the more useful half: *how metallic anything may be is set by how
+  much there is to reflect*. Once the environment map became the biome's own
+  sky, ground and sun — rather than three.js's white studio room, which was the
+  same room on a park lawn, a midday beach and a roadside at dusk — the steel
+  could go up to 0.45 and finally reads as steel that is standing *somewhere*.
 - **Scene fog applies to sprites.** Labels and progress bars faded into the
   background on the far side of the kitchen. Every UI-ish material sets
   `fog: false`.

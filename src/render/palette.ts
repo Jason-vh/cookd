@@ -228,7 +228,10 @@ export const SURFACE = {
    */
   plaster: { roughness: 0.82, metalness: 0.0, grained: true },
   wood: { roughness: 0.78, metalness: 0.0, grained: true },
-  metal: { roughness: 0.32, metalness: 0.3, grained: false },
+  // Raised from 0.3 once the environment map became the biome's own sky, ground
+  // and sun: a metal is its reflections, so how metallic anything is allowed to
+  // be is set by how much there is to reflect.
+  metal: { roughness: 0.32, metalness: 0.45, grained: false },
   paintedMetal: { roughness: 0.45, metalness: 0.1, grained: true },
   ceramic: { roughness: 0.22, metalness: 0.0, grained: false },
   food: { roughness: 0.58, metalness: 0.0, grained: false },

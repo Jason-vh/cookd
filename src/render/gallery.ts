@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { APPLIANCE_KINDS, applianceDef, type ApplianceKind } from "../data/appliances";
 import { biome as lookupBiome } from "../data/biomes";
 import { CUSTOMER_KINDS } from "../data/customers";
@@ -8,7 +7,8 @@ import { itemLabel } from "../sim/queries";
 import type { Appliance, Item, ItemSpec } from "../sim/types";
 import { CAMERA_OFFSET } from "../orientation";
 import { buildAppliance } from "./appliance-meshes";
-import { addLights } from "./environment";
+import { addLights, lightingEnvironment } from "./environment";
+import { disposeSubtree } from "./dispose";
 import { buildItemModel, modelledStates } from "./models";
 import { PALETTE } from "./palette";
 import { buildChef, buildCustomer } from "./person-mesh";
@@ -142,8 +142,10 @@ export class Gallery {
     this.renderer.toneMappingExposure = biome.exposure;
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const world = lightingEnvironment(biome);
+    this.scene.environment = pmrem.fromScene(world, 0.04).texture;
     this.scene.environmentIntensity = biome.environmentIntensity;
+    disposeSubtree(world);
     pmrem.dispose();
     this.scene.background = new THREE.Color(PALETTE.wallLow);
 

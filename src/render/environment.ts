@@ -64,6 +64,64 @@ export function createEnvironment(
 
 // --- lighting ----------------------------------------------------------------
 
+/**
+ * A stand-in for the world outside, rendered once into the image-based lighting.
+ *
+ * Every reflective thing in the game was lit by three.js's `RoomEnvironment` —
+ * a white studio with rectangular lamps in it. It gives a beautiful roughness
+ * response, and it is *the same room* on a park lawn, a midday beach and a
+ * roadside at dusk: the steel of a sink caught a photographer's softbox in all
+ * three, and the one appliance that should have told you where it was standing
+ * told you nothing. It also fought the grade, which is trying to push the whole
+ * frame amber while the highlights insist on neutral studio white.
+ *
+ * So the environment is the biome: its own sky above, its own ground below, and
+ * its own sun where its own sun is. That is why metalness is capped around 0.3
+ * in `SURFACE` — a fully metallic surface *is* its reflections — and it is the
+ * cheapest way to raise the ceiling on how metallic anything is allowed to be.
+ *
+ * Deliberately crude: it is blurred into a handful of mip levels by
+ * `PMREMGenerator` about a millisecond after it is built, so shapes in it are
+ * energy, not detail.
+ */
+export function lightingEnvironment(biome: Biome): THREE.Scene {
+  const scene = new THREE.Scene();
+
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(12, 20, 14),
+    new THREE.MeshBasicMaterial({ map: skyTexture(biome), side: THREE.BackSide }),
+  );
+  scene.add(dome);
+
+  // What the ground throws back up. The beach is bright sand and the park is
+  // grass, and the underside of everything in the room should know which.
+  const ground = new THREE.Mesh(
+    new THREE.CircleGeometry(20, 20),
+    new THREE.MeshBasicMaterial({ color: biome.ground.base }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.6;
+  scene.add(ground);
+
+  // The sun itself, well past white, so there is a hot spot for a curved metal
+  // surface to catch. Colour beyond 1 is how three.js's own room does its lamps.
+  const azimuth = (biome.sun.azimuth * Math.PI) / 180;
+  const elevation = (biome.sun.elevation * Math.PI) / 180;
+  const disc = new THREE.Mesh(
+    new THREE.SphereGeometry(2.4, 12, 10),
+    new THREE.MeshBasicMaterial({ color: biome.sun.color }),
+  );
+  disc.material.color.multiplyScalar(6 * biome.sun.intensity);
+  disc.position.set(
+    Math.cos(azimuth) * Math.cos(elevation) * 10,
+    Math.sin(elevation) * 10,
+    Math.sin(azimuth) * Math.cos(elevation) * 10,
+  );
+  scene.add(disc);
+
+  return scene;
+}
+
 /** Exported for the model gallery, which wants the game's light and nothing else. */
 export function addLights(
   scene: THREE.Scene,

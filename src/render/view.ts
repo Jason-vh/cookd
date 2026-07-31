@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { EffectCue, Rect, Seam, World } from "../sim/types";
+import type { Biome } from "../data/biomes";
 import { applianceAtTile, playerById } from "../sim/world";
 import { hatchOf } from "../sim/lane";
 import { edgeSeam, horizontalWall, verticalWall } from "../sim/walls";
@@ -11,7 +11,7 @@ import { ApplianceViews } from "./appliance-views";
 import { CarViews } from "./car-views";
 import { KitchenCamera, type FollowTarget } from "./camera";
 import { disposeSubtree } from "./dispose";
-import { createEnvironment } from "./environment";
+import { createEnvironment, lightingEnvironment } from "./environment";
 import { HighlightViews } from "./highlight-views";
 import { ItemViews } from "./item-views";
 import { mergeStatic } from "./merge";
@@ -111,7 +111,7 @@ export class View {
     this.highlights = new HighlightViews(this.scene, this.appliances, this.people);
 
     // Sky, sunlight, ground and scenery all come from the biome.
-    this.setupImageBasedLighting(biome.environmentIntensity);
+    this.setupImageBasedLighting(biome);
     createEnvironment(this.scene, biome, {
       width: world.width,
       height: world.height,
@@ -125,13 +125,17 @@ export class View {
 
   // --- scene setup -----------------------------------------------------------
 
-  private setupImageBasedLighting(intensity: number): void {
-    // RoomEnvironment gives image-based lighting with zero assets: soft
-    // directional variation and believable roughness response on every surface.
-    // This is the single biggest quality win over plain analytic lights.
+  private setupImageBasedLighting(biome: Biome): void {
+    // Image-based lighting with zero assets: soft directional variation and a
+    // believable roughness response on every surface, which is the single
+    // biggest quality win over plain analytic lights. The environment is built
+    // out of the biome rather than out of three.js's white studio, so what a
+    // steel rim catches is this kitchen's sky and this kitchen's sun.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = intensity;
+    const world = lightingEnvironment(biome);
+    this.scene.environment = pmrem.fromScene(world, 0.04).texture;
+    this.scene.environmentIntensity = biome.environmentIntensity;
+    disposeSubtree(world);
     pmrem.dispose();
   }
 
