@@ -234,8 +234,9 @@ export function validateContent(): string[] {
  * Keys are crossfaded, which makes two of these silent rather than wrong-
  * looking: keys out of order sample the wrong pair, and an azimuth that turns
  * back on itself swings every shadow in the kitchen the other way at noon. The
- * elevation floor is the shadow camera's — a sun on the horizon lays shadows
- * out further than it covers, and they end in a straight line across the grass.
+ * elevation floor is the shadow map's: a texel is smeared across the ground by
+ * `1 / sin(elevation)`, so at 10 degrees one covers six times what it does
+ * overhead and the edge of a shadow visibly steps.
  */
 function daylightProblems(where: string, keys: readonly DaylightKey[]): string[] {
   const problems: string[] = [];
@@ -256,8 +257,8 @@ function daylightProblems(where: string, keys: readonly DaylightKey[]): string[]
   return problems;
 }
 
-/** How low the sun may hang before the shadow camera stops covering it. */
-const MIN_SUN_ELEVATION = 12;
+/** How low the sun may hang before its shadows start to step. */
+const MIN_SUN_ELEVATION = 15;
 
 /**
  * What is wrong with a level, asked of the world it builds.

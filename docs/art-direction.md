@@ -213,6 +213,44 @@ What that bought, and what it cost:
   no sky and no fog, because a turntable is for comparing models to each other
   and that needs the light to hold still.
 
+### A shadow is only as sharp as where the map is spent
+
+The low sun arrived and every shadow edge went chunky — a visible staircase
+rather than a line. Worth writing down, because none of it is antialiasing and
+an afternoon could be lost looking there.
+
+A shadow comes from a depth photograph the renderer takes from the sun, so the
+edge can only be as precise as that photo's pixels. Two things were wasting them:
+
+- **The box was drawn around the kitchen and the camera frames a third of it.**
+  22 tiles wide against about eleven in shot, so three quarters of the map paid
+  for lawn nobody was looking at. It now follows the camera's own ground
+  footprint (`KitchenCamera.footprint`, four frustum corners projected onto the
+  floor), which is the same argument as not hand-tuning the view size: the
+  camera already knows what it is showing, so nothing else should guess.
+- **A low sun smears each texel across the ground** by `1 / sin(elevation)` — a
+  factor of 4.4 at 13°. The keys have a floor under them now, checked in
+  `validate.ts`, and the map went to 4096² because shadows were measured at 4%
+  of a frame and the pass draws a handful of merged meshes.
+
+Together that is about four times the resolution on the part of the world you
+can see. Two things it cost:
+
+- **A moving shadow box crawls.** Slide it smoothly and the whole map resamples
+  every frame, so every edge shimmers even when nothing is moving. The centre is
+  snapped to whole shadow texels, and the box's *size* is quantised too — it
+  decides how big a texel is, so a box that resized every frame would move the
+  grid the centre is snapped to.
+- **The box is tight across the sun's line and generous along it.** A caster
+  whose shadow reaches the kitchen from off-screen is up-sun of it, which is
+  *depth* to the shadow camera and costs nothing but precision. The two axes
+  across it are the expensive ones, and only have to hold the bodies of casters
+  standing just out of shot.
+
+And what would not have helped: SMAA. It finds high-contrast edges and smooths
+them, and a soft shadow edge is a gradient, so it walks straight past. The
+staircase was in the data, not in how the data was drawn.
+
 The park deliberately includes **picnic tables**: they were set dressing and the
 seed of the dining room, back when there was not one. The beach has parasols for
 the same reason — a place should look like it knows what it is for.

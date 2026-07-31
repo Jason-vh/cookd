@@ -66,9 +66,10 @@ export type SkyState = {
  *
  * Keys are interpolated, so three of them are a whole day — and because the
  * sun's azimuth is one of the numbers being crossfaded, it should move one way
- * only, or the shadows will double back at noon. Keep elevations above ~12
- * degrees as well: a sun on the horizon throws shadows longer than the shadow
- * camera covers, and they clip at the edge of it.
+ * only, or the shadows will double back at noon. Keep elevations above the
+ * floor in `validate.ts` as well: a shadow texel is stretched across the ground
+ * by `1 / sin(elevation)`, so the last few degrees above the horizon are where
+ * a shadow's edge stops being an edge and starts being a staircase.
  */
 export type DaylightKey = SkyState & { at: number };
 
@@ -124,7 +125,7 @@ export const PARK: Biome = {
       at: 1,
       sky: { top: 0x7b8ea9, middle: 0xc9bdb0, horizon: 0xf3d3a4 },
       fog: { color: 0xe8ceaa, near: 26, far: 84 },
-      sun: { color: 0xffd39a, intensity: 1.85, azimuth: -18, elevation: 15 },
+      sun: { color: 0xffd39a, intensity: 1.85, azimuth: -18, elevation: 17 },
       fill: { color: 0xa9b3c9, intensity: 0.34 },
       ambient: { sky: 0xd0c6b6, ground: 0x5e5744, intensity: 0.64 },
       environmentIntensity: 0.45,
@@ -274,7 +275,7 @@ export const ROADSIDE: Biome = {
       at: 1,
       sky: { top: 0x5a6d92, middle: 0xa892a2, horizon: 0xecab78 },
       fog: { color: 0xdca87c, near: 22, far: 76 },
-      sun: { color: 0xffb478, intensity: 1.7, azimuth: 210, elevation: 13 },
+      sun: { color: 0xffb478, intensity: 1.7, azimuth: 210, elevation: 16 },
       fill: { color: 0x99a0bc, intensity: 0.34 },
       ambient: { sky: 0xb8a89a, ground: 0x554c3e, intensity: 0.62 },
       environmentIntensity: 0.42,

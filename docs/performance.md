@@ -55,6 +55,13 @@ What changed:
   them;
 - **drawing is capped**, at 60fps focused and 10fps unfocused.
 
+That last number is why the shadow map was later *raised* to 4096² rather than
+left alone: shadows cost 4% of a frame, the pass draws a handful of merged
+meshes rather than 1,700 loose ones, and the resolution was the cheapest half of
+fixing a staircased shadow edge — the other half being to stop spending the map
+on ground the camera never shows. See
+[art direction](art-direction.md#a-shadow-is-only-as-sharp-as-where-the-map-is-spent).
+
 Measured and rejected, so nobody spends the afternoon again: smaller shadow maps
 (shadows are 4% of a frame — switching them off entirely saves nothing worth
 having), instancing the progress dials (already invisible when nothing is

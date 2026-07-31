@@ -117,6 +117,9 @@ export class View {
       cx: world.width / 2,
       cz: world.height / 2,
     });
+    // The shadow map is spent on the ground the camera is actually showing,
+    // which is about half the kitchen. The rig rewrites those corners in place.
+    this.daylight.follow(this.rig.footprint);
     createEnvironment(this.scene, biome, {
       width: world.width,
       height: world.height,
@@ -268,10 +271,6 @@ export class View {
     const dt = Math.min(0.1, this.clock.getDelta());
     const time = this.clock.elapsedTime;
 
-    // The hour first: the grade it settles on is part of this frame's image.
-    this.daylight.update(dayProgress(world), dt);
-    this.post?.setGrade(this.daylight.state.grade);
-
     this.syncEffects(world, dt);
     this.appliances.sync(world, dt, time);
     this.people.syncChefs(world, alpha, dt, time);
@@ -291,6 +290,11 @@ export class View {
     // Halfway through the turn, so the lip changes hands while the wall it is
     // leaving is edge-on and hardest to catch doing it.
     if (corner(this.rig.facing) !== this.wallCorner) this.buildWalls(world);
+
+    // After the camera, which decides where the shadow map is spent; before the
+    // post chain, whose grade is part of what the hour means.
+    this.daylight.update(dayProgress(world), dt);
+    this.post?.setGrade(this.daylight.state.grade);
 
     if (this.post) this.post.render();
     else this.renderer.render(this.scene, this.camera);

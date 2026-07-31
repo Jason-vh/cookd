@@ -109,6 +109,17 @@ export class KitchenCamera {
    * first update, which snaps rather than easing in from nowhere. */
   private view: { x: number; y: number; halfH: number } | null = null;
   private readonly scratch = new THREE.Vector3();
+  /**
+   * The four corners of the ground currently in shot, rewritten in place every
+   * update. Handed to the shadow camera, which has no other way of knowing that
+   * a 22x11 kitchen is being viewed eleven metres at a time — see `daylight.ts`.
+   */
+  readonly footprint: readonly THREE.Vector3[] = [
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+  ];
 
   /** @param bounds world-space box the camera must never show past. */
   constructor(bounds: THREE.Box3) {
@@ -214,6 +225,15 @@ export class KitchenCamera {
     this.camera.top = y + halfH;
     this.camera.bottom = y - halfH;
     this.camera.updateProjectionMatrix();
+
+    // Where those four frustum corners land on the floor. Cheap, and only the
+    // shadows read it — but they read it every frame, so it is written into the
+    // vectors it already owns.
+    for (let i = 0; i < 4; i++) {
+      this.footprint[i]!.copy(
+        this.ground(i & 1 ? x + halfW : x - halfW, i & 2 ? y + halfH : y - halfH),
+      );
+    }
   }
 
   /** Position the camera on its orbit and cache what depends on where it is. */

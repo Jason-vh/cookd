@@ -22,8 +22,52 @@ import { disposeSubtree } from "./dispose";
  * catch.
  */
 
-/** Where the sun hangs, in world units. Also fixes the shadow camera's depth. */
-const SUN_DISTANCE = 18;
+/** Where the sun hangs, in world units. */
+const SUN_DISTANCE = 25;
+
+/**
+ * How far along the sun's own line the shadow camera looks, either side of it.
+ *
+ * This is the axis that has to be generous rather than tight: a caster whose
+ * shadow reaches the kitchen from off-screen is *up-sun* of it, which is depth
+ * here and costs nothing but precision — unlike the two axes across it, where
+ * every extra metre is shadow-map resolution spent on grass nobody is looking
+ * at.
+ */
+const SHADOW_DEPTH = 24;
+
+/**
+ * How far past the edge of the frame the shadow camera reaches, in tiles.
+ *
+ * Only for casters standing just out of shot: their shadows fall *along* the
+ * sun's line, which the depth range above covers, so this only has to hold the
+ * bodies themselves.
+ */
+const SHADOW_MARGIN = 2.5;
+
+/** Half-extents the shadow box never shrinks below, in tiles. */
+const SHADOW_MIN = 6;
+
+/**
+ * Shadow map resolution.
+ *
+ * The other half of the sharpness, and affordable because shadows measured 4%
+ * of a frame when the whole map was being spent on the wrong place (see
+ * `docs/performance.md`) — the pass draws a handful of merged meshes, so this
+ * buys resolution rather than draw calls.
+ */
+const SHADOW_MAP = 4096;
+
+/**
+ * The step the shadow box's size and centre are quantised to, in tiles.
+ *
+ * The box has to move with the camera, and a box that slides smoothly makes
+ * every shadow edge in the kitchen crawl as it resamples — the classic reason
+ * to snap a shadow camera to whole texels. The size is quantised for the same
+ * reason at one remove: it decides how big a texel *is*, so a box that resized
+ * every frame would move the grid the centre is snapped to.
+ */
+const SHADOW_QUANTUM = 0.5;
 
 /** How many times a day the sky texture and the environment map are rebuilt. */
 const STEPS = 24;
@@ -77,6 +121,11 @@ export class Daylight {
   private time = 0;
   private step = -1;
 
+  /** Live corners of the ground in shot, or null for a fixed box. See `follow`. */
+  private followed: readonly THREE.Vector3[] | null = null;
+  /** Half-extents of the shadow box, across the sun's line and along it. */
+  private readonly shadowBox = { right: 0, up: 0 };
+
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
     private readonly scene: THREE.Scene,
@@ -99,24 +148,19 @@ export class Daylight {
     this.probeSun = disc;
 
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.02;
     this.sun.target.position.set(bounds.cx, 0, bounds.cz);
 
-    // Cover the kitchen plus a margin so nearby trees cast onto the patio, but
-    // no more than that: every extra unit costs shadow-map resolution. The
-    // margin is generous at this end of the day — a low sun lays a tree's
-    // shadow out several times its own height.
-    const reach = Math.max(bounds.width, bounds.height) * 0.72 + 9;
     const shadowCam = this.sun.shadow.camera;
-    shadowCam.left = -reach;
-    shadowCam.right = reach;
-    shadowCam.top = reach;
-    shadowCam.bottom = -reach;
-    shadowCam.near = 1;
-    shadowCam.far = SUN_DISTANCE * 2.4;
-    shadowCam.updateProjectionMatrix();
+    shadowCam.near = SUN_DISTANCE - SHADOW_DEPTH;
+    shadowCam.far = SUN_DISTANCE + SHADOW_DEPTH;
+
+    // Until somebody says otherwise, cover the whole kitchen: that is what the
+    // gallery wants, and it is what the game gets on the frame before its
+    // camera has decided where it is looking.
+    this.fitShadows(Math.max(bounds.width, bounds.height) * 0.72 + SHADOW_MARGIN);
 
     this.fill.position.set(bounds.cx - 10, 7, bounds.cz - 8);
     scene.add(this.sun, this.sun.target, this.fill, this.hemisphere);
@@ -127,6 +171,24 @@ export class Daylight {
     }
 
     this.set(0);
+  }
+
+  /**
+   * Spend the shadow map on the ground actually in shot.
+   *
+   * `corners` is kept by reference and re-read every frame, because the camera
+   * rewrites its own in place (`camera.ts`) and this is not worth an allocation
+   * a frame to restate.
+   *
+   * The kitchen is 22 tiles wide and the camera frames about eleven of them, so
+   * a shadow box drawn around the *building* spends three quarters of its
+   * resolution on lawn nobody is looking at. That is most of the difference
+   * between a shadow edge that steps in visible chunks and one that does not —
+   * the rest is the sun's height, which stretches every shadow texel across the
+   * ground by `1 / sin(elevation)` and is why the keys have a floor under them.
+   */
+  follow(corners: readonly THREE.Vector3[]): void {
+    this.followed = corners;
   }
 
   /**
@@ -142,8 +204,10 @@ export class Daylight {
     this.time = time;
     const state = sampleDaylight(this.keys, time, this.state);
 
-    // Around the target, which is the kitchen: the shadow camera was sized for
-    // a sun on that sphere and stops covering one anywhere else.
+    // Aim first, then stand the sun on the line: the shadow box is centred on
+    // wherever the light is looking, and moving that afterwards would leave the
+    // light pointing a frame behind its own frustum.
+    this.aimShadows(state);
     place(this.sun.position, state.sun, SUN_DISTANCE, this.sun.target.position);
     this.sun.color.setHex(state.sun.color);
     this.sun.intensity = state.sun.intensity;
@@ -169,6 +233,69 @@ export class Daylight {
     this.step = step;
     this.drawSky();
     this.bakeEnvironment();
+  }
+
+  /**
+   * Point the shadow camera at the ground in shot, snapped to whole texels.
+   *
+   * Everything happens in the light's own axes, which are the ones three builds
+   * for the shadow camera: `right` across the sun's line and `up` along it,
+   * both perpendicular to the light. The corners of the visible floor are
+   * measured in those axes, the box is sized to hold them, and its centre is
+   * then rounded to a multiple of one shadow texel — without which the whole
+   * shadow map resamples every time the camera pans by a fraction of a texel,
+   * and every edge in the kitchen crawls.
+   */
+  private aimShadows(state: SkyState): void {
+    if (!this.followed) return;
+
+    direction(DIR, state.sun);
+    RIGHT.set(0, 1, 0).cross(DIR).normalize();
+    UP.copy(DIR).cross(RIGHT);
+
+    let minR = Infinity;
+    let maxR = -Infinity;
+    let minU = Infinity;
+    let maxU = -Infinity;
+    let depth = 0;
+    for (const corner of this.followed) {
+      minR = Math.min(minR, corner.dot(RIGHT));
+      maxR = Math.max(maxR, corner.dot(RIGHT));
+      minU = Math.min(minU, corner.dot(UP));
+      maxU = Math.max(maxU, corner.dot(UP));
+      depth += corner.dot(DIR) / this.followed.length;
+    }
+
+    const box = this.fitShadows(
+      (maxR - minR) / 2 + SHADOW_MARGIN,
+      (maxU - minU) / 2 + SHADOW_MARGIN,
+    );
+    this.sun.target.position
+      .copy(RIGHT)
+      .multiplyScalar(snap((minR + maxR) / 2, (2 * box.right) / SHADOW_MAP))
+      .addScaledVector(UP, snap((minU + maxU) / 2, (2 * box.up) / SHADOW_MAP))
+      .addScaledVector(DIR, depth);
+  }
+
+  /**
+   * Size the shadow box, in quantised steps so that the texel grid the centre
+   * is snapped to holds still while the camera zooms.
+   */
+  private fitShadows(halfRight: number, halfUp = halfRight): { right: number; up: number } {
+    const box = this.shadowBox;
+    const right = Math.max(SHADOW_MIN, Math.ceil(halfRight / SHADOW_QUANTUM) * SHADOW_QUANTUM);
+    const up = Math.max(SHADOW_MIN, Math.ceil(halfUp / SHADOW_QUANTUM) * SHADOW_QUANTUM);
+    if (right !== box.right || up !== box.up) {
+      box.right = right;
+      box.up = up;
+      const shadowCam = this.sun.shadow.camera;
+      shadowCam.left = -right;
+      shadowCam.right = right;
+      shadowCam.top = up;
+      shadowCam.bottom = -up;
+      shadowCam.updateProjectionMatrix();
+    }
+    return box;
   }
 
   /** The background gradient, four pixels wide because it has no horizontal. */
@@ -266,21 +393,36 @@ function buildProbe(sky: THREE.Texture): {
   return { probe, ground, disc };
 }
 
-/** Put something on the sun's line: azimuth around Y, elevation off the ground. */
+/** The light's own axes: toward the sun, and the two across it. */
+const DIR = new THREE.Vector3();
+const RIGHT = new THREE.Vector3();
+const UP = new THREE.Vector3();
+
+/** Which way the sun is, as a unit vector: azimuth around Y, elevation off the ground. */
+function direction(target: THREE.Vector3, sun: SkyState["sun"]): THREE.Vector3 {
+  const azimuth = (sun.azimuth * Math.PI) / 180;
+  const elevation = (sun.elevation * Math.PI) / 180;
+  return target.set(
+    Math.cos(azimuth) * Math.cos(elevation),
+    Math.sin(elevation),
+    Math.sin(azimuth) * Math.cos(elevation),
+  );
+}
+
+/** Put something on the sun's line, `distance` out from `around`. */
 function place(
   target: THREE.Vector3,
   sun: SkyState["sun"],
   distance: number,
   around: THREE.Vector3 | null,
 ): void {
-  const azimuth = (sun.azimuth * Math.PI) / 180;
-  const elevation = (sun.elevation * Math.PI) / 180;
-  target.set(
-    Math.cos(azimuth) * Math.cos(elevation) * distance,
-    Math.sin(elevation) * distance,
-    Math.sin(azimuth) * Math.cos(elevation) * distance,
-  );
+  direction(target, sun).multiplyScalar(distance);
   if (around) target.add(around);
+}
+
+/** Round to a multiple of `step`, which is how a shadow box stops crawling. */
+function snap(value: number, step: number): number {
+  return Math.round(value / step) * step;
 }
 
 const FROM = new THREE.Color();
