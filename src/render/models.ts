@@ -9,7 +9,7 @@ import {
   material,
   mesh,
   roundedBox,
-  shellMaterial,
+  shellMesh,
   sphere,
   torus,
 } from "./primitives";
@@ -597,12 +597,11 @@ function addPlate(parent: THREE.Object3D, item: Item, y: number): void {
     [0.33, 0.082],
   ]);
   const dirty = item.processes.includes("dirty");
-  const dish = new THREE.Mesh(
+  const dish = shellMesh(
     profile,
-    shellMaterial(dirty ? PALETTE.plateDirty : PALETTE.ceramic, dirty ? "ceramic" : "enamel"),
+    dirty ? PALETTE.plateDirty : PALETTE.ceramic,
+    dirty ? "ceramic" : "enamel",
   );
-  dish.castShadow = true;
-  dish.receiveShadow = true;
   dish.position.y = y;
   parent.add(dish);
 

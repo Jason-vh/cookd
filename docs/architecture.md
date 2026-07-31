@@ -91,6 +91,7 @@ src/
     dial.ts               the work gauge over a busy appliance
     popups.ts             floating "+$12" text
     appliance-meshes.ts   appliance bodies, tops and details
+    parts.ts              parts more than one thing is made of: rims, handles, grips, sides
     shell-meshes.ts       the kitchen's own fabric: wall segments, doorway, serving hatch, floor
     person-mesh.ts        one rig, two costumes: chefs and customers
     overlay-meshes.ts     drawn over the kitchen: tile highlight, tip coins

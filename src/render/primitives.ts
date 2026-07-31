@@ -245,3 +245,15 @@ export function mesh(
   object.receiveShadow = true;
   return object;
 }
+
+/** `mesh`, for an open shell that has to be visible from the inside too. */
+export function shellMesh(
+  geometry: THREE.BufferGeometry,
+  color: number,
+  surface: SurfaceName = "ceramic",
+): THREE.Mesh {
+  const object = new THREE.Mesh(geometry, shellMaterial(color, surface));
+  object.castShadow = true;
+  object.receiveShadow = true;
+  return object;
+}

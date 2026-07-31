@@ -464,8 +464,12 @@ export class ApplianceViews {
       visual.oil.position.y = height + 0.05 + (frying ? boil * 0.012 : 0);
       visual.oil.scale.y = frying ? 1 + boil * 0.35 : 1;
       visual.oilGlow.emissiveIntensity = frying ? 0.7 + boil * 0.5 : 0.4;
-      if (visual.basket)
-        visual.basket.rotation.z = 0.4 + (frying ? Math.sin(phase * 0.7) * 0.12 : 0);
+      // The basket sits *in* the oil, so what the boil moves is how high it
+      // rides and how much it rolls — not the lean of a stick in mid-air.
+      if (visual.basket) {
+        visual.basket.position.y = height + 0.06 + (frying ? boil * 0.018 : 0);
+        visual.basket.rotation.z = frying ? Math.sin(phase * 0.7) * 0.05 : 0;
+      }
     }
 
     if (visual.water) {

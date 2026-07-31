@@ -4,7 +4,8 @@ import { ingredient } from "../data/ingredients";
 import type { Appliance } from "../sim/types";
 import { buildIngredientSample, buildProduceHeap } from "./models";
 import { PALETTE, type SurfaceName } from "./palette";
-import { cylinder, mesh, roundedBox, sphere, torus } from "./primitives";
+import { dHandle, facing, grip, rim, SIDES } from "./parts";
+import { cylinder, lathe, mesh, roundedBox, shellMesh, sphere, sweep } from "./primitives";
 import { makeLabel } from "./sprites";
 import { cssHex, textTexture } from "./text";
 
@@ -483,12 +484,7 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
     case "oven": {
       // A dark glass door on every side, because the camera turns and an oven
       // showing its blank back is an oven you cannot tell is baking.
-      for (const [x, z, ry] of [
-        [0.48, 0, Math.PI / 2],
-        [-0.48, 0, Math.PI / 2],
-        [0, 0.48, 0],
-        [0, -0.48, 0],
-      ] as const) {
+      for (const [x, z] of SIDES) {
         const door = mesh(roundedBox(0.56, 0.34, 0.04, 0.02), PALETTE.ovenGlass, "enamel");
         // Own material instance: the glass glows while something is baking, and
         // materials are shared by colour+surface elsewhere.
@@ -496,14 +492,14 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
         glass.emissive.setHex(PALETTE.ember);
         glass.emissiveIntensity = 0;
         door.material = glass;
-        door.position.set(x, h * 0.5, z);
-        door.rotation.y = ry;
+        door.position.set(x * 0.48, h * 0.5, z * 0.48);
+        door.rotation.y = facing(x, z);
         group.add(door);
         (parts.glass ??= []).push(glass);
-        const handle = mesh(cylinder(0.025, 0.025, 0.6), PALETTE.brass, "metal");
-        handle.rotation.z = Math.PI / 2;
-        handle.rotation.y = ry;
-        handle.position.set(x * 1.02, h * 0.5 + 0.26, z * 1.02);
+
+        const handle = dHandle(0.58, 0.07);
+        handle.position.set(x * 0.49, h * 0.5 + 0.26, z * 0.49);
+        handle.rotation.y = facing(x, z);
         group.add(handle);
       }
       break;
@@ -519,9 +515,43 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
       group.add(oil);
       parts.oil = oil;
       parts.oilGlow = glow;
-      const basket = mesh(cylinder(0.03, 0.03, 0.34), PALETTE.brass, "metal");
-      basket.position.set(0.3, h + 0.2, 0.3);
-      basket.rotation.z = 0.4;
+      // A real basket sitting in the oil, rather than the bare stick at 0.4
+      // radians that stood in for one. Open mesh, a rim, and a handle that
+      // reaches out over the corner where a chef would take hold of it.
+      const basket = new THREE.Group();
+      basket.position.set(0.06, h + 0.06, 0.06);
+      const bowl = shellMesh(
+        lathe("fryer-basket", [
+          [0, 0],
+          [0.16, 0],
+          [0.21, 0.06],
+          [0.23, 0.16],
+        ]),
+        PALETTE.steelDark,
+        "metal",
+      );
+      basket.add(bowl);
+      const lip = rim(0.23, 0.016, PALETTE.steel);
+      lip.position.y = 0.16;
+      basket.add(lip);
+      const arm = mesh(
+        sweep(
+          "fryer-basket-arm",
+          [
+            [0.16, 0.14, 0.16],
+            [0.3, 0.24, 0.3],
+            [0.42, 0.26, 0.42],
+          ],
+          0.018,
+        ),
+        PALETTE.steel,
+        "metal",
+      );
+      basket.add(arm);
+      const hold = grip(0.16, 0.03, PALETTE.crateTrim);
+      hold.position.set(0.47, 0.26, 0.47);
+      hold.rotation.y = -Math.PI / 4;
+      basket.add(hold);
       group.add(basket);
       parts.basket = basket;
       break;
@@ -549,8 +579,7 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
     case "plates": {
       // A shallow lip, so plates put back on it look put *away* rather than
       // balanced on a box.
-      const lip = mesh(torus(0.34, 0.028), PALETTE.steelDark, "metal");
-      lip.rotation.x = Math.PI / 2;
+      const lip = rim(0.34, 0.028);
       lip.position.y = h + 0.02;
       group.add(lip);
       break;
@@ -563,39 +592,49 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
       basin.position.y = h - 0.06;
       group.add(basin);
 
-      const rim = mesh(roundedBox(0.82, 0.06, 0.82, 0.03), PALETTE.steel, "metal");
-      rim.position.y = h + 0.01;
-      group.add(rim);
+      const surround = mesh(roundedBox(0.82, 0.06, 0.82, 0.03), PALETTE.steel, "metal");
+      surround.position.y = h + 0.01;
+      group.add(surround);
 
       const water = mesh(roundedBox(0.62, 0.03, 0.62, 0.02), PALETTE.suds, "ceramic");
       water.position.y = h - 0.01;
       group.add(water);
       parts.water = water;
 
-      const spout = mesh(cylinder(0.03, 0.035, 0.34), PALETTE.brass, "metal");
-      spout.position.set(0, h + 0.17, -0.36);
+      // A mixer tap in one piece: up off the deck, over, and down into the
+      // basin. It used to be three cylinders and a ball, with the joints
+      // showing at both bends.
+      const spout = mesh(
+        sweep(
+          "sink-tap",
+          [
+            [0, 0.02, -0.36],
+            [0, 0.26, -0.36],
+            [0, 0.36, -0.28],
+            [0, 0.34, -0.12],
+            [0, 0.29, -0.08],
+          ],
+          0.028,
+          24,
+          10,
+        ),
+        PALETTE.brass,
+        "metal",
+      );
+      spout.position.y = h;
       group.add(spout);
-      const neck = mesh(cylinder(0.028, 0.028, 0.22), PALETTE.brass, "metal");
-      neck.rotation.x = Math.PI / 2;
-      neck.position.set(0, h + 0.32, -0.27);
-      group.add(neck);
-      const tap = mesh(sphere(0.05), PALETTE.brass, "metal");
-      tap.position.set(0, h + 0.34, -0.36);
-      group.add(tap);
+
+      // The lever, which is what makes it a tap rather than a pipe.
+      const lever = mesh(roundedBox(0.16, 0.035, 0.05, 0.016), PALETTE.brass, "metal");
+      lever.position.set(0.02, h + 0.28, -0.4);
+      lever.rotation.z = 0.22;
+      group.add(lever);
       break;
     }
     default:
       break;
   }
 }
-
-/** The four sides of a square, as an offset direction and the turn that faces it. */
-const SIDES = [
-  [0, 1, 0],
-  [0, -1, 0],
-  [1, 0, Math.PI / 2],
-  [-1, 0, Math.PI / 2],
-] as const;
 
 /**
  * A slatted produce crate, open at the top and stacked with what it dispenses.
@@ -644,20 +683,20 @@ function buildCrate(parts: ApplianceParts, h: number): void {
   // Three boards a side. The gaps are the point, so the slat is deliberately
   // thinner than the pitch between the rows.
   for (const t of [0.22, 0.5, 0.78]) {
-    for (const [x, z, ry] of SIDES) {
+    for (const [x, z] of SIDES) {
       const slat = mesh(roundedBox(0.84, h * 0.17, 0.055, 0.02), PALETTE.crate, "wood");
       slat.position.set(x * 0.44, h * t, z * 0.44);
-      slat.rotation.y = ry;
+      slat.rotation.y = facing(x, z);
       group.add(slat);
     }
   }
 
   // A rail round the mouth: it caps the stiles and gives the top edge the one
   // continuous line the slats never make.
-  for (const [x, z, ry] of SIDES) {
+  for (const [x, z] of SIDES) {
     const rail = mesh(roundedBox(0.96, 0.08, 0.11, 0.03), PALETTE.crateTop, "wood");
     rail.position.set(x * 0.42, h - 0.04, z * 0.42);
-    rail.rotation.y = ry;
+    rail.rotation.y = facing(x, z);
     group.add(rail);
   }
 
@@ -695,10 +734,9 @@ function buildBin(parts: ApplianceParts, h: number): THREE.Object3D {
     bin.add(band);
   }
 
-  const rim = mesh(torus(0.44, 0.035), PALETTE.steelDark, "metal");
-  rim.rotation.x = Math.PI / 2;
-  rim.position.y = bodyH;
-  bin.add(rim);
+  const lip = rim(0.44, 0.035);
+  lip.position.y = bodyH;
+  bin.add(lip);
 
   // Lid hinged at the back so it can flip open. Pivot sits on the rim.
   const lid = new THREE.Group();
