@@ -239,12 +239,18 @@ live in [lessons.md](lessons.md).
   an off-screen one to the edge of the frame, pointing at its table, so it still
   answers "what" and "how far" from anywhere. Bringing the ticket list back would
   only re-split the attention it was deleted to unsplit.
-- **The art still assumes one camera angle.** `KitchenCamera.setYaw` works and
-  the framing maths is orientation-agnostic, but turning the camera would expose
-  what the art takes for granted: the walls nearest the camera are built as a low
-  lip so they don't occlude the kitchen (`View.buildKitchenShell`), ovens only
-  wear glass doors on their two visible sides (`render/meshes.ts`), and the sun
-  is fixed. Rotation is a lighting and modelling job, not a camera one.
+- **The kitchen turns in quarter circles, and the art turns with it.** `[`/`]`
+  (shoulder buttons on a pad) swing the view to the next corner; the yaw lives
+  in `orientation.ts` so the *controls* turn with the picture, which is the only
+  part of rotation a player can get wrong. Everything the art took for granted
+  about one fixed angle had to follow it, and each of those is worth naming
+  because each was invisible until the room moved: the walls nearest the camera
+  are a low lip so they do not occlude the kitchen, so they are rebuilt when the
+  camera crosses a corner (`View.buildWalls`); ovens wore glass doors on their
+  two visible sides and now wear one on each; the recipe card is the one
+  appliance with a readable *face*, so its easel turns to keep it towards you.
+  The sun does **not** turn — it is the same time of day from every corner, and
+  a shadow that swung round with the camera would say otherwise.
 
 ## Feedback: showing what the sim knows
 

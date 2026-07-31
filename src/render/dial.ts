@@ -88,6 +88,9 @@ export type DialState = {
   scale: number;
 };
 
+/** Scratch for undoing a rotated parent, reused every frame. */
+const FACING = new THREE.Quaternion();
+
 export class Dial {
   readonly object: THREE.Mesh;
   private readonly uniforms;
@@ -139,9 +142,14 @@ export class Dial {
   apply(state: DialState): void {
     this.object.visible = state.alpha > 0.002;
     if (!this.object.visible) return;
-    // Appliances never rotate, so the camera's world orientation is also the
-    // right local one. Revisit if a rotating parent ever holds a dial.
+    // Face the camera in *world* terms, which is not the same as copying its
+    // orientation: the card stand's easel turns to face the viewer, so a dial
+    // under it would inherit that turn on top of this one.
     this.object.quaternion.copy(this.camera.quaternion);
+    const parent = this.object.parent;
+    if (parent) {
+      this.object.quaternion.premultiply(parent.getWorldQuaternion(FACING).invert());
+    }
     this.uniforms.uProgress.value = state.progress;
     this.uniforms.uColor.value.copy(linear(state.color));
     this.uniforms.uAlpha.value = state.alpha;

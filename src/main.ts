@@ -8,6 +8,7 @@ import { PauseMenu } from "./ui/menu";
 import { MenuController } from "./ui/menu-controller";
 import { JoinScreen } from "./ui/join";
 import { loadIdentity, saveIdentity } from "./identity";
+import { rotateCamera } from "./orientation";
 import { assertContentValid } from "./data/validate";
 import type { Game } from "./game/game";
 import { LocalGame } from "./game/local";
@@ -262,6 +263,12 @@ function frame(now: number): void {
   last = now;
 
   fallbackIfUnreachable(now);
+
+  // Before the join screen's early return: the kitchen is drawn behind it, and
+  // being able to walk around the outside of a room you are deciding whether to
+  // cook in is the point of showing it at all.
+  const turn = input.consumeRotateRequest();
+  if (turn) rotateCamera(turn);
 
   if (join.isOpen) {
     join.poll(input);

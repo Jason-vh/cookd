@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CAMERA_OFFSET, CAMERA_YAW } from "../orientation";
+import { CAMERA_OFFSET, cameraYaw } from "../orientation";
 import { LAYER } from "./layers";
 
 /**
@@ -11,7 +11,7 @@ import { LAYER } from "./layers";
  * than that. So the frustum is now sized to a *fixed world height* and slid to
  * keep the local players inside it.
  *
- * Two rules keep that from becoming a nuisance:
+ * Three rules keep that from becoming a nuisance:
  *
  *  - **Couch co-op shares one camera.** Two local chefs at opposite ends of the
  *    kitchen cannot both be centred, so the view zooms out until it holds them
@@ -20,11 +20,14 @@ import { LAYER } from "./layers";
  *  - **It never pans off the diorama.** The view rect is clamped inside the
  *    kitchen's bounds, so the frame is always full of kitchen rather than
  *    drifting into empty park when somebody hugs a wall.
+ *  - **It turns, a corner at a time.** Which corner is `orientation.ts`'s to
+ *    say, because the controls have to turn with the picture; this eases there
+ *    and keeps the same patch of floor in the middle while it does.
  *
  * Everything is computed in *camera space* by projecting world points through
  * the inverse camera matrix. That is what makes the whole thing orientation
- * agnostic: fitting, clamping and panning never mention world x/z, so changing
- * `setYaw` is enough to spin the kitchen without touching any of the maths.
+ * agnostic: fitting, clamping and panning never mention world x/z, so the yaw
+ * can move without touching any of the maths.
  */
 
 /** Where the camera sits relative to the point it looks at. */
@@ -37,10 +40,17 @@ const ORBIT = {
   pivotY: 0.4,
 };
 
-/** The 3/4 angle the kitchen art is authored for. See README: rotating the
- * camera past this needs the wall lip and appliance detailing to follow — and
- * the input layer, which turns the controls to match (`orientation.ts`). */
-const DEFAULT_YAW = CAMERA_YAW;
+/**
+ * How fast the kitchen turns, in e-folds per second.
+ *
+ * Quick enough that the room has arrived by the time you have looked at it,
+ * slow enough to see *which way* it went — a snap leaves you re-reading a
+ * kitchen you had memorised.
+ */
+const YAW_RATE = 9;
+
+/** Close enough to the target angle to stop working at it. */
+const YAW_SETTLED = 1e-4;
 
 /**
  * Half the vertical size of the followed view, in world units.
@@ -71,6 +81,9 @@ const ZOOM_RATE = 3;
 /** A rectangle in camera space: what the orthographic frustum is. */
 type Rect = { minX: number; maxX: number; minY: number; maxY: number };
 
+/** Scratch for the view direction, reused while the kitchen is turning. */
+const FORWARD = new THREE.Vector3();
+
 /** A point to keep in frame, in world space. */
 export type FollowTarget = { x: number; z: number };
 
@@ -83,7 +96,14 @@ export class KitchenCamera {
   private readonly toCamera = new THREE.Matrix4();
   /** The kitchen's bounds in camera space, plus margin: the panning limit. */
   private limit: Rect = { minX: -1, maxX: 1, minY: -1, maxY: 1 };
-  private yaw = DEFAULT_YAW;
+  /**
+   * Built already facing whichever corner the player last turned to, rather
+   * than spinning there from the default: a new `View` (a different kitchen,
+   * or going online) should look like the same room, not like a camera move.
+   */
+  private yaw = cameraYaw();
+  /** Where the yaw is heading. See `setYaw`. */
+  private wantedYaw = this.yaw;
   private aspect = 1;
   /** Smoothed frustum: centre and half-height in camera space. Null until the
    * first update, which snaps rather than easing in from nowhere. */
@@ -105,17 +125,61 @@ export class KitchenCamera {
   }
 
   /**
-   * Turn the camera around the kitchen. Nothing here objects to it, but the
-   * *art* currently assumes one angle — see the wall lip in `View` and the
-   * one-sided appliance detailing in `meshes.ts` — so it stays fixed for now.
+   * Turn the camera around the kitchen, easing there rather than cutting.
+   *
+   * Called every frame with whatever `orientation.ts` currently says, so it has
+   * to be free when nothing has changed.
    */
   setYaw(yaw: number): void {
-    if (yaw === this.yaw) return;
+    this.wantedYaw = yaw;
+  }
+
+  /** The angle the kitchen is being drawn from right now. */
+  get facing(): number {
+    return this.yaw;
+  }
+
+  /** Ease the yaw towards its target, carrying the framing with it. */
+  private turn(dt: number): void {
+    const gap = this.wantedYaw - this.yaw;
+    if (Math.abs(gap) < YAW_SETTLED) {
+      if (gap !== 0) this.applyYaw(this.wantedYaw);
+      return;
+    }
+    this.applyYaw(this.yaw + gap * ease(YAW_RATE, dt));
+  }
+
+  /**
+   * Stand somewhere new, keeping the view pointed at the same patch of floor.
+   *
+   * Camera-space coordinates mean something different at every angle, so the
+   * smoothed rect cannot simply be carried over — it would send the view
+   * sliding across the kitchen. What *is* the same at both angles is the point
+   * on the ground the frame is centred on, so that is what is carried across.
+   */
+  private applyYaw(yaw: number): void {
+    const centre = this.view ? this.ground(this.view.x, this.view.y) : null;
     this.yaw = yaw;
     this.place();
-    // Camera-space coordinates mean something different now; the old smoothed
-    // rect would send the view sliding across the kitchen.
-    this.view = null;
+    if (this.view && centre) {
+      const moved = centre.applyMatrix4(this.toCamera);
+      this.view.x = moved.x;
+      this.view.y = moved.y;
+    }
+  }
+
+  /**
+   * Where a point in camera space meets the ground the chefs stand on.
+   *
+   * The frustum is orthographic, so every camera-space point is a ray along the
+   * view direction; `TARGET_HEIGHT` is the plane the follow targets live on,
+   * which makes it the honest answer to "what is the middle of the frame".
+   */
+  private ground(x: number, y: number): THREE.Vector3 {
+    const point = this.scratch.set(x, y, 0).applyMatrix4(this.camera.matrixWorld);
+    const forward = FORWARD.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    const travel = (TARGET_HEIGHT - point.y) / forward.y;
+    return point.addScaledVector(forward, travel);
   }
 
   setAspect(aspect: number): void {
@@ -127,6 +191,7 @@ export class KitchenCamera {
    * join screen, or a spectator — it falls back to the whole kitchen.
    */
   update(targets: readonly FollowTarget[], dt: number): void {
+    this.turn(dt);
     const wanted = this.fit(targets.length ? this.project(targets) : this.limit);
 
     if (!this.view) this.view = wanted;

@@ -51,6 +51,7 @@ installs the hooks.
 | Grab / place / deliver / bus | `A` (south) | `Space` or `E` | `,` |
 | Use (hold to prep) | `X` (west) or `B` | `F` or `Left Shift` | `.` |
 | Open the next day | `Y` (north) | `Enter` | `Enter` |
+| Turn the kitchen | `L1` / `R1` | `[` / `]` | `[` / `]` |
 | Pause menu | `Start` | `Esc` | `Esc` |
 | Close the menu | `B` (east) or `Start` | `Esc` or `Backspace` | — |
 | Add a local player | press any button | `P` | — |

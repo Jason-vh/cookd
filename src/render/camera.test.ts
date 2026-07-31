@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { screenToWorld } from "../orientation";
+import { cameraYaw, resetCamera, rotateCamera, screenToWorld } from "../orientation";
 import { KitchenCamera } from "./camera";
 
 /** The Park Kitchen's bounds, as `View` builds them for a 20x9 grid. */
@@ -149,5 +149,26 @@ describe("screen-relative controls", () => {
     const screen = project(rig(), 0, -1);
 
     expect(screen.x).toBeGreaterThan(0.5);
+  });
+
+  test("and keeps running up the screen from every corner", () => {
+    // The whole reason the yaw lives outside both layers: turn the kitchen and
+    // the controls have to turn with it, or every rotation is a puzzle about
+    // which key now means "towards the sink".
+    for (const turns of [1, 2, 3, 4]) {
+      resetCamera();
+      rotateCamera(turns);
+      const camera = rig();
+      camera.setYaw(cameraYaw());
+      settle(camera, [{ x: 10, z: 4 }]);
+
+      const move = { x: 0, y: -1 };
+      screenToWorld(move);
+      const screen = project(camera, move.x, move.y);
+
+      expect(screen.x).toBeCloseTo(0, 5);
+      expect(screen.y).toBeGreaterThan(0);
+    }
+    resetCamera();
   });
 });

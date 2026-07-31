@@ -370,10 +370,13 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): voi
   switch (appliance.kind) {
     case "bell_oven":
     case "oven": {
-      // Dark glass door on both camera-facing sides.
+      // A dark glass door on every side, because the camera turns and an oven
+      // showing its blank back is an oven you cannot tell is baking.
       for (const [x, z, ry] of [
         [0.48, 0, Math.PI / 2],
+        [-0.48, 0, Math.PI / 2],
         [0, 0.48, 0],
+        [0, -0.48, 0],
       ] as const) {
         const door = mesh(roundedBox(0.56, 0.34, 0.04, 0.02), PALETTE.ovenGlass, "enamel");
         // Own material instance: the glass glows while something is baking, and

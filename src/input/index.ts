@@ -69,7 +69,10 @@ const KEY_SCHEMES: KeyScheme[] = [
 // Standard gamepad mapping. `back` (B / Circle) doubles as an alternate USE
 // during play and as "close the menu" while it is open — the two contexts are
 // mutually exclusive, so they cannot conflict.
-const BUTTON = { grab: 0, use: 2, start: 3, menu: 9, back: 1 } as const;
+// The shoulders turn the kitchen, which is the one control that is about the
+// *view* rather than about the chef — so it sits where a camera control sits on
+// every other pad.
+const BUTTON = { grab: 0, use: 2, start: 3, menu: 9, back: 1, turnL: 4, turnR: 5 } as const;
 const STICK_DEADZONE = 0.22;
 
 export class InputManager {
@@ -97,6 +100,10 @@ export class InputManager {
   private dropPlayerRequested = false;
   /** Set for one poll when the mute key is pressed. */
   private muteRequested = false;
+  /** Quarter turns of the camera asked for since the last poll. */
+  private rotateRequested = 0;
+  /** Shoulder buttons already held, so a held bumper turns the room once. */
+  private readonly padTurning = new Set<string>();
 
   constructor() {
     window.addEventListener("keydown", (e) => {
@@ -115,6 +122,12 @@ export class InputManager {
       // rather than a menu item: the pause menu's actions go to the *world*,
       // and muting one browser is nobody else's business.
       if (e.code === "KeyM" && !e.repeat) this.muteRequested = true;
+      // Which way the kitchen turns. The obvious keys for this are `Q`/`E`,
+      // and `E` is a grab — a camera control that sometimes throws your dinner
+      // on the floor is not a camera control. The brackets are a pair, they
+      // point the way they turn, and nothing else in the game wants them.
+      if (e.code === "BracketLeft" && !e.repeat) this.rotateRequested -= 1;
+      if (e.code === "BracketRight" && !e.repeat) this.rotateRequested += 1;
       this.keys.add(e.code);
       this.pressedForPlay.add(e.code);
       this.pressedForMenu.add(e.code);
@@ -146,6 +159,35 @@ export class InputManager {
     const requested = this.addPlayerRequested;
     this.addPlayerRequested = false;
     return requested;
+  }
+
+  /**
+   * Quarter turns of the camera asked for since the last call, positive
+   * clockwise.
+   *
+   * Pads are edge-detected here rather than in `poll`, because turning the view
+   * belongs to nobody in particular: any pad in the room may do it, including
+   * one that has not claimed a chef yet.
+   */
+  consumeRotateRequest(): number {
+    let turns = this.rotateRequested;
+    this.rotateRequested = 0;
+    for (const pad of navigator.getGamepads?.() ?? []) {
+      if (!pad) continue;
+      for (const [button, step] of [
+        [BUTTON.turnL, -1],
+        [BUTTON.turnR, 1],
+      ] as const) {
+        const held = `${pad.index}:${button}`;
+        if (!pad.buttons[button]?.pressed) {
+          this.padTurning.delete(held);
+          continue;
+        }
+        if (!this.padTurning.has(held)) turns += step;
+        this.padTurning.add(held);
+      }
+    }
+    return turns;
   }
 
   /** Number of player slots that at least one device is bound to. */

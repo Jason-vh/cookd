@@ -86,9 +86,10 @@ export class Bubble {
     // Sized to fill the ring: the dish is the message, the ring is the clock.
     this.dish.scale.setScalar(1.15 * settle * pulse);
     this.dish.position.y = (1 - settle) * -0.15;
-    // A slow turn, not a billboard. The camera never moves, so the dish is
-    // already seen from the angle it was modelled for; rotating it just keeps
-    // the bubble alive and shows off the side a plated dish usually hides.
+    // A slow turn, not a billboard: a dish is modelled to read from any side,
+    // and turning it keeps the bubble alive and shows off the side a plated
+    // dish usually hides. The ring it sits in faces the camera for both of
+    // them (see `Dial`), which is what makes this safe when the view turns.
     this.dish.rotation.y += dt * 0.7;
   }
 

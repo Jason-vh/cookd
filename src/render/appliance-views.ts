@@ -67,6 +67,9 @@ export class ApplianceViews {
   private stranded = new Set<number>();
   private strandedFor = -1;
 
+  /** Reused by `viewingAngle`, which runs every frame. */
+  private readonly scratch = new THREE.Vector3();
+
   constructor(
     private readonly scene: THREE.Scene,
     private readonly camera: THREE.Camera,
@@ -75,6 +78,18 @@ export class ApplianceViews {
   /** The object an appliance is drawn as, for things that hang off it. */
   root(id: number): THREE.Object3D | undefined {
     return this.visuals.get(id)?.root;
+  }
+
+  /**
+   * Which way to turn something so its front faces the camera.
+   *
+   * Read off the camera itself rather than from `orientation.ts`, so a face
+   * swings round *with* the room while the view is easing between corners
+   * rather than snapping ahead of it.
+   */
+  private viewingAngle(): number {
+    const forward = this.scratch.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    return Math.atan2(-forward.x, -forward.z);
   }
 
   /** Show this appliance's contextual name for one frame. */
@@ -207,6 +222,12 @@ export class ApplianceViews {
     dt: number,
     time: number,
   ): void {
+    // The easel turns to face whoever is looking at it. Everything else in the
+    // kitchen is a box and reads from any corner; this one has a *face*, and a
+    // recipe card showing its back to the camera is the one appliance a turned
+    // view could make unreadable.
+    visual.root.rotation.y = this.viewingAngle();
+
     // Cards are a morning thing. A day opening takes them with it, and the
     // simulation agrees — `beginDay` clears them — but the phase is what the
     // renderer can see first, on the very frame it changes.

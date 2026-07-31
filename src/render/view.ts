@@ -3,6 +3,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import type { EffectCue, World } from "../sim/types";
 import { applianceAtTile, playerById } from "../sim/world";
 import { biome as lookupBiome } from "../data/biomes";
+import { cameraYaw } from "../orientation";
 import { lerp } from "./anim";
 import { ApplianceViews } from "./appliance-views";
 import { KitchenCamera, type FollowTarget } from "./camera";
@@ -62,6 +63,14 @@ function wallBounds(world: World): { minX: number; minY: number; maxX: number; m
     : { minX, minY, maxX, maxY };
 }
 
+/**
+ * Which of the four corners a yaw is looking from, as a value that can be
+ * compared. Only which side of each axis the camera is on matters.
+ */
+function corner(yaw: number): string {
+  return `${Math.sin(yaw) > 0 ? "+" : "-"}${Math.cos(yaw) > 0 ? "+" : "-"}`;
+}
+
 export class View {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.OrthographicCamera;
@@ -84,6 +93,9 @@ export class View {
   /** Reused every frame so following allocates nothing. */
   private readonly followTargets: FollowTarget[] = [];
   private readonly shell: THREE.Object3D[] = [];
+  /** Rebuilt when the camera crosses to another corner. See `buildWalls`. */
+  private readonly walls: THREE.Object3D[] = [];
+  private wallCorner = "";
   private readonly onResize = (): void => this.resize();
 
   constructor(canvas: HTMLCanvasElement, world: World, biomeId: string) {
@@ -137,9 +149,9 @@ export class View {
   /**
    * The kitchen itself: its tiled floor and its walls.
    *
-   * Walls are fixed by the level and the floor never moves, so the whole shell
-   * is baked down to one draw call per material alongside the scenery. There is
-   * no rebuild path — a resizable kitchen or editable walls would need one.
+   * The floor never moves, so it is baked once. The walls are rebuilt whenever
+   * the camera crosses to a new corner — see `buildWalls` for why they cannot
+   * simply be baked with it.
    */
   private buildKitchenShell(world: World): void {
     const shell = new THREE.Group();
@@ -166,6 +178,41 @@ export class View {
     floor.receiveShadow = true;
     shell.add(floor);
 
+    const baked = mergeStatic(shell);
+    this.shell.push(...baked);
+    this.scene.add(...baked);
+    this.buildWalls(world);
+  }
+
+  /**
+   * The walls, with the two edges nearest the camera cut down to a lip.
+   *
+   * Full-height near walls would stand between the camera and the kitchen, so
+   * which two are near is not decoration — it is whether you can see the room
+   * at all. That used to be a fact about the *building* alone (the south and
+   * east runs, because that is where the camera stood); now the camera turns,
+   * so it is a fact about the building **and** where we are looking from, and
+   * the walls are rebuilt when that answer changes.
+   *
+   * Rebuilt rather than toggled because they are baked into one merged mesh per
+   * material, which is what keeps a hundred wall tiles off the draw call
+   * budget. It happens on a keypress, four times around, and never during play.
+   */
+  private buildWalls(world: World): void {
+    for (const part of this.walls) disposeSubtree(part);
+    this.walls.length = 0;
+
+    const yaw = this.rig.facing;
+    this.wallCorner = corner(yaw);
+
+    const room = wallBounds(world);
+    // The near edges are the ones whose outside faces the camera: with the
+    // camera at +x/+z those are the last column and the last row, and each
+    // quarter turn hands the lip to the next two runs.
+    const nearX = Math.sin(yaw) > 0 ? room.maxX : room.minX;
+    const nearY = Math.cos(yaw) > 0 ? room.maxY : room.minY;
+
+    const group = new THREE.Group();
     for (let y = 0; y < world.height; y++) {
       for (let x = 0; x < world.width; x++) {
         const tile = world.tiles[y * world.width + x];
@@ -174,24 +221,18 @@ export class View {
           // it reading as a hole somebody forgot to wall up.
           const frame = buildDoorway();
           frame.position.set(x + 0.5, 0, y + 0.5);
-          shell.add(frame);
+          group.add(frame);
           continue;
         }
         if (!tile?.wall) continue;
-        // The two edges nearest the camera are a low lip, otherwise they would
-        // occlude the kitchen. Which edges those are is a fact about the
-        // *building*, not about the grid: with a patio ring the world's last
-        // column is paving, and testing against it would leave the real near
-        // walls at full height with the kitchen hidden behind them.
-        const near = x === room.maxX || y === room.maxY;
-        const wall = buildWall(near ? 0.26 : 1.1);
+        const wall = buildWall(x === nearX || y === nearY ? 0.26 : 1.1);
         wall.position.set(x + 0.5, 0, y + 0.5);
-        shell.add(wall);
+        group.add(wall);
       }
     }
 
-    const baked = mergeStatic(shell);
-    this.shell.push(...baked);
+    const baked = mergeStatic(group);
+    this.walls.push(...baked);
     this.scene.add(...baked);
   }
 
@@ -227,7 +268,13 @@ export class View {
     this.items.sync(world, time);
     this.highlights.sync(world);
     this.popups.update(dt);
+    // The kitchen is turned from outside the renderer, because the controls
+    // have to turn with it — see `orientation.ts`.
+    this.rig.setYaw(cameraYaw());
     this.rig.update(this.followPoints(world, alpha, localIds), dt);
+    // Halfway through the turn, so the lip changes hands while the wall it is
+    // leaving is edge-on and hardest to catch doing it.
+    if (corner(this.rig.facing) !== this.wallCorner) this.buildWalls(world);
 
     if (this.post) this.post.render();
     else this.renderer.render(this.scene, this.camera);
@@ -372,8 +419,9 @@ export class View {
     this.items.dispose();
     this.highlights.dispose();
     this.popups.dispose();
-    for (const part of this.shell) disposeSubtree(part);
+    for (const part of [...this.shell, ...this.walls]) disposeSubtree(part);
     this.shell.length = 0;
+    this.walls.length = 0;
     this.scene.environment?.dispose();
     this.post?.dispose();
     this.renderer.dispose();

@@ -178,6 +178,49 @@ describe("movement is screen-relative", () => {
   });
 });
 
+describe("turning the kitchen", () => {
+  beforeEach(() => {
+    stubWindow();
+    setPads([]);
+  });
+
+  test("the brackets turn it one quarter each, and only once per press", () => {
+    const input = new InputManager();
+    tap("BracketRight");
+    tap("BracketRight");
+    tap("BracketLeft");
+
+    expect(input.consumeRotateRequest()).toBe(1);
+    // Consumed: a turn asked for twice is a kitchen back where it started.
+    expect(input.consumeRotateRequest()).toBe(0);
+  });
+
+  test("a grab is not a camera control", () => {
+    // `E` grabs. It is also the obvious key for turning a view, which is how a
+    // camera control ends up throwing somebody's dinner on the floor.
+    const input = new InputManager();
+    tap("KeyE");
+
+    expect(input.consumeRotateRequest()).toBe(0);
+    expect(input.poll([0])[0]!.grab).toBe(true);
+  });
+
+  test("a held bumper turns the room once, not every frame", () => {
+    const input = new InputManager();
+    const held: FakePad = { index: 0, buttons: [], axes: [0, 0] };
+    held.buttons[5] = { pressed: true };
+    setPads([held]);
+
+    expect(input.consumeRotateRequest()).toBe(1);
+    expect(input.consumeRotateRequest()).toBe(0);
+
+    held.buttons[5] = { pressed: false };
+    expect(input.consumeRotateRequest()).toBe(0);
+    held.buttons[5] = { pressed: true };
+    expect(input.consumeRotateRequest()).toBe(1);
+  });
+});
+
 describe("press buffers", () => {
   beforeEach(() => {
     stubWindow();

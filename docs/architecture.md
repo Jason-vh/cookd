@@ -32,7 +32,7 @@ src/
     step.ts               fixed-timestep tick: runs the systems in order
     queries.ts            read-only questions about the world; safe for the renderer
     systems/
-      movement.ts         circle-vs-tile collision, player separation
+      movement.ts         circle-vs-tile collision (chefs pass through each other)
       interaction.ts      grab/place/combine/deliver, build-phase appliance moving
       appliances.ts       transforms (chop/fry/bake) and burning
       customers.ts        arrivals, the door queue, seating, patience, eating, tips
@@ -67,7 +67,7 @@ src/
     index.ts            what the shell calls once a frame
   save.ts                 the saved-kitchen format, its parser and its migrations
   identity.ts             what this *browser* remembers: your name, your seat count
-  orientation.ts          which way the camera looks, and therefore which way "up" is
+  orientation.ts          which corner the camera looks from, and therefore which way "up" is
   render/                 mirrors the simulation; never writes to it
     view.ts               composition root: renderer, lighting, camera, kitchen shell
     appliance-views.ts    appliance meshes, dials, moving parts, ghosts, stranded rings
@@ -78,7 +78,7 @@ src/
     highlight-views.ts    the square in front of a chef, and the build-phase yes/no
     anim.ts               the animation maths, with no three.js in it
     scatter.ts            where the scenery goes, also with no three.js in it
-    camera.ts             the 3/4 ortho framing, and how it follows the local chefs
+    camera.ts             the 3/4 ortho framing, how it follows the chefs, and how it turns
     environment.ts        biome rendering: sky, sun, ground, patio, scattered props
     bubble.ts             one order: the dish model and its patience ring
     dial.ts               the work gauge over a busy appliance
