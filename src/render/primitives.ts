@@ -84,6 +84,81 @@ export function torus(radius: number, tube: number): THREE.BufferGeometry {
   return cached(`tor:${radius},${tube}`, () => new THREE.TorusGeometry(radius, tube, 10, 28));
 }
 
+/**
+ * A capsule: a cylinder with hemispherical ends, `length` between the centres.
+ *
+ * The honest shape for anything hand-sized and held — limbs, grips, bottles,
+ * rolling pins. A cylinder of the same size reads as cut pipe, because the one
+ * thing real handles never have is a sharp circular edge at each end.
+ */
+export function capsule(radius: number, length: number, sides = 16): THREE.BufferGeometry {
+  return cached(
+    `cap:${radius},${length},${sides}`,
+    () => new THREE.CapsuleGeometry(radius, length, 6, sides),
+  );
+}
+
+/**
+ * A cylinder whose top and bottom edges are filleted, standing on y=0.
+ *
+ * Rule 1 of the art style — everything is rounded — had no cylindrical form to
+ * apply itself to: `roundedBox` bevels a box and `cylinder` leaves two hard
+ * circular edges, which is why every leg, foot, rim and tin in the kitchen
+ * ended its silhouette with a hairline. This is a lathe, so the fillet is real
+ * geometry that catches the key light rather than a shading trick.
+ */
+export function roundedCylinder(
+  radius: number,
+  h: number,
+  fillet = Math.min(radius, h / 2) * 0.25,
+  sides = 24,
+): THREE.BufferGeometry {
+  const r = Math.min(fillet, radius - 0.001, h / 2 - 0.001);
+  const points: [number, number][] = [[0, 0]];
+  // Quarter arcs at each end, sampled coarsely: a fillet is a highlight, not a
+  // feature, and four segments is where more stop being visible.
+  for (let i = 0; i <= 4; i++) {
+    const a = (i / 4) * (Math.PI / 2);
+    points.push([radius - r + Math.sin(a) * r, r - Math.cos(a) * r]);
+  }
+  for (let i = 0; i <= 4; i++) {
+    const a = (i / 4) * (Math.PI / 2);
+    points.push([radius - r + Math.cos(a) * r, h - r + Math.sin(a) * r]);
+  }
+  points.push([0, h]);
+  return lathe(`rcyl:${radius},${h},${r},${sides}`, points, sides);
+}
+
+/**
+ * A tube swept along a smooth curve through `points`.
+ *
+ * The shape the kit had no way to make. Taps, kettle spouts, oven handles,
+ * fryer baskets, cables, bag straps and awning scallops were all being
+ * approximated by a cylinder plus a bent cylinder plus a sphere at the elbow —
+ * three draw calls and a visible joint each. A sweep is one geometry and the
+ * curve is the drawing: the points are read as a Catmull-Rom spline, so a
+ * handle is the three or four places it passes through.
+ */
+export function sweep(
+  key: string,
+  points: [number, number, number][],
+  radius: number,
+  segments = 20,
+  sides = 8,
+): THREE.BufferGeometry {
+  return cached(
+    `swp:${key}`,
+    () =>
+      new THREE.TubeGeometry(
+        new THREE.CatmullRomCurve3(points.map(([x, y, z]) => new THREE.Vector3(x, y, z))),
+        segments,
+        radius,
+        sides,
+        false,
+      ),
+  );
+}
+
 export function cone(radius: number, h: number, sides = 12): THREE.BufferGeometry {
   return cached(`con:${radius},${h},${sides}`, () => new THREE.ConeGeometry(radius, h, sides));
 }
@@ -104,7 +179,14 @@ export function lathe(
   );
 }
 
-/** Extruded 2D shape with a bevel; used for wedges and other flat-sided food. */
+/**
+ * Extruded 2D shape with a bevel; used for wedges and other flat-sided food.
+ *
+ * `build` may pierce the shape by pushing a `THREE.Path` onto `shape.holes`,
+ * and the bevel follows the hole as it follows the outline — which is how a
+ * slotted, fretted or handled panel gets made in one geometry instead of being
+ * faked with four boxes around a gap.
+ */
 export function extruded(
   key: string,
   build: (shape: THREE.Shape) => void,

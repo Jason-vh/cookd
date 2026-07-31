@@ -175,6 +175,24 @@ inside a ~0.34 radius so items fit on a plate, take every colour from `PALETTE`,
 and use `wobble()` rather than `Math.random()` so a given item always looks the
 same.
 
+## The primitive kit
+
+`render/primitives.ts` is the vocabulary every model is written in, and its
+shape decides what the game can look like: box, rounded box, sphere, cylinder,
+**rounded cylinder**, **capsule**, torus, cone, lathe, **swept tube**, and
+extrusion — which may be pierced, because `build` can push holes onto the shape.
+
+The three in bold were added after a survey of what the kitchen kept
+approximating. A tap, an oven handle, a fryer basket and a bag strap were each
+a cylinder plus a bent cylinder plus a sphere at the elbow: three parts and a
+visible joint, where a sweep is one geometry and the curve *is* the drawing.
+Every leg, foot and rim ended in a hard circular edge, because rule 1 —
+everything is rounded — had no cylindrical form to apply itself to.
+
+The lesson generalises: **a new primitive unlocks a class of objects, a new
+model unlocks one.** When something is hard to build, check whether the kit is
+missing a word before writing forty lines of parts.
+
 ## Gotchas discovered the hard way
 
 The ones that are about *rendering*. The rest — worlds sharing arrays,
