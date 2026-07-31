@@ -14,6 +14,7 @@ import {
 } from "../sim/queries";
 import { offerLabel, offerPrice } from "../sim/shop";
 import { chopLift, ease, workPhase } from "./anim";
+import { setGlow } from "./glow";
 import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";
 import { setGhost, setGhostOpacity } from "./ghost";
@@ -108,6 +109,18 @@ export class ApplianceViews {
     if (label) label.visible = true;
   }
 
+  /**
+   * Light up the appliance a chef is pointing at.
+   *
+   * Cleared for everything at the top of every frame and re-asserted here, the
+   * same way the contextual label works: whoever is pointing says so once a
+   * frame, and nothing has to remember to stop pointing.
+   */
+  highlight(id: number, color: number): void {
+    const visual = this.visuals.get(id);
+    if (visual) setGlow(visual.root, color);
+  }
+
   /** A bin had something thrown in it: flip the lid. */
   openBin(id: number): void {
     const visual = this.visuals.get(id);
@@ -149,8 +162,9 @@ export class ApplianceViews {
       this.syncWarning(appliance, visual, time);
 
       // Labels are off by default and turned on for one frame by whoever is
-      // pointing at this appliance — see `showLabel`.
+      // pointing at this appliance — see `showLabel` and `highlight`.
       if (visual.label) visual.label.visible = false;
+      setGlow(visual.root, null);
 
       const phase = workPhase(appliance.motion, appliance.id, time);
       this.animateParts(appliance, visual, phase, dt);

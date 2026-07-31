@@ -102,6 +102,7 @@ src/
     text.ts               text as a texture or a sprite, in one place
     palette.ts            every colour and surface finish in the game
     ghost.ts              solid <-> translucent preview, and back
+    glow.ts               lighting up the object a chef is pointing at, and back
     dispose.ts            giving GPU memory back, without freeing shared caches
     nodes.ts              typed narrowing for scene-graph nodes
     merge.ts              batching the static scenery into few draw calls

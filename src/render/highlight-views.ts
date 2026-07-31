@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { applianceDef } from "../data/appliances";
 import { canPlace, reachedTile } from "../sim/queries";
 import type { World } from "../sim/types";
 import { applianceAtTile } from "../sim/world";
@@ -10,11 +9,19 @@ import { PALETTE } from "./palette";
 import type { PeopleViews } from "./people-views";
 
 /**
- * The square in front of each chef: what they would interact with.
+ * What each chef would interact with: the object itself, lit up.
  *
- * It is also the build phase's yes/no. Red means the appliance you are carrying
- * will not go here, and it uses `canPlace` — the simulation's own rule — so the
- * preview and the thing it previews cannot disagree.
+ * It used to be a translucent square floating above whatever was being pointed
+ * at, and that asks the player to make the connection: the square is over the
+ * oven, so it must mean the oven. Lighting the oven *is* the statement, and
+ * there is nothing to work out at a glance in the middle of a rush.
+ *
+ * The square survives for the one case that has no object to light — an empty
+ * tile — where where-you-are-pointing is the whole of what has to be said.
+ *
+ * Either way it is also the build phase's yes/no. Red means the appliance you
+ * are carrying will not go here, and it uses `canPlace` — the simulation's own
+ * rule — so the preview and the thing it previews cannot disagree.
  */
 export class HighlightViews {
   private readonly meshes = new Map<number, THREE.Mesh>();
@@ -57,8 +64,6 @@ export class HighlightViews {
       if (!tile || !inside) continue;
 
       const appliance = applianceAtTile(world, tile.x, tile.y);
-      const height = appliance ? applianceDef(appliance.kind).height + 0.1 : 0.03;
-      mesh.position.set(tile.x + 0.5, height, tile.y + 0.5);
 
       // Name the thing you're pointing at, and only that thing — but yield to
       // the progress dial, which occupies the same space and says more.
@@ -68,15 +73,27 @@ export class HighlightViews {
 
       const placing = world.phase === "build" && player.carriedAppliance !== null;
       const blocked = placing && !canPlace(world, tile.x, tile.y);
+      // Whose chef is pointing, except in the build phase, where what matters is
+      // whether the thing in your hands will go there and not who is asking.
+      const color = blocked
+        ? PALETTE.progressBurn
+        : world.phase === "build"
+          ? PALETTE.progressGood
+          : this.people.colorOf(player.id);
+
+      // An occupied tile lights its occupant; an empty one gets the square. A
+      // refused placement over an appliance therefore turns *that appliance*
+      // red, which is the thing in the way and so the thing to say it about.
+      mesh.visible = appliance === null;
+      if (appliance) {
+        this.appliances.highlight(appliance.id, color);
+        continue;
+      }
+
+      mesh.position.set(tile.x + 0.5, 0.03, tile.y + 0.5);
       const material = basicMaterial(mesh);
-      material.color.setHex(
-        blocked
-          ? PALETTE.progressBurn
-          : world.phase === "build"
-            ? PALETTE.progressGood
-            : this.people.colorOf(player.id),
-      );
-      material.opacity = blocked ? 0.7 : appliance ? 0.75 : 0.28;
+      material.color.setHex(color);
+      material.opacity = blocked ? 0.7 : 0.3;
     }
   }
 

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { disposeGhost } from "./ghost";
+import { disposeGlow } from "./glow";
 import { isMesh } from "./nodes";
 import { isCached } from "./primitives";
 
@@ -27,9 +28,10 @@ import { isCached } from "./primitives";
  * outside it.
  */
 export function disposeSubtree(root: THREE.Object3D): void {
-  // Ghost clones are not in the scene graph once the material is switched back,
-  // so a walk of the tree would never find them.
+  // Ghost and glow clones are not in the scene graph once the material is
+  // switched back, so a walk of the tree would never find them.
   disposeGhost(root);
+  disposeGlow(root);
   root.traverse((node) => {
     if (isMesh(node)) {
       disposeGeometry(node.geometry);
