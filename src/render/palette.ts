@@ -81,14 +81,6 @@ export const PALETTE = {
   signOpen: 0x4e8a5c,
   signClosed: 0xa8483f,
   ceramic: 0xf1ece0,
-  /**
-   * The recessed base every appliance stands on.
-   *
-   * One colour for all of them, warm and dark: a toe-kick is read as the shadow
-   * under the thing rather than as part of it, so it must not argue with the
-   * body above it — a plinth painted to match would just make the box taller.
-   */
-  plinth: 0x4c453c,
   bin: 0x4a453e,
   brass: 0xc9a86b,
   // Scuffed stainless, and the one pool of water in the kitchen. The suds are
@@ -240,3 +232,23 @@ export const SURFACE = {
 } as const;
 
 export type SurfaceName = keyof typeof SURFACE;
+
+/**
+ * A palette colour, darkened or lightened.
+ *
+ * For the second tone of one material — a door panel against its cabinet, a
+ * plinth under its body, a reveal beside its frame. Those want to be *the same
+ * paint in a different light*, and giving each its own palette entry is how a
+ * palette ends up with five browns nobody can tell apart. Derived, so recolour
+ * the body and every part of it follows.
+ */
+function channel(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+export function shade(color: number, factor: number): number {
+  const r = channel(((color >> 16) & 0xff) * factor);
+  const g = channel(((color >> 8) & 0xff) * factor);
+  const b = channel((color & 0xff) * factor);
+  return (r << 16) | (g << 8) | b;
+}

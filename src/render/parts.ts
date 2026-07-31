@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { PALETTE, type SurfaceName } from "./palette";
+import { PALETTE, shade, type SurfaceName } from "./palette";
 import { capsule, extruded, mesh, roundedBox, roundedCylinder, sweep, torus } from "./primitives";
 
 /**
@@ -134,13 +134,16 @@ export function deck(
  * and a shadow under a thing is most of what says the thing is on top of the
  * floor rather than part of it.
  *
- * Small on purpose: 9cm at kitchen scale. Any more and appliances read as
- * standing on stilts from the low 3/4 camera.
+ * 12cm at kitchen scale. The first attempt was 9cm and inset 7cm, which is what
+ * a real kitchen does and what this camera cannot see: from up here the near
+ * face is foreshortened, so a deep, short recess disappears into the contact
+ * shadow it was supposed to be distinct from. Taller and shallower is the shape
+ * that survives the projection.
  */
-export const TOE_KICK = 0.09;
+export const TOE_KICK = 0.12;
 
 /** How far in the plinth is set from the body above it. */
-const PLINTH_INSET = 0.07;
+const PLINTH_INSET = 0.05;
 
 /**
  * The recessed base a body stands on, plus the two feet that carry it.
@@ -148,11 +151,13 @@ const PLINTH_INSET = 0.07;
  * Inset rather than flush, because a flush base is just the bottom of the box
  * again: it is the *overhang* that catches shadow and reads as a plinth.
  */
-export function plinth(width: number, height = TOE_KICK): THREE.Object3D {
+export function plinth(width: number, color: number, height = TOE_KICK): THREE.Object3D {
   const group = new THREE.Group();
   const inner = width - PLINTH_INSET * 2;
 
-  const base = mesh(roundedBox(inner, height, inner, 0.02), PALETTE.plinth, "paintedMetal");
+  // The body's own colour in shadow, rather than one grey for every appliance:
+  // a plinth is part of the furniture standing on it, not a hole under it.
+  const base = mesh(roundedBox(inner, height, inner, 0.02), shade(color, 0.62), "paintedMetal");
   base.position.y = height / 2;
   group.add(base);
 
@@ -195,6 +200,43 @@ export const CORNERS: readonly (readonly [number, number])[] = [
   [-1, 1],
   [1, 1],
 ];
+
+/**
+ * A cabinet face on all four sides: a door panel, and the handle to open it.
+ *
+ * Counters are the most numerous object in any kitchen and were the emptiest:
+ * a plain box with a worktop on it, repeated eight times down a wall. A door is
+ * the smallest thing that turns a box into a cupboard, and unlike detailing
+ * bolted to the top it survives being seen from across the room — the panel's
+ * reveal catches a shadow on every face, at every camera corner.
+ *
+ * Panels are the body's colour half a step darker, not a colour of their own.
+ */
+export function cabinetFace(
+  group: THREE.Object3D,
+  width: number,
+  bodyHeight: number,
+  floor: number,
+  color: number,
+  surface: SurfaceName,
+): void {
+  const panelW = width * 0.76;
+  const panelH = bodyHeight * 0.66;
+  const centre = floor + bodyHeight * 0.5;
+  const face = width / 2 - 0.005;
+
+  for (const [x, z] of SIDES) {
+    const panel = mesh(roundedBox(panelW, panelH, 0.045, 0.02), shade(color, 0.9), surface);
+    panel.position.set(x * face, centre, z * face);
+    panel.rotation.y = facing(x, z);
+    group.add(panel);
+
+    const handle = dHandle(panelW * 0.44, 0.045, 0.016, PALETTE.steelDark);
+    handle.position.set(x * (face + 0.018), centre + panelH * 0.5 - 0.07, z * (face + 0.018));
+    handle.rotation.y = facing(x, z);
+    group.add(handle);
+  }
+}
 
 /**
  * A grip: the part of a handle a hand actually closes around, drawn as the

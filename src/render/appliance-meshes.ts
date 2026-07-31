@@ -5,6 +5,7 @@ import type { Appliance } from "../sim/types";
 import { buildIngredientSample, buildProduceHeap } from "./models";
 import { PALETTE, type SurfaceName } from "./palette";
 import {
+  cabinetFace,
   CORNERS,
   dHandle,
   deck,
@@ -148,7 +149,8 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
     const body = mesh(roundedBox(w, bodyH, w, 0.07), look.body[0], look.body[1]);
     body.position.y = stand + bodyH / 2;
     root.add(body);
-    if (stand > 0) root.add(plinth(w, stand));
+    if (stand > 0) root.add(plinth(w, look.body[0], stand));
+    if (look.cabinet) cabinetFace(root, w, bodyH, stand, look.body[0], look.body[1]);
 
     if (look.top) {
       // Wider than the body it sits on, not narrower. A worktop *overhangs* its
@@ -471,6 +473,12 @@ type Look = {
   label?: string;
   /** Meets the floor on its own terms, so no plinth is put under it. */
   grounded?: true;
+  /**
+   * Has cupboard doors on it. True of everything you would find under a
+   * worktop, and false of the things whose faces are already doing a job — an
+   * oven's glass, a fryer's body, a hatch standing in a wall.
+   */
+  cabinet?: true;
 };
 
 const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
@@ -482,11 +490,16 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // Built by `buildSign`. No contextual label: a sign that needs a label to say
   // what it is has failed at the only job it has.
   sign: { body: [PALETTE.signBoard, "wood"] },
-  counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"] },
+  counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"], cabinet: true },
   // Worktop like the counter's, with a block let into it — see `addDetails`.
   // A chopping station is a counter you have put a board on, and a whole top in
   // board colours is a claim that the counter *is* the board.
-  board: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"], label: "Chop" },
+  board: {
+    body: [PALETTE.wood, "wood"],
+    top: [PALETTE.woodTop, "wood"],
+    label: "Chop",
+    cabinet: true,
+  },
   // An upgrade has to be tellable from its plain twin across the kitchen, so
   // each one changes *material* rather than shape: a steel top where the wood
   // was, dark enamel and brass where the oven is grey.
@@ -494,6 +507,7 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
     body: [PALETTE.wood, "wood"],
     top: [PALETTE.woodTop, "wood"],
     label: "Chop (fast)",
+    cabinet: true,
   },
   // No slab: a fryer's deck is a frame around a vat, and it is built with a
   // hole in it by `addDetails`.
@@ -510,8 +524,8 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // by `item-views.ts`, because it is now a real, countable pile. An empty
   // plate stack has to *look* empty — that is the moment the whole feature
   // exists to create.
-  plates: { body: [PALETTE.steel, "enamel"], label: "Plates" },
-  sink: { body: [PALETTE.sinkBody, "enamel"], label: "Sink" },
+  plates: { body: [PALETTE.steel, "enamel"], label: "Plates", cabinet: true },
+  sink: { body: [PALETTE.sinkBody, "enamel"], label: "Sink", cabinet: true },
   bin: { body: [PALETTE.bin, "enamel"], top: [PALETTE.steelDark, "enamel"], label: "Bin" },
   table: { body: [PALETTE.wood, "wood"], label: "Table" },
   // The serving hatch: a steel sill in a hole in the wall. Enamel and a steel
