@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { CAMERA_OFFSET, CAMERA_YAW } from "../orientation";
 import { LAYER } from "./layers";
 
 /**
@@ -29,7 +30,7 @@ import { LAYER } from "./layers";
 /** Where the camera sits relative to the point it looks at. */
 const ORBIT = {
   /** Horizontal distance from the pivot. */
-  radius: Math.hypot(13, 15),
+  radius: Math.hypot(CAMERA_OFFSET.x, CAMERA_OFFSET.z),
   /** Height above the pivot, which fixes the pitch of the 3/4 angle. */
   height: 17,
   /** Chef eye-line-ish, so the kitchen sits in the middle of the frame. */
@@ -37,8 +38,9 @@ const ORBIT = {
 };
 
 /** The 3/4 angle the kitchen art is authored for. See README: rotating the
- * camera past this needs the wall lip and appliance detailing to follow. */
-const DEFAULT_YAW = Math.atan2(13, 15);
+ * camera past this needs the wall lip and appliance detailing to follow — and
+ * the input layer, which turns the controls to match (`orientation.ts`). */
+const DEFAULT_YAW = CAMERA_YAW;
 
 /**
  * Half the vertical size of the followed view, in world units.

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
+import { screenToWorld } from "../orientation";
 import { KitchenCamera } from "./camera";
 
 /** The Park Kitchen's bounds, as `View` builds them for a 20x9 grid. */
@@ -14,6 +15,14 @@ function rig(aspect = 16 / 9): KitchenCamera {
 /** Settle the easing, so a test asserts the framing and not the transition. */
 function settle(camera: KitchenCamera, targets: { x: number; z: number }[]): void {
   for (let i = 0; i < 240; i++) camera.update(targets, 1 / 60);
+}
+
+/** Where a world direction goes on screen, in camera space. */
+function project(camera: KitchenCamera, x: number, z: number): { x: number; y: number } {
+  const toCamera = camera.camera.matrixWorld.clone().invert();
+  const from = new THREE.Vector3(0, 0, 0).applyMatrix4(toCamera);
+  const to = new THREE.Vector3(x, 0, z).applyMatrix4(toCamera);
+  return { x: to.x - from.x, y: to.y - from.y };
 }
 
 const width = (camera: KitchenCamera) => camera.camera.right - camera.camera.left;
@@ -107,5 +116,38 @@ describe("KitchenCamera", () => {
     expect(height(turned)).toBeLessThan(height(whole));
     expect(turned.camera.left).toBeGreaterThanOrEqual(whole.camera.left - 1e-6);
     expect(turned.camera.right).toBeLessThanOrEqual(whole.camera.right + 1e-6);
+  });
+});
+
+/**
+ * The other half of the fix in `orientation.ts`, and the only place it can be
+ * proved: rotating the controls is only correct if the world direction that
+ * comes out actually points up the screen. Projecting through the real camera
+ * says so; the input layer's own test cannot.
+ */
+describe("screen-relative controls", () => {
+  test("pressing up runs straight up the screen", () => {
+    const move = { x: 0, y: -1 };
+    screenToWorld(move);
+    const screen = project(rig(), move.x, move.y);
+
+    expect(screen.x).toBeCloseTo(0, 6);
+    expect(screen.y).toBeGreaterThan(0);
+  });
+
+  test("pressing right runs across the screen, and does not rise or fall", () => {
+    const move = { x: 1, y: 0 };
+    screenToWorld(move);
+    const screen = project(rig(), move.x, move.y);
+
+    expect(screen.y).toBeCloseTo(0, 6);
+    expect(screen.x).toBeGreaterThan(0);
+  });
+
+  test("the un-rotated control frame is the bug this replaced", () => {
+    // Raw world -z, which is what "up" used to mean: up and to the right.
+    const screen = project(rig(), 0, -1);
+
+    expect(screen.x).toBeGreaterThan(0.5);
   });
 });

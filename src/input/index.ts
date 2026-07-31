@@ -1,4 +1,5 @@
 import { emptyInput } from "../sim/world";
+import { screenToWorld } from "../orientation";
 import type { Inputs, PlayerInput } from "../sim/types";
 
 /**
@@ -7,6 +8,11 @@ import type { Inputs, PlayerInput } from "../sim/types";
  * Everything here is deliberately dumb: it reads devices and writes plain
  * data. The sim never sees a Gamepad or a KeyboardEvent, which is what lets us
  * swap in network-received inputs later.
+ *
+ * The one thing it is not dumb about is *which way up is*: directions are read
+ * in screen space and turned into world space here, before anything is
+ * quantised or sent. Doing it at the edge keeps the sim ignorant of the camera
+ * and keeps lockstep intact — what goes on the wire is still a plain vector.
  *
  * Device assignment:
  *   - keyboard scheme 0 always drives player 0 (so you can always play solo);
@@ -72,8 +78,13 @@ export class InputManager {
    * Keys that saw a keydown since the last poll. A press-and-release that
    * happens entirely within one frame would otherwise be dropped, because we
    * only sample `keys` once per frame.
+   *
+   * One buffer per *reader*, because a buffer that is cleared on read can only
+   * be read once: while these were shared, the menu's poll ran first and ate
+   * the tap before gameplay ever saw it.
    */
-  private pressedSincePoll = new Set<string>();
+  private pressedForPlay = new Set<string>();
+  private pressedForMenu = new Set<string>();
   /** Gamepad index -> the player id it drives. */
   private padToPlayer = new Map<number, number>();
   /** A join has been asked for and not yet answered. See `bindGamepads`. */
@@ -89,6 +100,9 @@ export class InputManager {
 
   constructor() {
     window.addEventListener("keydown", (e) => {
+      // Typing your name is not playing: without this, the join screen's `P`
+      // added a chef, and `Space` was swallowed before it reached the field.
+      if (isTyping(e.target)) return;
       if (e.code === "KeyP" && !e.repeat) {
         // Shift+P drops the last one. Adding a player needed an undo: a stray
         // press, or a controller claiming a seat you did not mean to fill,
@@ -102,13 +116,15 @@ export class InputManager {
       // and muting one browser is nobody else's business.
       if (e.code === "KeyM" && !e.repeat) this.muteRequested = true;
       this.keys.add(e.code);
-      this.pressedSincePoll.add(e.code);
+      this.pressedForPlay.add(e.code);
+      this.pressedForMenu.add(e.code);
       if (SWALLOWED.has(e.code)) e.preventDefault();
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     window.addEventListener("blur", () => {
       this.keys.clear();
-      this.pressedSincePoll.clear();
+      this.pressedForPlay.clear();
+      this.pressedForMenu.clear();
     });
   }
 
@@ -199,7 +215,7 @@ export class InputManager {
   pollMenu(): MenuNav {
     const nav: MenuNav = { up: false, down: false, confirm: false, menu: false, back: false };
     const down = (codes: string[]): boolean =>
-      codes.some((k) => this.keys.has(k) || this.pressedSincePoll.has(k));
+      codes.some((k) => this.keys.has(k) || this.pressedForMenu.has(k));
 
     for (const scheme of KEY_SCHEMES) {
       if (down(scheme.up)) nav.up = true;
@@ -208,7 +224,7 @@ export class InputManager {
       if (down(scheme.menu)) nav.menu = true;
     }
     if (down(["Backspace"])) nav.back = true;
-    this.pressedSincePoll.clear();
+    this.pressedForMenu.clear();
 
     for (const pad of navigator.getGamepads?.() ?? []) {
       if (!pad) continue;
@@ -241,7 +257,7 @@ export class InputManager {
       if (scheme) this.applyKeys(input, scheme);
       this.inputs[id] = input;
     }
-    this.pressedSincePoll.clear();
+    this.pressedForPlay.clear();
 
     const pads = navigator.getGamepads?.() ?? [];
     for (const pad of pads) {
@@ -251,13 +267,20 @@ export class InputManager {
       if (input) this.applyPad(input, pad);
     }
 
-    for (const id of local) clampMove(this.inputs[id]!);
+    for (const id of local) {
+      const input = this.inputs[id]!;
+      // Devices speak in screen directions; the kitchen is turned 41 degrees
+      // away from them. Rotate first, then clamp, so quantisation stays the
+      // last thing that happens to a number bound for the wire.
+      screenToWorld(input.move);
+      clampMove(input);
+    }
     return this.inputs;
   }
 
   private applyKeys(input: PlayerInput, scheme: KeyScheme): void {
     const down = (codes: string[]): boolean =>
-      codes.some((k) => this.keys.has(k) || this.pressedSincePoll.has(k));
+      codes.some((k) => this.keys.has(k) || this.pressedForPlay.has(k));
     if (down(scheme.up)) input.move.y -= 1;
     if (down(scheme.down)) input.move.y += 1;
     if (down(scheme.left)) input.move.x -= 1;
@@ -295,16 +318,25 @@ export class InputManager {
   }
 }
 
-/**
- * Quantised so identical stick positions produce identical floats on every
- * machine — a prerequisite for deterministic lockstep netcode later.
- */
+/** Tags that own their own keystrokes: the join screen's name and room fields. */
+const TYPING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
+
+/** True when a keypress belongs to a form field rather than to the kitchen. */
+function isTyping(target: EventTarget | null): boolean {
+  return !!target && "tagName" in target && TYPING_TAGS.has(String(target.tagName));
+}
+
 /** True when a pad is being *used*, not merely connected. */
 function isPadActive(pad: Gamepad): boolean {
   if (pad.buttons.some((button) => button.pressed)) return true;
   return pad.axes.some((axis) => Math.abs(axis) > 0.5);
 }
 
+/**
+ * Clamped to a unit of speed, then quantised so identical stick positions
+ * produce identical floats on every machine — a prerequisite for deterministic
+ * lockstep netcode.
+ */
 function clampMove(input: PlayerInput): void {
   const mag = Math.hypot(input.move.x, input.move.y);
   if (mag > 1) {

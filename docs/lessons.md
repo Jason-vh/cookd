@@ -96,6 +96,22 @@ that call site does.
   this reason. This was originally a comment in `main.ts`, and when that file was
   rewritten for multiplayer the comment went with it and the bug came back
   immediately: the first `Grab` of every offline playthrough did nothing.
+- **A buffer cleared on read belongs to one reader.** The "pressed since last
+  poll" set was shared by the menu's poll and gameplay's, and the menu's ran
+  first — so on any frame the menu was up, or the join screen was, a tap was
+  consumed before the kitchen could see it. There is one set per reader now. The
+  general shape: *clear-on-read is a queue of one, and a second reader is a
+  thief.*
+- **Controls belong to the camera, not to the grid.** Directions were written in
+  world axes while the kitchen is drawn from a corner 41 degrees away, so
+  pressing "up" walked you up and to the *right* — on the stick as well as the
+  keys, on every playthrough since the camera was angled, and nobody filed it
+  until a player did. It survived that long because both halves are individually
+  correct: the sim is right to think in world axes and the camera is right to
+  stand where it does. The missing piece was that *somebody* has to reconcile
+  them, and the edge is the place — `input/` rotates by the shared yaw in
+  `orientation.ts` before anything is quantised, so the sim stays ignorant of the
+  camera and the wire still carries a plain vector.
 - **Never `world.players[id]`.** Use `playerById()`. Ids stopped being array
   positions when players could leave, and the two only disagree *after someone
   disconnects* — which no test covered, because tests join players in order from
@@ -171,6 +187,8 @@ Several of these are no longer only advice:
 | Playout is paced by the server's clock | `snapshots.test.ts`, "sending early does not read as jitter" |
 | A round trip needs a latch | `input.test.ts`, "a pending online join is asked for once" |
 | A connected gamepad is not a player | `input.test.ts`, "a connected but untouched pad does not create a player" |
+| A buffer cleared on read belongs to one reader | `input.test.ts`, "press buffers" |
+| Controls belong to the camera | `camera.test.ts`, "screen-relative controls"; `input.test.ts`, "movement is screen-relative" |
 | Never `world.players[id]` | `playerById` is the only lookup; ids are never array positions |
 | Optional parameters in the middle of a signature | `AdvanceOptions`, a named object |
 | Don't trust what arrives over a socket | `game/wire.ts` and `wire.test.ts` |

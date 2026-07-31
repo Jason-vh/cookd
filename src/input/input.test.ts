@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { CAMERA_YAW } from "../orientation";
 import { InputManager } from "./index";
 
 /**
@@ -31,8 +32,41 @@ function setPads(pads: FakePad[]): void {
   defineGlobal("navigator", { getGamepads: (): FakePad[] => pads });
 }
 
+/** The bits of a `KeyboardEvent` the input layer actually reads. */
+type FakeKey = {
+  code: string;
+  target: null;
+  repeat: boolean;
+  shiftKey: boolean;
+  preventDefault: () => void;
+};
+
+const listeners = new Map<string, ((event: FakeKey) => void)[]>();
+
 function stubWindow(): void {
-  defineGlobal("window", { addEventListener: (): void => {} });
+  listeners.clear();
+  defineGlobal("window", {
+    addEventListener: (type: string, handler: (event: FakeKey) => void): void => {
+      listeners.set(type, [...(listeners.get(type) ?? []), handler]);
+    },
+  });
+}
+
+function fire(type: string, code: string): void {
+  const event: FakeKey = {
+    code,
+    target: null,
+    repeat: false,
+    shiftKey: false,
+    preventDefault: (): void => {},
+  };
+  for (const handler of listeners.get(type) ?? []) handler(event);
+}
+
+/** A press that begins and ends inside one frame — the case the buffers exist for. */
+function tap(code: string): void {
+  fire("keydown", code);
+  fire("keyup", code);
 }
 
 describe("gamepad seating", () => {
@@ -109,5 +143,68 @@ describe("gamepad seating", () => {
     setPads([pad(0, true), pad(1, true)]);
     for (let frame = 0; frame < 5; frame++) input.bindGamepads([4], askServer);
     expect(joins).toBe(2);
+  });
+});
+
+/**
+ * The controls used to be expressed in world axes while the kitchen was drawn
+ * from a corner, so "up" walked you up and to the *right* — 53 degrees off, on
+ * every device. The projection half of this is asserted in `camera.test.ts`,
+ * which has the camera to project through; here we only check that the input
+ * layer aims at the camera's ground-forward rather than at the world grid.
+ */
+describe("movement is screen-relative", () => {
+  beforeEach(() => {
+    stubWindow();
+    setPads([]);
+  });
+
+  test("up walks away from the camera, not along -z", () => {
+    const input = new InputManager();
+    fire("keydown", "KeyW");
+    const move = input.poll([0])[0]!.move;
+
+    expect(move.x).toBeCloseTo(-Math.sin(CAMERA_YAW), 2);
+    expect(move.y).toBeCloseTo(-Math.cos(CAMERA_YAW), 2);
+  });
+
+  test("a rotated diagonal is still one unit of speed", () => {
+    const input = new InputManager();
+    fire("keydown", "KeyW");
+    fire("keydown", "KeyD");
+    const move = input.poll([0])[0]!.move;
+
+    expect(Math.hypot(move.x, move.y)).toBeCloseTo(1, 2);
+  });
+});
+
+describe("press buffers", () => {
+  beforeEach(() => {
+    stubWindow();
+    setPads([]);
+  });
+
+  test("a menu poll does not eat a gameplay tap", () => {
+    const input = new InputManager();
+    tap("Space");
+    input.pollMenu();
+
+    expect(input.poll([0])[0]!.grab).toBe(true);
+  });
+
+  test("a gameplay poll does not eat a menu tap", () => {
+    const input = new InputManager();
+    tap("KeyW");
+    input.poll([0]);
+
+    expect(input.pollMenu().up).toBe(true);
+  });
+
+  test("a tap counts for one poll and no more", () => {
+    const input = new InputManager();
+    tap("Space");
+
+    expect(input.poll([0])[0]!.grab).toBe(true);
+    expect(input.poll([0])[0]!.grab).toBe(false);
   });
 });

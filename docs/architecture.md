@@ -58,7 +58,7 @@ src/
     wire.ts               the edge of trust: unknown bytes -> validated messages
     snapshots.ts          the received timeline, on the server's clock, and how far behind to read it
   input/
-    index.ts            keyboard + Gamepad API -> Inputs (keyed by player id)
+    index.ts            keyboard + Gamepad API -> Inputs (keyed by player id), turned to face the screen
     latch.ts            a control that must be released before it counts again
   audio/                the kitchen, heard: an observer like the renderer
     cues.ts             pure: the world -> the sounds it is making this frame
@@ -67,6 +67,7 @@ src/
     index.ts            what the shell calls once a frame
   save.ts                 the saved-kitchen format, its parser and its migrations
   identity.ts             what this *browser* remembers: your name, your seat count
+  orientation.ts          which way the camera looks, and therefore which way "up" is
   render/                 mirrors the simulation; never writes to it
     view.ts               composition root: renderer, lighting, camera, kitchen shell
     appliance-views.ts    appliance meshes, dials, moving parts, ghosts, stranded rings
