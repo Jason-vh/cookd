@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import type { World } from "../sim/types";
 import { Bubble } from "./bubble";
-import type { PeopleViews } from "./people-views";
 
 /**
  * The orders, floating over the people who placed them.
@@ -17,6 +16,11 @@ import type { PeopleViews } from "./people-views";
  * Positioned in world space rather than parented to the customer's rig. The rig
  * turns to face the table, and a bubble inheriting that rotation would swing
  * around behind them as they sat down.
+ *
+ * *Whose* head is a question this module deliberately does not answer: a diner
+ * has one and a car has a roof, and which of the two a customer is drawn as
+ * belongs to the composition root. It is handed a lookup instead — the same
+ * bubble, over whatever this kitchen puts its orders in.
  */
 export class OrderViews {
   private readonly bubbles = new Map<number, Bubble>();
@@ -26,7 +30,7 @@ export class OrderViews {
   constructor(
     private readonly scene: THREE.Scene,
     private readonly camera: THREE.Camera,
-    private readonly people: PeopleViews,
+    private readonly rootOf: (customerId: number) => THREE.Object3D | undefined,
   ) {}
 
   sync(world: World, dt: number, time: number): void {
@@ -38,7 +42,7 @@ export class OrderViews {
     }
 
     for (const customer of world.customers) {
-      const root = this.people.customerRoot(customer.id);
+      const root = this.rootOf(customer.id);
       if (!root) continue;
 
       let bubble = this.bubbles.get(customer.id);

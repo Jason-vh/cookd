@@ -3,6 +3,7 @@ import { LAUNCH_SHARE } from "../../data/progression";
 import { DISH_INDEX, RECIPE_BY_ID } from "../../data/recipes";
 import { isDirty, isPlate, specKey } from "../items";
 import { MAX_PLATES, plateCount, scrape, stackPlates, stockPlates } from "../plates";
+import { CAR_SPEED, LANE_QUEUE, hatchOf, laneCars, laneEnds, laneSpot } from "../lane";
 import { pathTo, reachableFrom, seatsAround } from "../pathing";
 import { unlockedRecipes } from "../cards";
 import type { Appliance, Customer, Item, Recipe, Vec2, World } from "../types";
@@ -144,6 +145,7 @@ export function freeTables(world: World, reachable: Set<number>): number {
 
 export function customerSystem(world: World, dt: number): void {
   if (world.phase !== "service") return;
+  if (world.lane) return laneSystem(world, dt);
 
   // One flood fill per tick, shared by everyone who needs it. Somebody waiting
   // at the door re-asks "is there a table yet" constantly, and doing the search
@@ -168,6 +170,181 @@ export function customerSystem(world: World, dt: number): void {
   // as though those tables were still free — that is how a rush turns into a
   // permanent queue instead of a spike the room recovers from.
   world.nextArrivalIn = arrivalInterval(world, reachable);
+}
+
+// --- the drive-through -------------------------------------------------------
+
+/**
+ * A kitchen that serves cars, and the whole of what makes it a different game.
+ *
+ * A dining room is **parallel**: four tables are four independent orders, and a
+ * slow one costs you that table. A lane is **serial** — the car at the hatch
+ * stands between every car behind it and the road — so one dish nobody has
+ * started holds up the entire queue. That is the pressure tables cannot
+ * express, and it is why this is a level type rather than a hatch bolted onto
+ * a dining room.
+ *
+ * Structurally it is the [line at the door](../../docs/dining-room.md) with the
+ * seating taken out: rank comes from list order, position is arithmetic, cars
+ * are ghosts. What it does *not* have is a `deciding` beat or an `eating` one —
+ * a car is `arriving`, then `ordering` in the lane, then `leaving`, which is
+ * the existing state machine with two states never entered.
+ */
+function laneSystem(world: World, dt: number): void {
+  for (let i = world.customers.length - 1; i >= 0; i--) {
+    const car = world.customers[i]!;
+    car.prevPos.x = car.pos.x;
+    car.prevPos.y = car.pos.y;
+    if (drive(world, car, dt)) world.customers.splice(i, 1);
+  }
+
+  if (world.dayTime <= LAST_ORDERS) return;
+  world.nextArrivalIn -= dt;
+  if (world.nextArrivalIn > 0) return;
+  driveUp(world);
+  world.nextArrivalIn = laneInterval(world);
+}
+
+/**
+ * How fast the road sends cars: the day curve as a floor, **lane space** as the
+ * dial.
+ *
+ * The same shape as `arrivalInterval`, counting the same way in a different
+ * noun. A dining room pulls the next customer nearer for every free table; a
+ * drive-through does it for every car-length of empty lane, so a queue you are
+ * clearing fills up again and a queue you are not is left alone. Past the end
+ * of the lane nobody sets off at all, for the reason the door queue has a
+ * length: a car that can only ever leave again reads as a room failing rather
+ * than as a road that was busy.
+ */
+function laneInterval(world: World): number {
+  const floor = Math.max(6, 14 - world.day * 1.5);
+  const pull = QUIET_INTERVAL - SEAT_PULL * (LANE_QUEUE - laneCars(world).length);
+  return Math.max(floor, pull) + random(world) * 4;
+}
+
+/**
+ * One car off the road, if there is room in the lane for it.
+ *
+ * One order per car, deliberately: a party in a car is three bubbles over one
+ * roof and a single vehicle blocking the lane until every one of them is
+ * cooked, which is a much harder thing to read than it is to build. The lane is
+ * already the pressure this room is for.
+ *
+ * Two draws from the stream — the dish and the kind — exactly as a diner costs,
+ * and unconditionally, because randomness spent on questions about the room is
+ * randomness that makes two rooms on one seed diverge.
+ */
+function driveUp(world: World): void {
+  if (laneCars(world).length >= LANE_QUEUE) return;
+  const recipe = orderFrom(world);
+  if (!recipe) return; // a room with nothing on the menu takes no orders
+  const kind = pickKind(world);
+  const start = laneEnds(world).in;
+
+  world.customers.push({
+    id: world.nextId++,
+    state: "arriving",
+    pos: { ...start },
+    prevPos: { ...start },
+    facing: { x: 0, y: 1 },
+    table: null,
+    party: 0,
+    plate: null,
+    seat: null,
+    recipeId: recipe.id,
+    kind: kind.id,
+    path: [],
+    timer: 0,
+    remaining: recipe.patience * kind.patience,
+    patience: recipe.patience * kind.patience,
+    tip: 0,
+  });
+}
+
+/** Advance one car. Returns true when it should be removed. */
+function drive(world: World, car: Customer, dt: number): boolean {
+  const speed = CAR_SPEED * customerKind(car.kind).pace;
+
+  if (car.state === "leaving") return walk(car, dt, speed);
+
+  // Where this car stands is a function of how many are still in front of it,
+  // recomputed every tick, so the lane closes up as it is served — and a car
+  // that has not reached its spot yet simply has further to drive.
+  const rank = laneCars(world).indexOf(car);
+  standAt(car, laneSpot(world, Math.max(0, rank)));
+  const parked = walk(car, dt, speed);
+
+  if (car.state === "arriving") {
+    if (!parked) return false;
+    // The order appears when the car stops, not when it sets off: the drive in
+    // is the beat of calm the walk up the path is, and the bubble arriving at
+    // the back of the lane is how far ahead the kitchen gets to work.
+    car.state = "ordering";
+    car.remaining = car.patience;
+    return false;
+  }
+
+  car.remaining -= dt;
+  // Only the front of the queue may be handed anything, and a dish left waiting
+  // on the sill is taken by whoever pulls up to it. That is what lets one chef
+  // run the lane: plate ahead, and the hatch does the serving.
+  if (rank === 0) {
+    const hatch = hatchOf(world);
+    if (hatch?.item && serveHatch(world, hatch, hatch.item) !== null) return false;
+  }
+  if (car.remaining > 0) return false;
+
+  const recipe = RECIPE_BY_ID.get(car.recipeId);
+  effect(world, { kind: "walkout", tile: tileOf(car) });
+  log(world, `${recipe?.name ?? car.recipeId} drove off`);
+  lose(world, car);
+  driveOff(world, car);
+  return false;
+}
+
+/**
+ * Out of the lane and back onto the road.
+ *
+ * Forwards, past the hatch, whether they were served or gave up: a car that
+ * reversed the length of the queue would be the one place in this game where
+ * somebody's position matters to somebody else, and customers are ghosts here
+ * exactly as they are in the dining room.
+ */
+function driveOff(world: World, car: Customer): void {
+  car.state = "leaving";
+  car.path = [laneEnds(world).out];
+}
+
+/**
+ * A plate, handed through the hatch to the car at the front. Returns the
+ * reward, or null when that is not what they asked for.
+ *
+ * **The car takes the food; the plate stays.** It is the one rule takeaway
+ * needed and it is load-bearing twice over: plates are conserved, so a car
+ * driving off with one would be a hole in the count that a save would then
+ * write down — and a drive-through with no washing-up would be a kitchen with
+ * no loop, which is exactly what serving through a hatch used to be. Every
+ * cover comes back as a dirty plate in the hands that served it, immediately.
+ *
+ * The plate is scraped where it lies: in a chef's hands if they handed it over,
+ * on the sill if they left it there. Whoever owned it still owns it.
+ */
+export function serveHatch(world: World, hatch: Appliance, plate: Item): number | null {
+  const car = laneCars(world)[0];
+  if (!car || car.state !== "ordering") return null;
+  const recipe = ordered(car, plate);
+  if (!recipe) return null;
+
+  const reward = charge(world, car, recipe);
+  // No table to leave it on, so the tip is handed over with the change. It is
+  // the same number the dining room works out and pays a moment later.
+  world.money += car.tip;
+  world.today.tips += car.tip;
+  scrape(plate);
+  effect(world, { kind: "paid", tile: hatch.tile, amount: reward + car.tip });
+  driveOff(world, car);
+  return reward;
 }
 
 /** Advance one customer. Returns true when they should be removed. */
@@ -595,10 +772,10 @@ function sitDown(world: World, customer: Customer, table: Appliance, reachable: 
  * the flood fill approved, and bodyblocking by pathing NPCs is the fastest
  * route to frustration in a game about hurrying.
  */
-function walk(customer: Customer, dt: number): boolean {
+function walk(customer: Customer, dt: number, speed = customerSpeed(customer)): boolean {
   if (customer.path.length === 0) return true;
 
-  let step = customerSpeed(customer) * dt;
+  let step = speed * dt;
   while (step > 0) {
     const target = customer.path[0];
     if (!target) return true;
@@ -703,20 +880,45 @@ export function tableOf(world: World, customer: Customer): Appliance | null {
  * back up undoes the mistake at the cost of the walk.
  */
 function acceptDelivery(world: World, customer: Customer, plate: Item): number | null {
-  if (!isPlate(plate) || isDirty(plate) || plate.contents.length !== 1) return null;
+  const recipe = ordered(customer, plate);
+  if (!recipe) return null;
 
-  const recipe = DISH_INDEX.get(specKey(plate.contents[0]!));
-  if (!recipe || recipe.id !== customer.recipeId) return null;
-
-  const speed = Math.max(0, customer.remaining / customer.patience);
-  const kind = customerKind(customer.kind);
-  customer.tip = Math.round(recipe.reward * TIP_FRACTION * speed * kind.generosity);
   customer.state = "eating";
   customer.timer = eatTime(customer);
   // They take their dinner in front of them, which is what frees the table for
   // the rest of their party. Plates are conserved and this is a place one can
   // be — `platesInWorld` counts it, and they put it back dirty when they go.
   customer.plate = plate;
+  return charge(world, customer, recipe);
+}
+
+/**
+ * Is this the dish this customer asked for? The recipe if so, null if not.
+ *
+ * Split out from the delivery itself because a hatch answers the same question
+ * and then does something else with the plate — a car takes the food out of it
+ * and leaves the crockery behind. What counts as "their dish" must not be able
+ * to differ between the two.
+ */
+function ordered(customer: Customer, plate: Item): Recipe | null {
+  if (!isPlate(plate) || isDirty(plate) || plate.contents.length !== 1) return null;
+  const recipe = DISH_INDEX.get(specKey(plate.contents[0]!));
+  return recipe && recipe.id === customer.recipeId ? recipe : null;
+}
+
+/**
+ * Book the sale: the reward into the till, the tip onto the customer, the day's
+ * tally. Returns what was paid on the spot.
+ *
+ * Where the tip then *goes* is the dining room's business or the hatch's: a
+ * diner leaves it on the table for whoever busses the plate, and a car has no
+ * table so it is handed over with the change. Working it out in one place is
+ * what keeps a fast cover worth the same wherever it is served.
+ */
+function charge(world: World, customer: Customer, recipe: Recipe): number {
+  const speed = Math.max(0, customer.remaining / customer.patience);
+  const kind = customerKind(customer.kind);
+  customer.tip = Math.round(recipe.reward * TIP_FRACTION * speed * kind.generosity);
 
   world.money += recipe.reward;
   world.served++;

@@ -398,6 +398,45 @@ player plate-and-slide while another runs food, but the gap means nobody is
 *forced* through a bottleneck — so cook, runner and busser stay things a group
 discovers rather than roles the level assigns.
 
+### The Highway Stop
+
+The third kitchen, and the first with **no dining room at all**: a long galley,
+one serving hatch in the south wall, and a lane of cars coming to it. It is not
+a third arrangement of the same furniture — it is the other half of what this
+game is made of. See [the drive-through](drive-through.md).
+
+The reason it is a *level* rather than a window added to the park kitchen is
+that a window beside a dining room would be free money: it stands on the patio,
+so it costs no floor, and it takes no table, so it costs no capacity. A whole
+room built on it earns instead of adding, and the player chooses it from the
+join screen knowing what they are choosing.
+
+**Tables are parallel; a lane is serial.** Four tables are four independent
+orders and a slow one costs you that table. Four cars are a queue: the one at
+the hatch is standing between every car behind it and the road, so a dish nobody
+has started holds up all of them. That is the one pressure a dining room cannot
+express, and the whole room is built to apply it.
+
+The loop keeps its back half in the one place there was room for it. **The car
+takes the food and the plate stays**, dirty, in the hands that served it — so
+every cover is a wash, immediately, and the sink is what a table was: the thing
+the kitchen buys its way out of. A drive-through with no washing-up would be a
+kitchen with no loop, which is exactly what [serving through a hatch used to
+be](dining-room.md).
+
+Which raises the obvious question, because a `serving` appliance was deleted two
+sections ago for being a chute food vanished into. **A hatch is not a chute when
+there is somebody on the other side of it.** The old one had nothing behind it
+but the edge of the map; this one has a car with a face, a patience ring and
+three more behind it, and it hands you back a plate. The rule that killed the
+first one — a delivery has to be to *somebody* — is the rule this one is built
+on.
+
+A hatch is level furniture, like the stall and the sign: immovable, never
+saved, and it makes its own hole in the shell as it is placed, exactly as the
+door does. Nothing about the build phase changes, and no existing room does
+either.
+
 Dough is **made, not found**: flour + water. An ingredient that arrives ready to
 use is a crate that exists only to be walked to, and the pizza's first step now
 teaches the combine rule that the rest of it depends on.

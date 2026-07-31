@@ -4,7 +4,7 @@ import { STARTING_RECIPES } from "../data/progression";
 import { plateCount, stockPlates } from "./plates";
 import { nextRandom } from "./random";
 import { restockStall } from "./shop";
-import { createWalls, doorSeam, setHorizontalWall, setVerticalWall } from "./walls";
+import { createWalls, edgeSeam, openSeam, setHorizontalWall, setVerticalWall } from "./walls";
 import type {
   Appliance,
   ApplianceKind,
@@ -154,6 +154,7 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     players: [],
     customers: [],
     door: { x: level.door.x, y: level.door.y },
+    lane: level.lane ? { entry: { ...level.lane.entry }, exit: { ...level.lane.exit } } : null,
     phase: "build",
     day: 1,
     dayTime: 0,
@@ -178,6 +179,11 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     // there, for the same reason nothing may be built on the paving around the
     // stall.
     if (tile && !applianceDef(placement.kind).movable) tile.placeable = false;
+    // A hatch is a counter standing in a hole in the wall, so the hole is part
+    // of putting it there. Punched from the placement rather than named by the
+    // level, for the same reason the doorway is punched from the door tile:
+    // one fact about where the hatch is, not two that have to agree.
+    if (placement.kind === "hatch") openSeam(world, edgeSeam(level.room, placement.at));
     spawnAppliance(world, placement.kind, placement.at, placement.source ?? null);
   }
 
@@ -201,7 +207,8 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
  *
  * The doorway is taken out last on purpose. It interrupts the shell, and
  * authoring the shell in two pieces around it would be two facts that have to
- * agree; this way there is one, and the hole is punched afterwards.
+ * agree; this way there is one, and the hole is punched afterwards. A hatch
+ * makes its own hole the same way, as it is placed.
  */
 function buildRoom(world: World, level: LevelDef): void {
   for (let y = level.room.y; y < level.room.y + level.room.height; y++) {
@@ -215,9 +222,7 @@ function buildRoom(world: World, level: LevelDef): void {
       else setHorizontalWall(world, seam.x, seam.y, true);
     }
   }
-  const gap = doorSeam(level.room, level.door);
-  if (gap.axis === "vertical") setVerticalWall(world, gap.x, gap.y, false);
-  else setHorizontalWall(world, gap.x, gap.y, false);
+  openSeam(world, edgeSeam(level.room, level.door));
   world.tiles[tileIndex(world, level.door.x, level.door.y)] = { door: true, placeable: true };
 }
 

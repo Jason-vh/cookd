@@ -131,6 +131,20 @@ export const PALETTE = {
   customerLegs: 0x7b7466,
   hair: 0x4c4038,
 
+  // --- cars ---
+  // Paintwork is not here either: a car is what a *kind* of customer arrives
+  // in, so it is painted out of the coats in `data/customers.ts` — the same
+  // rule, and the reason a hurried driver is the dark saloon. What is here is
+  // everything every car shares.
+  /** The lane a drive-through's cars queue in, and the dashes down it. */
+  tarmac: 0x585552,
+  tarmacLine: 0xd9cfae,
+  carGlass: 0x50606b,
+  carTyre: 0x2f2d2c,
+  carHub: 0xb9b5ad,
+  carLight: 0xf6e6b8,
+  carShadow: 0x6b6357,
+
   // --- tips ---
   coin: 0xd9b45c,
   coinEdge: 0xbf9741,

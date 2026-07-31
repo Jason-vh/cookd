@@ -307,10 +307,22 @@ while the room empties, and the HUD clock says `last orders` and then `closing`.
 something to care about. A 60-second grace period is the backstop: nobody can
 hold a day open forever.
 
+## The room that has none of this
+
+Everything above describes a kitchen with tables in it, and one kitchen does
+not have any. The [Highway Stop](drive-through.md) serves cars at a hatch: no
+seat, no dwell, no tip on a table, and a queue that is **serial** rather than
+parallel — the car being served is standing between every car behind it and the
+road. It is the same customer, the same patience and the same kinds, with the
+seating taken out and a lane put in.
+
+Which of the two a room is, is `world.lane`, and it is decided by the level.
+
 ---
 
 Next:
 
+- [drive-through.md](drive-through.md) — the kitchen where they never get out of the car
 - [content.md](content.md) — what they order
 - [the-menu.md](the-menu.md) — how a room decides what that list is
 - [art-direction.md](art-direction.md) — how a customer's patience is drawn

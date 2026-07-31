@@ -1,4 +1,4 @@
-import type { ApplianceKind, ItemSpec, Rect, Seam, Vec2 } from "../sim/types";
+import type { ApplianceKind, ItemSpec, Lane, Rect, Seam, Vec2 } from "../sim/types";
 
 /**
  * Kitchens are structured data: a rectangle for the building, a list of walls,
@@ -59,6 +59,18 @@ export type LevelDef = {
   door: Vec2;
   /** Interior walls. The shell comes from `room`, and `door` is its one hole. */
   walls: WallRun[];
+  /**
+   * The drive-through lane, for a kitchen that serves cars instead of tables.
+   *
+   * A level has a lane or it has a dining room; **the lane is what says which**,
+   * so there is one fact rather than a `service` flag that has to agree with the
+   * furniture. The hatch it leads to is wherever the `hatch` placement stands —
+   * again one fact, and `createWorld` punches the gap in the shell beside it the
+   * same way it punches the doorway.
+   *
+   * `null` for a kitchen with a dining room, which is most of them.
+   */
+  lane?: Lane;
   appliances: Placement[];
   spawns: Vec2[];
   /** Length of the service phase in seconds. */
@@ -261,6 +273,79 @@ export const BEACH_SHACK: LevelDef = {
 };
 
 /**
+ * The third kitchen, and the first that does not have a dining room.
+ *
+ * A **drive-through**: one hatch in the south wall, a lane of cars coming to
+ * it, and no chair in the building. It exists because the two rooms above are
+ * the same game with the furniture moved, and this one is a different job.
+ *
+ * Tables are **parallel** — a slow table costs you that table, and the others
+ * carry on. A lane is **serial**: the car at the window is standing between
+ * every car behind it and the road, so one order nobody can cook holds up all
+ * of them. That pressure is the whole reason this room exists, and it is the
+ * one thing a dining room cannot express. See
+ * [the drive-through](../../docs/drive-through.md).
+ *
+ * The loop keeps its back half, in the one place there was room for it: the car
+ * takes the *food* and the plate stays behind, dirty, in the hands that served
+ * it. Every cover is a wash, immediately, and the kitchen owns four plates — so
+ * the sink is what a table was, the thing you buy your way out of.
+ *
+ * A long galley on purpose. Nobody leaves the building during service, so the
+ * walk that used to be to a table has to exist *inside* the room: the crates
+ * and the wash-up are at opposite ends of it, and the hatch is in the middle of
+ * the long wall where both are a run away.
+ */
+export const HIGHWAY_STOP: LevelDef = {
+  id: "highway-stop-1",
+  name: "Highway Stop",
+  biome: "roadside",
+  dayLength: 150,
+  // Four, as everywhere — but they turn over faster here than in any dining
+  // room, because a car hands one back dirty the moment it is served rather
+  // than a quarter of an hour later.
+  plates: 4,
+  size: { width: 20, height: 10 },
+  // Patio (x 0..1) | the galley (x 2..17) | patio again (x 18..19), with the
+  // lane along the south apron at y = 8.
+  room: { x: 2, y: 2, width: 16, height: 6 },
+  door: { x: 2, y: 4 },
+  // No dividing wall: there is nothing to divide. The shell is the whole of it.
+  walls: [],
+  // Cars come off the road at the east end and pull away at the west, so the
+  // lane runs *past* the building rather than into it. Nobody reverses.
+  lane: { entry: { x: 19, y: 8 }, exit: { x: 0, y: 8 } },
+  appliances: [
+    // The apron furniture, as every kitchen has it: the stall, the card stand,
+    // and the sign on the first tile inside the door.
+    ...run("stall", 0, 2, 3, "y"),
+    ...run("cards", 0, 6, 2, "y"),
+    at("sign", 2, 5),
+    // The back run: crates and prep at the west end, wash-up at the east.
+    crate("tomato", 3, 2),
+    crate("lettuce", 4, 2),
+    at("counter", 5, 2),
+    at("board", 6, 2),
+    ...run("counter", 7, 2, 2),
+    at("counter", 14, 2),
+    at("plates", 15, 2),
+    at("sink", 16, 2),
+    at("bin", 17, 2),
+    // The hatch, and the sill either side of it. A dish left *on* the hatch is
+    // handed to whoever pulls up next, so one chef can load it ahead of the
+    // car and two can split the window from the cooking entirely.
+    at("counter", 9, 7),
+    at("hatch", 10, 7),
+    at("counter", 11, 7),
+  ],
+  spawns: [
+    { x: 6, y: 5 },
+    { x: 10, y: 4 },
+    { x: 14, y: 5 },
+  ],
+};
+
+/**
  * Every kitchen the game knows about, by id.
  *
  * The wire carries a level *id*, never the geometry: both ends compile the same
@@ -272,6 +357,7 @@ export const BEACH_SHACK: LevelDef = {
 export const LEVELS: Record<string, LevelDef> = {
   [PARK_KITCHEN.id]: PARK_KITCHEN,
   [BEACH_SHACK.id]: BEACH_SHACK,
+  [HIGHWAY_STOP.id]: HIGHWAY_STOP,
 };
 
 /** The level a room gets when nothing says otherwise. */

@@ -1,19 +1,21 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import type { EffectCue, World } from "../sim/types";
+import type { EffectCue, Rect, Seam, World } from "../sim/types";
 import { applianceAtTile, playerById } from "../sim/world";
-import { doorSeam, horizontalWall, verticalWall } from "../sim/walls";
+import { hatchOf } from "../sim/lane";
+import { edgeSeam, horizontalWall, verticalWall } from "../sim/walls";
 import { biome as lookupBiome } from "../data/biomes";
 import { cameraYaw } from "../orientation";
 import { lerp } from "./anim";
 import { ApplianceViews } from "./appliance-views";
+import { CarViews } from "./car-views";
 import { KitchenCamera, type FollowTarget } from "./camera";
 import { disposeSubtree } from "./dispose";
 import { createEnvironment } from "./environment";
 import { HighlightViews } from "./highlight-views";
 import { ItemViews } from "./item-views";
 import { mergeStatic } from "./merge";
-import { buildDoorway, buildWall, floorTexture } from "./shell-meshes";
+import { buildDoorway, buildServingHatch, buildWall, floorTexture } from "./shell-meshes";
 import { PALETTE } from "./palette";
 import { PeopleViews } from "./people-views";
 import { Popups } from "./popups";
@@ -57,6 +59,7 @@ export class View {
 
   private readonly appliances: ApplianceViews;
   private readonly people: PeopleViews;
+  private readonly cars: CarViews;
   private readonly tables: TableViews;
   private readonly orders: OrderViews;
   private readonly items: ItemViews;
@@ -95,14 +98,25 @@ export class View {
 
     this.appliances = new ApplianceViews(this.scene, this.camera);
     this.people = new PeopleViews(this.scene);
+    this.cars = new CarViews(this.scene);
     this.tables = new TableViews(this.appliances);
-    this.orders = new OrderViews(this.scene, this.camera, this.people);
+    // A customer is drawn as a person or as a car, never both, so the bubble
+    // over their head asks for whichever of the two this kitchen has.
+    this.orders = new OrderViews(
+      this.scene,
+      this.camera,
+      (id) => this.people.customerRoot(id) ?? this.cars.carRoot(id),
+    );
     this.items = new ItemViews(this.scene, this.people);
     this.highlights = new HighlightViews(this.scene, this.appliances, this.people);
 
     // Sky, sunlight, ground and scenery all come from the biome.
     this.setupImageBasedLighting(biome.environmentIntensity);
-    createEnvironment(this.scene, biome, { width: world.width, height: world.height });
+    createEnvironment(this.scene, biome, {
+      width: world.width,
+      height: world.height,
+      lane: world.lane,
+    });
     this.buildKitchenShell(world);
 
     this.resize();
@@ -205,16 +219,15 @@ export class View {
       }
     }
 
-    // The gap customers arrive through. A frame around it is what stops it
-    // reading as a hole somebody forgot to wall up.
-    const gap = doorSeam(world.room, world.door);
-    const frame = buildDoorway();
-    if (gap.axis === "vertical") frame.position.set(gap.x, 0, gap.y + 0.5);
-    else {
-      frame.position.set(gap.x + 0.5, 0, gap.y);
-      frame.rotation.y = Math.PI / 2;
+    // The gaps in the shell. A frame around one is what stops it reading as a
+    // hole somebody forgot to wall up — and a drive-through's hatch is a hole
+    // in exactly the same sense, framed differently so that it reads as one.
+    group.add(frameGap(edgeSeam(world.room, world.door), buildDoorway()));
+    const hatch = hatchOf(world);
+    if (hatch) {
+      const seam = edgeSeam(world.room, hatch.tile);
+      group.add(frameGap(seam, buildServingHatch(outward(world.room, seam))));
     }
-    group.add(frame);
 
     const baked = mergeStatic(group);
     this.walls.push(...baked);
@@ -245,7 +258,8 @@ export class View {
     this.syncEffects(world, dt);
     this.appliances.sync(world, dt, time);
     this.people.syncChefs(world, alpha, dt, time);
-    this.people.syncCustomers(world, alpha, dt, time);
+    if (world.lane) this.cars.sync(world, alpha, dt, time);
+    else this.people.syncCustomers(world, alpha, dt, time);
     this.tables.sync(world, dt);
     // After the people: a bubble follows the head it is drawn over, and reading
     // a rig that has not moved yet is a bubble one frame behind its customer.
@@ -399,6 +413,7 @@ export class View {
     window.removeEventListener("resize", this.onResize);
     this.appliances.dispose();
     this.people.dispose();
+    this.cars.dispose();
     this.tables.dispose();
     this.orders.dispose();
     this.items.dispose();
@@ -411,4 +426,26 @@ export class View {
     this.post?.dispose();
     this.renderer.dispose();
   }
+}
+
+/** Stand a frame in a gap in the shell, turned to the wall it interrupts. */
+function frameGap(seam: Seam, frame: THREE.Object3D): THREE.Object3D {
+  if (seam.axis === "vertical") frame.position.set(seam.x, 0, seam.y + 0.5);
+  else {
+    frame.position.set(seam.x + 0.5, 0, seam.y);
+    frame.rotation.y = Math.PI / 2;
+  }
+  return frame;
+}
+
+/**
+ * Which way is *out* through this seam, in the frame's own axes.
+ *
+ * A frame is built facing along its local x and then turned a quarter turn for
+ * a horizontal seam, which flips the sense of that axis — so the one thing a
+ * frame cannot work out for itself is which side of the building it is on.
+ */
+function outward(room: Rect, seam: Seam): number {
+  if (seam.axis === "vertical") return seam.x === room.x ? -1 : 1;
+  return seam.y === room.y ? 1 : -1;
 }

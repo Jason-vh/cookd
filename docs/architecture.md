@@ -30,6 +30,7 @@ src/
     day.ts                opening, closing and restarting a day, and what closing up clears
     pathing.ts            BFS over steps somebody could take: routes and reachability
     walls.ts              walls, which live on the seams between tiles
+    lane.ts               the drive-through: where the hatch is, and where the nth car stops
     random.ts             the one PRNG — deterministic, shared with the scenery
     step.ts               fixed-timestep tick: runs the systems in order, and the service clock
     queries.ts            read-only questions about the world; safe for the renderer
@@ -37,7 +38,7 @@ src/
       movement.ts         circle-vs-tile collision (chefs pass through each other)
       interaction.ts      grab/place/combine/deliver, build-phase appliance moving
       appliances.ts       transforms (chop/fry/bake) and burning
-      customers.ts        arrivals, the door queue, seating, patience, eating, tips
+      customers.ts        arrivals, the door queue, seating, patience, eating, tips — and the lane of cars, for a kitchen with a hatch instead
       cards.ts            arming and taking a recipe card
       sign.ts             the sign by the door: opening the day, and last orders
   data/                   content — plain data, no logic
@@ -76,6 +77,8 @@ src/
     view.ts               composition root: renderer, lighting, camera, kitchen shell
     appliance-views.ts    appliance meshes, dials, moving parts, ghosts, stranded rings
     people-views.ts       chef and customer rigs, walk cycle, working and eating poses
+    car-views.ts          the cars in a drive-through lane: wheels, weight transfer, idle
+    car-mesh.ts           one car, painted out of the customer kind that arrived in it
     table-views.ts        the tip left on a table
     order-views.ts        the order bubble over the head that placed it
     item-views.ts         food on counters and in hands, and plates emptying
@@ -88,7 +91,7 @@ src/
     dial.ts               the work gauge over a busy appliance
     popups.ts             floating "+$12" text
     appliance-meshes.ts   appliance bodies, tops and details
-    shell-meshes.ts       the kitchen's own fabric: wall segments, doorway, floor
+    shell-meshes.ts       the kitchen's own fabric: wall segments, doorway, serving hatch, floor
     person-mesh.ts        one rig, two costumes: chefs and customers
     overlay-meshes.ts     drawn over the kitchen: tile highlight, tip coins
     sprites.ts            name tags and appliance labels

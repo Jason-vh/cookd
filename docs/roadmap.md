@@ -26,6 +26,17 @@ Near term:
   (night market, ski lodge) and the harder half nobody has needed yet: a room's
   level is fixed when it is created, so there is no way to move a kitchen you
   have already built.
+- **The drive-through is in**, as a *level* rather than as a window: the
+  [Highway Stop](drive-through.md) has no dining room at all, one hatch in the
+  wall and a lane of cars queueing at it. It cost a `lane` field, a hatch that
+  makes its own hole in the shell, and a second arrival loop in the customer
+  system that mostly *deletes* branches — no seat draw, no dwell, no plate left
+  on a table. What is left of the idea is everything a first version should not
+  have: a speaker separate from the hatch, a party in one car, and a room that
+  is both kinds of restaurant at once. The open design question is the one a
+  dining room answers with furniture — **what a lane's difficulty dial is**, now
+  that there are no tables to buy. Plates and sinks are the honest answer today,
+  and they escalate the loop rather than the demand.
 - **Verify the gamepad mapping** on real hardware, add per-player join/leave UI
   and rumble on burn/serve.
 - **Multiplayer polish:** there is still no spectator mode and no proper

@@ -460,6 +460,10 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   sink: { body: [PALETTE.sinkBody, "enamel"], label: "Sink" },
   bin: { body: [PALETTE.bin, "enamel"], top: [PALETTE.steelDark, "enamel"], label: "Bin" },
   table: { body: [PALETTE.wood, "wood"], label: "Table" },
+  // The serving hatch: a steel sill in a hole in the wall. Enamel and a steel
+  // top rather than the timber of the counters beside it, so the one tile you
+  // hand food through is the one tile that does not look like a worktop.
+  hatch: { body: [PALETTE.sinkBody, "enamel"], top: [PALETTE.steel, "metal"], label: "Hatch" },
 };
 
 /** Small silhouette details: this is what stops every appliance reading as a box. */

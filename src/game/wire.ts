@@ -342,6 +342,7 @@ const APPLIANCE_KINDS: Record<ApplianceKind, true> = {
   sink: true,
   bin: true,
   table: true,
+  hatch: true,
 };
 
 function isApplianceKind(value: string): value is ApplianceKind {

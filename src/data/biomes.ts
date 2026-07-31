@@ -143,9 +143,54 @@ export const BEACH: Biome = {
   ],
 };
 
+/**
+ * A layby off a hot road: dry verge, bleached tarmac, a sun going down behind
+ * the traffic.
+ *
+ * The mood is *late* rather than bright — a low amber sun and long shadows,
+ * because a drive-through is somewhere you stop on the way to somewhere else,
+ * and the whole room is one long wall with a queue against it. It is the first
+ * biome with no `path`: nobody walks up to this kitchen, so a run of paving
+ * slabs to the door would be a promise about arrival that the lane keeps
+ * instead.
+ *
+ * Every prop kind is one the park already had. A biome earns a new `PropKind`
+ * when no existing shape means the same thing, and a dusty verge is scrub,
+ * rocks and grass however far the road goes.
+ */
+export const ROADSIDE: Biome = {
+  id: "roadside",
+  name: "Highway Stop",
+  sky: { top: "#7f93b0", middle: "#c2b4a8", horizon: "#f0cf9c" },
+  fog: { color: 0xe4c9a0, near: 26, far: 86 },
+  sun: { color: 0xffd9a0, intensity: 2.4, azimuth: 246, elevation: 22 },
+  fill: { color: 0xb9bccb, intensity: 0.38 },
+  ambient: { sky: 0xd8cdbb, ground: 0x6f6552, intensity: 0.7 },
+  environmentIntensity: 0.48,
+  exposure: 1.02,
+  grade: { saturation: 0.84, warmth: 0.52, lift: 0.01 },
+  ground: { base: 0x9c9268, patch: 0x8d8560, accent: 0xa89c74 },
+  patio: { edge: 0x8e8a84, trim: 0x74716c, lift: 0.3, overhang: 0.55 },
+  path: null,
+  foliage: [0x7f8a52, 0x8d955f, 0x6f7a48],
+  blossom: [0xd8c07e, 0xe2d09a],
+  trunk: 0x7e6a4c,
+  rock: 0xa39887,
+  flowers: [0xe6d489, 0xd8b98a, 0xcfc7b2],
+  timber: 0xa88f68,
+  scatter: [
+    { kind: "tree", count: 9, minDistance: 5, maxDistance: 24, scale: [0.8, 1.3] },
+    { kind: "bush", count: 18, minDistance: 3, maxDistance: 22, scale: [0.6, 1.1] },
+    { kind: "rock", count: 20, minDistance: 2.5, maxDistance: 24, scale: [0.5, 1.3] },
+    { kind: "flowers", count: 40, minDistance: 2.5, maxDistance: 24, scale: [0.6, 1] },
+    { kind: "tuft", count: 240, minDistance: 1.6, maxDistance: 26, scale: [0.6, 1.4] },
+  ],
+};
+
 export const BIOMES: Record<string, Biome> = {
   park: PARK,
   beach: BEACH,
+  roadside: ROADSIDE,
 };
 
 export function biome(id: string): Biome {

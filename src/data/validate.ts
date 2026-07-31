@@ -5,7 +5,9 @@ import { CUSTOMER_KINDS, DEFAULT_CUSTOMER_KIND } from "./customers";
 import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
 import { LEVELS, runSeams, type LevelDef } from "./level";
-import type { Rect } from "../sim/types";
+import type { Rect, World } from "../sim/types";
+import { hatchOf, servingSpot } from "../sim/lane";
+import { canReach } from "../sim/walls";
 import { createWorld, isSolid } from "../sim/world";
 import { BACKFILL_RECIPES, CARD_SLOTS, STARTING_RECIPES, TIER_WEIGHT } from "./progression";
 import { COMBINES, RAW_INGREDIENTS, RECIPES, RECIPE_NEEDS, TRANSFORMS } from "./recipes";
@@ -300,7 +302,16 @@ export function levelProblems(level: LevelDef): string[] {
       say(`a chef spawns inside something at ${spawn.x},${spawn.y}`);
   }
 
-  if (count("table") === 0) say("no table, so no customer can ever sit");
+  // A kitchen serves people at tables or cars at a hatch, and which one it is
+  // is the lane. Both halves are checked: a lane with no hatch is a queue for
+  // nothing, and a hatch with no lane is a hole in the wall.
+  if (level.lane) {
+    for (const problem of laneProblems(level, world)) say(problem);
+  } else if (count("hatch") > 0) {
+    say("a hatch but no lane, so no car can ever come to it");
+  } else if (count("table") === 0) {
+    say("no table, so no customer can ever sit");
+  }
   // Plates are finite and conserved, so the two appliances the plate economy
   // runs on are not optional scenery: without a stack there is nowhere for the
   // kitchen's plates to start, and without a sink the first six dirty ones end
@@ -310,6 +321,10 @@ export function levelProblems(level: LevelDef): string[] {
   if (level.plates < count("table")) {
     say(`${level.plates} plates for ${count("table")} tables`);
   }
+  // A drive-through turns its crockery over faster than any dining room: the
+  // plate comes back dirty as the car pulls away, so one is a kitchen that
+  // stops between every cover to wash it.
+  if (level.lane && level.plates < 2) say(`${level.plates} plate(s) for a drive-through`);
   // The stall is how a kitchen grows, and a kitchen that cannot grow is one
   // where money has nothing to be for. The count matters as much as the
   // presence: `STALL_SLOTS` is what the stock roll fills, so a level with two
@@ -331,6 +346,55 @@ export function levelProblems(level: LevelDef): string[] {
     say(`${count("sign")} signs, expected exactly 1 — no way to open the day`);
   }
 
+  return problems;
+}
+
+/**
+ * What is wrong with a drive-through's lane.
+ *
+ * Three things have to be true for a queue of cars to be arithmetic rather than
+ * pathfinding, which is what `sim/lane.ts` is built on: there is exactly one
+ * hatch, the tile outside it is on the lane, and the lane is **straight**. A
+ * bent lane would put a car through a wall on the way to the window, and it
+ * would do it silently — nothing else in the game would notice.
+ */
+function laneProblems(level: LevelDef, world: World): string[] {
+  const problems: string[] = [];
+  const lane = level.lane!;
+  const hatches = level.appliances.filter((placement) => placement.kind === "hatch");
+  if (hatches.length !== 1) {
+    problems.push(`${hatches.length} hatches, expected exactly 1 — a lane leads to one window`);
+    return problems;
+  }
+
+  const straight = lane.entry.x === lane.exit.x || lane.entry.y === lane.exit.y;
+  if (!straight) problems.push("a lane that bends, so a car cannot drive it");
+
+  const spot = servingSpot(world);
+  if (!spot) {
+    problems.push("a hatch that does not stand against the building's wall");
+    return problems;
+  }
+  const onLane =
+    lane.entry.y === lane.exit.y
+      ? spot.y === lane.entry.y &&
+        spot.x > Math.min(lane.entry.x, lane.exit.x) &&
+        spot.x < Math.max(lane.entry.x, lane.exit.x)
+      : spot.x === lane.entry.x &&
+        spot.y > Math.min(lane.entry.y, lane.exit.y) &&
+        spot.y < Math.max(lane.entry.y, lane.exit.y);
+  if (straight && !onLane) problems.push("the hatch is not on the lane, so no car reaches it");
+
+  // The car has to be able to hand a plate back through the wall it pulled up
+  // to — which is the whole reason `createWorld` punches a gap beside a hatch.
+  const hatch = hatchOf(world);
+  if (hatch && !canReach(world, spot, hatch.tile)) {
+    problems.push("the wall is closed between the hatch and the lane");
+  }
+  for (const end of [lane.entry, lane.exit]) {
+    if (within(level.room, end.x, end.y)) problems.push(`the lane runs inside the building`);
+    else if (isSolid(world, end.x, end.y)) problems.push(`something stands in the lane`);
+  }
   return problems;
 }
 

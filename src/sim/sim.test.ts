@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { applianceDef } from "../data/appliances";
 import { CUSTOMER_KINDS, customerKind } from "../data/customers";
-import { LEVEL } from "../data/level";
+import { HIGHWAY_STOP, LEVEL } from "../data/level";
 import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
 import { endDay, restartDay } from "./day";
 import { DT, step } from "./step";
@@ -13,8 +13,9 @@ import {
   unreachableAppliances,
   unreachableTables,
 } from "./queries";
-import { isDirty, specKey } from "./items";
+import { isDirty, isPlate, makeItem, specKey } from "./items";
 import { seatsAround } from "./pathing";
+import { LANE_QUEUE, laneCars, laneSpot } from "./lane";
 import { snapshot } from "../save";
 import { plateCount, platesInWorld } from "./plates";
 import type { Appliance, ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
@@ -1816,5 +1817,208 @@ describe("customer variety", () => {
     // sent kinds it has never heard of, and the honest answer is an ordinary
     // customer rather than a crash halfway through drawing the dining room.
     expect(customerKind("food-critic-from-the-future").id).toBe("regular");
+  });
+});
+
+/**
+ * The drive-through, which is a whole kitchen rather than a wing of one.
+ *
+ * A dining room is parallel and a lane is serial, and everything below is one
+ * consequence of that sentence: cars queue in arrival order, only the front one
+ * can be served, and a car nobody feeds holds up every car behind it.
+ */
+/** The Highway Stop's serving hatch, faced from the tile inside it. */
+const HATCH = [10, 7] as const;
+/** The rest of its galley, all along the back wall and faced from below. */
+const LANE_CRATE = { tomato: [3, 2], lettuce: [4, 2] } as const;
+const LANE_COUNTER = [5, 2] as const;
+const LANE_BOARD = [6, 2] as const;
+const LANE_PLATES = [15, 2] as const;
+const LANE_SINK = [16, 2] as const;
+/** The lane tile outside the hatch, where the front car stops. */
+const STOP = [10, 8] as const;
+
+/** The Highway Stop, open for business, with nobody on the road yet. */
+function makeLane(): World {
+  const world = createWorld(HIGHWAY_STOP, 1);
+  world.nextArrivalIn = Infinity;
+  world.phase = "service";
+  world.dayTime = world.dayLength;
+  return world;
+}
+
+/** A car already stopped at the `rank`-th place in the lane, wanting `recipeId`. */
+function queueCar(world: World, recipeId = "salad", rank = 0): Customer {
+  const recipe = RECIPE_BY_ID.get(recipeId)!;
+  const spot = laneSpot(world, rank);
+  const car: Customer = {
+    id: world.nextId++,
+    state: "ordering",
+    pos: { ...spot },
+    prevPos: { ...spot },
+    facing: { x: -1, y: 0 },
+    table: null,
+    seat: null,
+    party: 0,
+    plate: null,
+    recipeId,
+    kind: "regular",
+    path: [],
+    timer: 0,
+    remaining: recipe.patience,
+    patience: recipe.patience,
+    tip: 0,
+  };
+  world.customers.push(car);
+  return car;
+}
+
+/** A plated salad, straight into the chef's hands. */
+function platedSalad(world: World): Item {
+  const plate = makeItem(world, { base: "plate", processes: [] });
+  plate.contents.push(makeItem(world, { base: "salad", processes: [] }));
+  return plate;
+}
+
+describe("the drive-through", () => {
+  test("cars come off the road, queue up, and shuffle forward", () => {
+    const world = makeLane();
+    world.nextArrivalIn = 0;
+    hold(world, 60, null);
+
+    const lane = laneCars(world);
+    expect(lane.length).toBeGreaterThan(1);
+    // Front car at the hatch, everybody else one tile further back down the
+    // road for each car in front of them. The queue is arithmetic, not bodies.
+    lane.forEach((car, rank) => {
+      expect(car.state).toBe("ordering");
+      expect(car.pos.x).toBeCloseTo(STOP[0] + rank + 0.5, 1);
+      expect(car.pos.y).toBeCloseTo(STOP[1] + 0.5, 1);
+    });
+    // Past the end of the lane nobody sets off at all.
+    expect(lane.length).toBeLessThanOrEqual(LANE_QUEUE);
+  });
+
+  test("the car takes the food and the plate stays behind, dirty", () => {
+    const world = makeLane();
+    const car = queueCar(world);
+    const plates = platesInWorld(world);
+
+    world.players[0]!.carried = platedSalad(world);
+    face(world.players[0]!, HATCH[0], HATCH[1], 0, 1);
+    press(world, "grab");
+
+    // Paid on the spot — there is no table for a tip to be left on, so the
+    // whole cover lands at once.
+    expect(world.served).toBe(1);
+    expect(world.money).toBeGreaterThan(RECIPE_BY_ID.get("salad")!.reward);
+    expect(car.state).toBe("leaving");
+
+    // The one rule takeaway needed: the crockery never leaves the kitchen, and
+    // it comes back dirty in the hands that served it.
+    const held = world.players[0]!.carried;
+    expect(isPlate(held)).toBe(true);
+    expect(isDirty(held)).toBe(true);
+    expect(held.contents).toEqual([]);
+    expect(platesInWorld(world)).toBe(plates + 1); // the one the test conjured
+  });
+
+  test("a dish left on the sill is handed to whoever pulls up to it", () => {
+    const world = makeLane();
+    const hatch = applianceAtTile(world, HATCH[0], HATCH[1])!;
+    hatch.item = platedSalad(world);
+
+    // Nobody is standing at the hatch: this is the path that lets one chef run
+    // a lane, by plating ahead of the car rather than waiting at the wall.
+    const car = queueCar(world);
+    step(world, idle());
+
+    expect(car.state).toBe("leaving");
+    expect(world.served).toBe(1);
+    expect(isDirty(hatch.item)).toBe(true);
+  });
+
+  test("only the front car can be served", () => {
+    const world = makeLane();
+    const first = queueCar(world, "pizza", 0);
+    const second = queueCar(world, "salad", 1);
+
+    world.players[0]!.carried = platedSalad(world);
+    face(world.players[0]!, HATCH[0], HATCH[1], 0, 1);
+    press(world, "grab");
+
+    // The salad is the second car's, and the second car is behind a pizza it
+    // cannot drive around. This is the pressure a dining room cannot express:
+    // one order nobody has started holds up the whole lane.
+    expect(world.served).toBe(0);
+    expect(first.state).toBe("ordering");
+    expect(second.state).toBe("ordering");
+
+    // It is not refused, though — the hatch is a sill, so the dish waits there
+    // for the car it belongs to. Serving ahead is the whole reason to put a
+    // plate down at the wall rather than stand holding it.
+    const sill = applianceAtTile(world, HATCH[0], HATCH[1])!;
+    expect(world.players[0]!.carried).toBeNull();
+    expect(sill.item?.contents[0]?.base).toBe("salad");
+
+    first.remaining = 0.05;
+    hold(world, 2, null);
+    expect(world.served).toBe(1);
+    expect(second.state).toBe("leaving");
+  });
+
+  test("a car that gives up drives off and the queue closes up", () => {
+    const world = makeLane();
+    const first = queueCar(world, "salad", 0);
+    const second = queueCar(world, "salad", 1);
+    first.remaining = 0.05;
+
+    hold(world, 2, null);
+    expect(world.lost).toBe(1);
+    expect(first.state).toBe("leaving");
+    // The one behind is now the one being served, and has moved up to say so.
+    expect(laneCars(world)[0]).toBe(second);
+    expect(second.pos.x).toBeCloseTo(STOP[0] + 0.5, 1);
+  });
+
+  test("a chef can cook a salad here and hand it through the hatch", () => {
+    // The whole loop in one test, on this kitchen's own tiles: the level is not
+    // playable unless a dish can be made *and* got out of the building, and
+    // this is the only test that walks the distance between those two things.
+    const world = makeLane();
+    const car = queueCar(world);
+    const plates = platesInWorld(world);
+
+    for (const crate of [LANE_CRATE.lettuce, LANE_CRATE.tomato]) {
+      takeFrom(world, crate);
+      putOn(world, LANE_BOARD);
+      workOn(world, LANE_BOARD, 2.1);
+      takeFrom(world, LANE_BOARD);
+      putOn(world, LANE_COUNTER); // the second one lands on the first and combines
+    }
+    takeFrom(world, LANE_PLATES);
+    putOn(world, LANE_COUNTER);
+    takeFrom(world, LANE_COUNTER);
+    expect(specKey(world.players[0]!.carried!.contents[0]!)).toBe("salad");
+
+    face(world.players[0]!, HATCH[0], HATCH[1], 0, 1);
+    press(world, "grab");
+    expect(car.state).toBe("leaving");
+
+    // And the washing-up is where the loop closes: the plate that just paid for
+    // itself is dirty, in your hands, four tiles from the sink.
+    putOn(world, LANE_SINK);
+    expect(isDirty(applianceAtTile(world, LANE_SINK[0], LANE_SINK[1])!.item)).toBe(true);
+    expect(platesInWorld(world)).toBe(plates);
+  });
+
+  test("a kitchen with no dining room is not a kitchen missing one", () => {
+    const world = makeLane();
+    // Every warning about tables is a warning about a room this one does not
+    // have. The hatch is level furniture: it cannot be sold, moved or built
+    // over, so there is nothing here for a player to get wrong.
+    expect(kitchenWarnings(world)).toEqual([]);
+    expect(applianceDef("hatch").movable).toBe(false);
+    expect(snapshot(world).appliances.some((entry) => entry.kind === "hatch")).toBe(false);
   });
 });

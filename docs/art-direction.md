@@ -120,6 +120,16 @@ Two things are worth stating from having done it:
   of grass is dune grass. A new `PropKind` earns its row when no existing shape
   means what you need — which is why the beach added three and reused three.
 
+The **roadside** was the second invoice, and a cheaper one: one biome row and
+*no* new prop builders at all. "A layby off a hot road, late in the day" decides
+a low amber sun, long shadows, dry scrub and a warmer grade, and every prop it
+needs is a shape the park already had. It is also the first biome with no
+`path` — nobody walks up to a [drive-through](drive-through.md), so a run of
+paving slabs to the door would be a promise about arrival the lane keeps
+instead. The lane itself is not scenery: it is drawn from the same two tiles the
+simulation queues cars along, because paving a player can see and a line a car
+actually drives must be one fact.
+
 Because the biome also owns the lighting, a night or golden-hour variant is
 purely a matter of numbers.
 

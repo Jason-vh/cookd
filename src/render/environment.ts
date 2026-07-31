@@ -3,6 +3,8 @@ import { isMesh } from "./nodes";
 import { scatter, type PropSpace } from "./scatter";
 import { mulberry32 } from "../sim/random";
 import type { Biome, PropKind } from "../data/biomes";
+import type { Vec2 } from "../sim/types";
+import { PALETTE } from "./palette";
 import { box, cylinder, mesh, roundedBox, sphere } from "./primitives";
 import { mergeStatic } from "./merge";
 
@@ -25,6 +27,14 @@ export type EnvironmentBounds = {
   /** Kitchen footprint in tiles. */
   width: number;
   height: number;
+  /**
+   * The drive-through lane, if this kitchen has one: both ends, in tiles.
+   *
+   * Read from the world rather than from the biome, because it is a fact about
+   * *this* kitchen rather than about the place it stands in — the same reason
+   * the walls are not scenery.
+   */
+  lane?: { entry: Vec2; exit: Vec2 } | null;
 };
 
 export function createEnvironment(
@@ -47,6 +57,7 @@ export function createEnvironment(
   addGround(scenery, biome, cx, cz, groundY);
   addPatio(scenery, biome, bounds, cx, cz, groundY);
   if (biome.path) addPath(scenery, biome, bounds, groundY);
+  if (bounds.lane) addLane(scenery, bounds.lane);
   addScatter(scenery, biome, bounds, cx, cz, groundY);
   scene.add(...mergeStatic(scenery));
 }
@@ -164,6 +175,51 @@ function addPath(
     );
     slab.rotation.y = (random() - 0.5) * 0.5;
     scene.add(slab);
+  }
+}
+
+/**
+ * The drive-through lane: a strip of tarmac past the building, with a dashed
+ * line down the middle of it.
+ *
+ * Drawn from the same two tiles the simulation queues cars along, so the paving
+ * a player can see and the line a car actually drives are the same fact. A lane
+ * nobody could see would be four cars in a row on the patio, which is a queue
+ * for nothing.
+ *
+ * It sits a hair above the patio it is painted on, in the one place in the
+ * renderer where a surface is deliberately not the ground: tarmac laid *level*
+ * with the paving z-fights with it from the far camera corner.
+ */
+function addLane(scene: THREE.Object3D, lane: { entry: Vec2; exit: Vec2 }): void {
+  const along = lane.entry.y === lane.exit.y ? "x" : "y";
+  const length = Math.abs(along === "x" ? lane.exit.x - lane.entry.x : lane.exit.y - lane.entry.y);
+  const mid = {
+    x: (lane.entry.x + lane.exit.x) / 2 + 0.5,
+    y: (lane.entry.y + lane.exit.y) / 2 + 0.5,
+  };
+
+  const w = along === "x" ? length + 1 : 1.05;
+  const d = along === "x" ? 1.05 : length + 1;
+  const tarmac = mesh(box(w, 0.03, d), PALETTE.tarmac, "stone");
+  tarmac.position.set(mid.x, 0.02, mid.y);
+  scene.add(tarmac);
+
+  // Dashes, one per two tiles: enough to read as a road and few enough that the
+  // lane still reads as somewhere a car stops rather than a motorway.
+  for (let i = 0; i < length; i += 2) {
+    const at = i + 1;
+    const dash = mesh(
+      box(along === "x" ? 0.5 : 0.07, 0.02, along === "x" ? 0.07 : 0.5),
+      PALETTE.tarmacLine,
+      "stone",
+    );
+    dash.position.set(
+      along === "x" ? Math.min(lane.entry.x, lane.exit.x) + at + 0.5 : mid.x,
+      0.035,
+      along === "x" ? mid.y : Math.min(lane.entry.y, lane.exit.y) + at + 0.5,
+    );
+    scene.add(dash);
   }
 }
 

@@ -97,6 +97,11 @@ const DEFS = {
   // the place verb players already know. Its price is what the build phase
   // charges for order capacity.
   table: { ...PLAIN, stations: [], speed: 1, label: "Table", color: 0xb08d63, height: 0.55, acceptsItems: true, movable: true, price: 40 },
+  // The serving hatch of a drive-through, standing in a gap in the outside
+  // wall: level furniture like the stall and the sign, and the fourth thing
+  // that is furniture of a *place*. It accepts items because it is a sill —
+  // a dish left on it is handed to the car that pulls up next.
+  hatch: { ...PLAIN, stations: [], speed: 1, label: "Hatch", color: 0xa9b4bc, height: 0.62, acceptsItems: true, movable: false, price: 0 },
   bin: { ...PLAIN, stations: [], speed: 1, label: "Bin", color: 0x35363c, height: 0.7, acceptsItems: true, movable: true, price: 10 },
 } as const satisfies Record<string, ApplianceDef>;
 

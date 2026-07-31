@@ -312,6 +312,17 @@ export type Walls = {
 /** One seam's worth of wall: which lattice line it is on, and where. */
 export type Seam = { axis: "vertical" | "horizontal"; x: number; y: number };
 
+/**
+ * A drive-through lane: where cars come from, and where they go.
+ *
+ * Both ends are patio tiles, and the tile outside the hatch is on the straight
+ * line between them — `validate.ts` insists on it, and everything in `lane.ts`
+ * is arithmetic because of it. A queue spaced by counting rather than by bodies
+ * is the same trick the line at the door plays, for the same reason: cars are
+ * ghosts to each other, as every customer in this game is.
+ */
+export type Lane = { entry: Vec2; exit: Vec2 };
+
 export type Tile = {
   /** true for the one tile inside the doorway customers arrive through. */
   door: boolean;
@@ -419,6 +430,15 @@ export type World = {
   /** The building: kitchen floor inside, patio outside. */
   room: Rect;
   walls: Walls;
+  /**
+   * The drive-through lane, or null for a kitchen with a dining room.
+   *
+   * The one field that says which of the two kinds of restaurant this is.
+   * Customers are cars where it is set and diners where it is not — there is no
+   * flag on the customer, because a room is one thing or the other and a
+   * customer who could be either would be a second answer to the same question.
+   */
+  lane: Lane | null;
   /** appliance id per tile index, or 0 for none. */
   applianceAt: number[];
   appliances: Map<number, Appliance>;

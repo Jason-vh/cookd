@@ -26,7 +26,7 @@ import {
   tileIndex,
   touchLayout,
 } from "../world";
-import { serveTable } from "./customers";
+import { serveHatch, serveTable } from "./customers";
 import { useCardStand } from "./cards";
 import { useSign } from "./sign";
 import { canPlace, itemLabel, reachedTile, targetAppliance } from "../queries";
@@ -127,6 +127,11 @@ function serviceGrab(world: World, player: Player): void {
     // the rest are still waiting, and a table's one surface must not be the
     // reason the second dish cannot be served.
     if (appliance.kind === "table" && tryDeliver(world, player, appliance)) return;
+    // The hatch hands food *out* and gives the plate back, which is the one
+    // delivery in the game that leaves something in your hands. Tried before
+    // the ordinary put-it-down rules so that serving beats stacking: a chef at
+    // the hatch with the dish the car in front of them ordered is serving it.
+    if (appliance.kind === "hatch" && tryHandOver(world, player, appliance)) return;
     if (!def.acceptsItems) return;
 
     if (!appliance.item) {
@@ -329,6 +334,23 @@ function tryDeliver(world: World, player: Player, table: Appliance): boolean {
   const reward = serveTable(world, table, player.carried);
   if (reward === null) return false;
   player.carried = null;
+  effect(world, { kind: "served", playerId: player.id, amount: reward });
+  return true;
+}
+
+/**
+ * Offer what a chef is carrying through the hatch to the car at the front.
+ * Returns whether it was taken.
+ *
+ * The plate does not leave their hands — the *food* does, and what is left is
+ * dirty. That is the drive-through's whole loop in one line, and it is why this
+ * is not `tryDeliver` with a different appliance: a table takes the crockery
+ * and a car cannot.
+ */
+function tryHandOver(world: World, player: Player, hatch: Appliance): boolean {
+  if (!player.carried) return false;
+  const reward = serveHatch(world, hatch, player.carried);
+  if (reward === null) return false;
   effect(world, { kind: "served", playerId: player.id, amount: reward });
   return true;
 }

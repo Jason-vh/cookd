@@ -40,22 +40,40 @@ export function setHorizontalWall(world: World, x: number, y: number, solid: boo
 }
 
 /**
- * The one seam the shell does not have a wall on.
+ * The seam of the shell that this edge tile stands against.
  *
- * Derived from the door tile rather than stated, because the two would then be
- * two facts that have to agree: a doorway is where it is *because* of the tile
+ * Derived from the tile rather than stated, because the two would then be two
+ * facts that have to agree: a doorway is where it is *because* of the tile
  * behind it, and a room that named both could put the frame on one wall and the
  * tile customers queue for against another. Taken from the room and the tile so
  * that the level building the world and the renderer drawing its frame ask the
  * same function rather than two that look alike.
+ *
+ * Two things stand against the shell and want a hole in it: the **door**, and
+ * the **hatch** of a drive-through. They are the same question, so they are the
+ * same function — a second one would be a second opinion about which wall a
+ * tile in the corner belongs to.
  */
-export function doorSeam(room: Rect, door: Vec2): Seam {
-  if (door.x === room.x) return { axis: "vertical", x: room.x, y: door.y };
-  if (door.x === room.x + room.width - 1) {
-    return { axis: "vertical", x: room.x + room.width, y: door.y };
+export function edgeSeam(room: Rect, tile: Vec2): Seam {
+  if (tile.x === room.x) return { axis: "vertical", x: room.x, y: tile.y };
+  if (tile.x === room.x + room.width - 1) {
+    return { axis: "vertical", x: room.x + room.width, y: tile.y };
   }
-  if (door.y === room.y) return { axis: "horizontal", x: door.x, y: room.y };
-  return { axis: "horizontal", x: door.x, y: room.y + room.height };
+  if (tile.y === room.y) return { axis: "horizontal", x: tile.x, y: room.y };
+  return { axis: "horizontal", x: tile.x, y: room.y + room.height };
+}
+
+/** Take a seam out of the shell, so the two tiles either side of it meet. */
+export function openSeam(world: World, seam: Seam): void {
+  if (seam.axis === "vertical") setVerticalWall(world, seam.x, seam.y, false);
+  else setHorizontalWall(world, seam.x, seam.y, false);
+}
+
+/** The tile on the other side of a seam from `tile`. */
+export function across(seam: Seam, tile: Vec2): Vec2 {
+  if (seam.axis === "vertical")
+    return { x: seam.x === tile.x ? tile.x - 1 : tile.x + 1, y: tile.y };
+  return { x: tile.x, y: seam.y === tile.y ? tile.y - 1 : tile.y + 1 };
 }
 
 /**

@@ -3,8 +3,9 @@
 A browser-based, controller-first co-op cooking game. Chefs run around a
 tile-aligned kitchen turning raw ingredients into plated dishes, carrying them
 out to seated customers before they walk out, and rearranging the restaurant
-between days. Two locations so far: a park kitchen, and a beach shack with a
-bigger deck and a smaller galley.
+between days. Three locations so far: a park kitchen, a beach shack with a
+bigger deck and a smaller galley, and a highway stop with no dining room at all
+— just a hatch, and a lane of cars queueing at it.
 
 Inspirations: **Overcooked** (moment-to-moment chaos, hold-to-chop, plate-and-serve
 loop) and **PlateUp!** (kitchen as a thing you design and optimise across days).
@@ -14,8 +15,9 @@ one dish and buys the rest from recipe cards, burning, a dining room with
 customers who walk in — alone or as a party — sit, order, eat and leave, tips
 left on tables, a sink and
 a kitchen with only four plates to its name, a day loop that begins in the
-morning, a market stall on the patio to spend the takings at — and a server so
-the chefs can be in different countries.
+morning, a market stall on the patio to spend the takings at, a **drive-through**
+where the dining room is a queue of cars and every cover comes back as washing-up
+— and a server so the chefs can be in different countries.
 
 ---
 
@@ -31,7 +33,7 @@ bun start            # build, then serve everything from one process
 ```
 
 Open the client, pick a name, a kitchen code and **where the kitchen is** — the
-city park or the beach shack — and share the URL — the code
+city park, the beach shack or the highway stop — and share the URL — the code
 lives in the hash (`/#KITCHEN`), so the link *is* the invite. **Play offline**
 skips the server entirely.
 
@@ -198,6 +200,7 @@ noticing. [A test](docs/docs.test.ts) now catches that much.
 | [Multiplayer](docs/multiplayer.md) | Three clocks, prediction, and what happens when a connection drops. |
 | [The content model](docs/content.md) | Items, transforms, combines, recipes and levels — everything that is data. Read this to add a dish. |
 | [The dining room](docs/dining-room.md) | Customers: arriving, seating, patience, eating, tips. |
+| [The drive-through](docs/drive-through.md) | The kitchen with no dining room: a hatch, a lane of cars, and why it is a level rather than a window. |
 | [The shop](docs/the-shop.md) | The morning, the market stall, and the patio they stand on. |
 | [The menu](docs/the-menu.md) | Recipe cards: how a kitchen chooses what it cooks, and the equipment that comes with it. |
 | [Art direction](docs/art-direction.md) | The look, the biomes, and the rendering gotchas behind both. |

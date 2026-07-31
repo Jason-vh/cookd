@@ -77,6 +77,48 @@ export function buildDoorway(): THREE.Object3D {
   return group;
 }
 
+/**
+ * The frame around a drive-through's serving hatch.
+ *
+ * The same two posts the doorway has, and then everything that says *this is
+ * not a door*: a lintel low enough to lean under, and a canopy over the lane
+ * outside. The gap in the wall is full height as far as the simulation is
+ * concerned — a seam is open or it is not — so the whole job of saying how big
+ * the opening really is falls to this.
+ *
+ * `out` is which way the lane is, in the frame's own axes: +1 or -1 along local
+ * x, because the caller is the only thing that knows which side of the building
+ * this wall is on.
+ */
+export function buildServingHatch(out: number): THREE.Object3D {
+  const group = new THREE.Group();
+  const height = 0.95;
+  const depth = WALL_THICKNESS;
+  for (const z of [-0.46, 0.46]) {
+    const post = mesh(roundedBox(depth, 1.1, 0.12, 0.04), PALETTE.wall, "enamel");
+    post.position.set(0, 0.55, z);
+    group.add(post);
+  }
+
+  const lintel = mesh(roundedBox(depth + 0.05, 0.18, 1 + depth, 0.04), PALETTE.wallTrim, "enamel");
+  lintel.position.y = height + 0.09;
+  group.add(lintel);
+
+  // A canopy over whoever is being served. It is also what makes the hatch
+  // findable from the far side of the building, which matters in the one room
+  // where the thing you are serving is outside the walls.
+  const canopy = mesh(roundedBox(0.42, 0.07, 1.15, 0.03), PALETTE.awning, "enamel");
+  canopy.position.set(out * 0.3, height + 0.24, 0);
+  canopy.rotation.z = out * 0.16;
+  group.add(canopy);
+
+  const bracket = mesh(roundedBox(0.24, 0.06, 0.06, 0.02), PALETTE.wallTrim, "enamel");
+  bracket.position.set(out * 0.14, height + 0.18, 0);
+  group.add(bracket);
+
+  return group;
+}
+
 /** Warm tiled kitchen floor with grout lines and a touch of per-tile variation. */
 export function floorTexture(width: number, height: number): THREE.Texture {
   const [element, ctx] = canvas2d(128);

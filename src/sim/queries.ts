@@ -174,12 +174,18 @@ function countKind(world: World, kind: ApplianceKind): number {
 export function kitchenWarnings(world: World): string[] {
   const warnings: string[] = [];
 
-  if (countKind(world, "table") === 0) {
-    warnings.push("No tables — nobody can sit down");
-  } else {
-    const stranded = unreachableTables(world);
-    if (stranded.length > 0) {
-      warnings.push(`${stranded.length} table(s) can't be reached from the door`);
+  // A drive-through has no tables and is not missing any: its dining room is a
+  // lane, and the hatch that serves it is furniture of the level that cannot be
+  // sold, moved or built over. Being unable to *reach* it is a real mistake and
+  // is already covered below, by the rule that covers every other appliance.
+  if (world.lane === null) {
+    if (countKind(world, "table") === 0) {
+      warnings.push("No tables — nobody can sit down");
+    } else {
+      const stranded = unreachableTables(world);
+      if (stranded.length > 0) {
+        warnings.push(`${stranded.length} table(s) can't be reached from the door`);
+      }
     }
   }
 
