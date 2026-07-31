@@ -164,6 +164,14 @@ Three rules make it work:
   the food arrives it moves in front of the person who ordered it — which is
   also just what people do — and comes back dirty when they leave. Four plates
   around the edge of one table is what a party looks like from across the room.
+- **Food is handed over, not put down.** A dish somebody at this table ordered
+  leaves your hands and goes straight in front of them, whatever else is
+  standing on the table. It has to work that way, because the first of a party
+  to finish leaves their plate behind while the rest are still waiting: the
+  table's one surface would otherwise be occupied by washing-up, and the second
+  order would sit in your hands with no way to deliver it. Putting a plate
+  *down* on a table is what happens when nobody there wants it yet — for a
+  customer still making their mind up, who finds it waiting when they finish.
 
 That last one is why `platesInWorld` counts customers: a plate in front of
 somebody eating is a plate the kitchen still owns, and a count that missed it

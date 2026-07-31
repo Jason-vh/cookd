@@ -1268,6 +1268,25 @@ describe("the dining room", () => {
     expect(table.tip).toBeGreaterThan(0);
   });
 
+  test("a used plate on the table does not block the rest of the party", () => {
+    const world = makeWorld();
+    const table = applianceAtTile(world, TABLE[0], TABLE[1])!;
+    // One of the party has eaten and gone, leaving their plate behind. Their
+    // friend is still waiting, and the table has one surface.
+    const used = dirtyPlate(world, TABLE);
+    const friend = seatCustomer(world, "salad");
+
+    makeSalad(world);
+    putOn(world, TABLE, 0, 1);
+
+    // The dish is handed over rather than put down, so the washing-up standing
+    // in the way is no longer the reason a second order cannot be served.
+    expect(friend.state).toBe("eating");
+    expect(world.served).toBe(1);
+    expect(world.players[0]!.carried).toBeNull();
+    expect(table.item).toBe(used);
+  });
+
   test("bussing the plate collects the tip, and the sink is what washes it", () => {
     const world = makeWorld();
     seatCustomer(world, "salad");

@@ -222,9 +222,12 @@ function advance(world: World, customer: Customer, dt: number, reachable: Set<nu
       // ignored until a chef picked it up and put it down again — the one
       // silent failure in the whole delivery path.
       const early = tableOf(world, customer);
-      if (early) {
-        const reward = acceptDelivery(world, early, customer);
-        if (reward !== null) effect(world, { kind: "paid", tile: early.tile, amount: reward });
+      if (early?.item) {
+        const reward = acceptDelivery(world, customer, early.item);
+        if (reward !== null) {
+          early.item = null;
+          effect(world, { kind: "paid", tile: early.tile, amount: reward });
+        }
       }
       return false;
     }
@@ -682,8 +685,14 @@ export function tableOf(world: World, customer: Customer): Appliance | null {
 }
 
 /**
- * Take whatever is on the table as this customer's dinner, if it is what they
- * asked for. Returns the reward paid, or null when it is not their dish.
+ * Give `plate` to this customer, if it is what they asked for. Returns the
+ * reward paid, or null when it is not their dish.
+ *
+ * The plate is taken *from the caller*, not off the table, because a dish is
+ * delivered from two places: a plate left standing there for somebody still
+ * making their mind up, and a plate handed straight over from a chef's hands.
+ * Whoever owns the plate is responsible for letting go of it — this function
+ * only says whether the customer took it.
  *
  * Payment is split in two: the base reward is paid here, to whoever is
  * standing there; the tip is worked out here too but stays with the customer
@@ -693,9 +702,8 @@ export function tableOf(world: World, customer: Customer): Appliance | null {
  * table with the order bubble still showing what was wanted, and picking it
  * back up undoes the mistake at the cost of the walk.
  */
-export function acceptDelivery(world: World, table: Appliance, customer: Customer): number | null {
-  const plate = table.item;
-  if (!plate || !isPlate(plate) || isDirty(plate) || plate.contents.length !== 1) return null;
+function acceptDelivery(world: World, customer: Customer, plate: Item): number | null {
+  if (!isPlate(plate) || isDirty(plate) || plate.contents.length !== 1) return null;
 
   const recipe = DISH_INDEX.get(specKey(plate.contents[0]!));
   if (!recipe || recipe.id !== customer.recipeId) return null;
@@ -705,11 +713,10 @@ export function acceptDelivery(world: World, table: Appliance, customer: Custome
   customer.tip = Math.round(recipe.reward * TIP_FRACTION * speed * kind.generosity);
   customer.state = "eating";
   customer.timer = eatTime(customer);
-  // They take their dinner off the table, which is what frees the table for
+  // They take their dinner in front of them, which is what frees the table for
   // the rest of their party. Plates are conserved and this is a place one can
   // be — `platesInWorld` counts it, and they put it back dirty when they go.
   customer.plate = plate;
-  table.item = null;
 
   world.money += recipe.reward;
   world.served++;
@@ -720,7 +727,8 @@ export function acceptDelivery(world: World, table: Appliance, customer: Custome
 }
 
 /**
- * Whatever is on this table, given to whoever at it ordered it.
+ * A plate, given to whoever at this table ordered it. Returns the reward, or
+ * null when nobody here is waiting for it.
  *
  * A table can be several orders now, so "the customer sitting here" is no
  * longer a question with one answer. The **most impatient** match is fed
@@ -728,12 +736,12 @@ export function acceptDelivery(world: World, table: Appliance, customer: Custome
  * ring is nearly empty is the one about to walk out, and feeding the other
  * would lose an order the kitchen had already cooked for.
  */
-export function serveTable(world: World, table: Appliance): number | null {
+export function serveTable(world: World, table: Appliance, plate: Item): number | null {
   const waiting = world.customers
     .filter((customer) => customer.table === table.id && customer.state === "ordering")
     .sort((a, b) => a.remaining - b.remaining);
   for (const customer of waiting) {
-    const reward = acceptDelivery(world, table, customer);
+    const reward = acceptDelivery(world, customer, plate);
     if (reward !== null) return reward;
   }
   return null;

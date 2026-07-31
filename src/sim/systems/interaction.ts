@@ -110,6 +110,12 @@ function serviceGrab(world: World, player: Player): void {
     } else if (takePlatesUp(world, player, appliance)) {
       return;
     }
+    // Food is handed **over**, not put down: a dish anybody at this table
+    // ordered leaves your hands and goes straight in front of them, whatever
+    // else is standing on the table. A party leaves used plates behind while
+    // the rest are still waiting, and a table's one surface must not be the
+    // reason the second dish cannot be served.
+    if (appliance.kind === "table" && tryDeliver(world, player, appliance)) return;
     if (!def.acceptsItems) return;
 
     if (!appliance.item) {
@@ -117,7 +123,6 @@ function serviceGrab(world: World, player: Player): void {
       player.carried = null;
       appliance.progress = 0;
       appliance.overcook = 0;
-      if (appliance.kind === "table") tryDeliver(world, player, appliance);
       return;
     }
 
@@ -299,17 +304,22 @@ function collectTip(world: World, player: Player, appliance: Appliance): void {
 }
 
 /**
- * A plate just landed on a table. If anybody sitting there ordered it, they
- * start eating and the chef who ran the food is paid for it.
+ * Offer what a chef is carrying to the table in front of them. If anybody
+ * sitting there ordered it they start eating, the chef who ran the food is
+ * paid, and the plate leaves their hands. Returns whether it was taken.
  *
  * *Anybody*, because a table is a party now: the rule that decides which of
  * them this was for lives with the customers (`serveTable`), along with the
  * one that lets a customer find their dish already waiting when they finish
  * deciding. Only the credit differs: there, nobody is standing at the table.
  */
-function tryDeliver(world: World, player: Player, table: Appliance): void {
-  const reward = serveTable(world, table);
-  if (reward !== null) effect(world, { kind: "served", playerId: player.id, amount: reward });
+function tryDeliver(world: World, player: Player, table: Appliance): boolean {
+  if (!player.carried) return false;
+  const reward = serveTable(world, table, player.carried);
+  if (reward === null) return false;
+  player.carried = null;
+  effect(world, { kind: "served", playerId: player.id, amount: reward });
+  return true;
 }
 
 /**
