@@ -4,7 +4,8 @@ import { APPLIANCES, APPLIANCE_KINDS, isApplianceKind, type ApplianceKind } from
 import { CUSTOMER_KINDS, DEFAULT_CUSTOMER_KIND } from "./customers";
 import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
-import { LEVELS, runTiles, type LevelDef, type Rect } from "./level";
+import { LEVELS, runSeams, type LevelDef } from "./level";
+import type { Rect } from "../sim/types";
 import { createWorld, isSolid } from "../sim/world";
 import { BACKFILL_RECIPES, CARD_SLOTS, STARTING_RECIPES, TIER_WEIGHT } from "./progression";
 import { COMBINES, RAW_INGREDIENTS, RECIPES, RECIPE_NEEDS, TRANSFORMS } from "./recipes";
@@ -237,25 +238,34 @@ export function levelProblems(level: LevelDef): string[] {
   // building with pieces missing rather than an error.
   const { room, size } = level;
   if (room.width <= 0 || room.height <= 0) say("a room with no floor in it");
-  // Inflated by two: one for the shell, and one so there is patio outside it.
-  // The stall stands on that ring, and a shop nobody can walk to is no shop.
-  if (room.x < 2 || room.y < 2) say("no patio between the building and the grid's edge");
-  if (room.x + room.width + 2 > size.width || room.y + room.height + 2 > size.height) {
+  // A tile of paving outside the walls, at least: the stall stands on it, and a
+  // shop nobody can walk to is no shop.
+  if (room.x < 1 || room.y < 1) say("no patio between the building and the grid's edge");
+  if (room.x + room.width + 1 > size.width || room.y + room.height + 1 > size.height) {
     say("no patio between the building and the grid's edge");
   }
   for (const line of level.walls) {
     if (line.from.x !== line.to.x && line.from.y !== line.to.y) say("a diagonal wall");
-    for (const tile of runTiles(line)) {
-      if (!within(room, tile.x, tile.y)) say(`a wall outside the building at ${tile.x},${tile.y}`);
+    else if (line.from.x === line.to.x && line.from.y === line.to.y) say("a wall of no length");
+    // A seam sits on the room's lattice, which is one wider than the room in
+    // the direction it cuts across: eighteen columns of floor have nineteen
+    // lines to hang a north-south wall on, and the outermost two are the shell.
+    for (const seam of runSeams(line)) {
+      const lattice = seam.axis === "vertical" ? grow(room, 1, 0) : grow(room, 0, 1);
+      if (!within(lattice, seam.x, seam.y)) {
+        say(`a wall outside the building at ${seam.x},${seam.y}`);
+      }
     }
   }
-  // The door is a hole in the shell, so it has to be *in* the shell: one tile
-  // off and it is a walkable square in the patio and the dining room is sealed.
-  const onShell =
-    (level.door.x === room.x - 1 || level.door.x === room.x + room.width) !==
-    (level.door.y === room.y - 1 || level.door.y === room.y + room.height);
-  if (!onShell || !within(inflate(room, 1), level.door.x, level.door.y)) {
-    say("the door is not in the building's wall, so no customer can ever arrive");
+  // The door is the tile behind the hole in the shell, so it has to be against
+  // the shell: one tile in and there is no wall for it to pierce, one tile out
+  // and it is a square of patio with the dining room sealed off behind it. A
+  // corner is two walls and no answer, so it is not a door either.
+  const onEdge =
+    (level.door.x === room.x || level.door.x === room.x + room.width - 1) !==
+    (level.door.y === room.y || level.door.y === room.y + room.height - 1);
+  if (!onEdge || !within(room, level.door.x, level.door.y)) {
+    say("the door is not against the building's wall, so no customer can ever arrive");
   }
 
   const seen = new Set<string>();
@@ -328,13 +338,9 @@ function within(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
 }
 
-function inflate(rect: Rect, by: number): Rect {
-  return {
-    x: rect.x - by,
-    y: rect.y - by,
-    width: rect.width + by * 2,
-    height: rect.height + by * 2,
-  };
+/** A rectangle a little wider and taller, for asking about the lattice. */
+function grow(rect: Rect, byX: number, byY: number): Rect {
+  return { ...rect, width: rect.width + byX, height: rect.height + byY };
 }
 
 /** Throw if the content is incoherent. Called at startup in development. */

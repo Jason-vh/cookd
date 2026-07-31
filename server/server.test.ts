@@ -409,7 +409,7 @@ describe("shutting down", () => {
       const saved = parseSave(written);
       expect(saved?.day).toBe(1);
       // The board is on the tile the player moved it to.
-      expect(saved?.appliances).toContainEqual({ kind: "board", x: 12, y: 7 });
+      expect(saved?.appliances).toContainEqual({ kind: "board", x: 11, y: 6 });
     } finally {
       proc.kill();
     }

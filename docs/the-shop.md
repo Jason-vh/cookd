@@ -44,11 +44,13 @@ for by the phase system. It was the only verb in the game that was not a chef
 doing something to an object — the stall's own lesson, *a shop is a place, not a
 menu*, applied to everything except the moment the restaurant opens.
 
-So it is a sign now, hung in the wall beside the door: level furniture like the
-stall and the card stand, immovable, never saved, answering a `Grab` on its own
-terms before any other rule can refuse it. **Zero new verbs.** The tile stays a
-wall tile — solid, unbuildable, part of the shell the renderer bakes — so the
-building is not a hole with a sign in it.
+So it is a sign now, standing against the wall beside the door: level furniture
+like the stall and the card stand, immovable, never saved, answering a `Grab` on
+its own terms before any other rule can refuse it. **Zero new verbs.** It used
+to hang *in* the wall, back when a wall was a solid square there was room to
+hang something in; walls are lines between squares now, so it stands on the
+first tile inside the door — which is where a chef opening the restaurant was
+always walking anyway.
 
 It reads both ways round, which is why it is a sign and not a button:
 
@@ -373,13 +375,14 @@ including the customers' walk up to the door, which now routes over the same
 tiles as everybody else's.
 
 - Patio tiles are `placeable: false`. `canPlace` asks the tile, not "is this
-  outside", so the ring is refused by the same rule that refuses a wall — and
-  outdoor seating one day is some tiles changing their mind about one flag.
+  outside", so the ring is refused by the same rule that refuses the paving —
+  and outdoor seating one day is some tiles changing their mind about one flag.
 - Automatic placement (a leaver's oven going home) already avoided the door; the
   patio falls out of the same `isFreeTile` guard.
-- **Wall-embedded ovens are now reachable from behind, and that is left
-  working.** Interaction keeps its one rule — face the tile — and the walk
-  around the building is the honest cost of using the far side.
+- **An appliance against the shell has one side, and it is the inside.** It used
+  to have two, briefly: a wall was a square, so an oven standing in one could be
+  worked from the paving behind it. A wall is a line now, and interaction keeps
+  its one rule — face the tile you can reach.
 
 The ring shifted every coordinate in the kitchen by two, which no migration can
 honestly repair: a layout is relative to walls that have moved. So the level's

@@ -287,16 +287,39 @@ export type Player = {
   prev: PlayerInput;
 };
 
+export type Rect = { x: number; y: number; width: number; height: number };
+
+/**
+ * Walls, which live on the **seams between tiles** rather than on tiles.
+ *
+ * A wall used to be a solid tile, which cost the kitchen a whole square of
+ * floor everywhere the building had an edge — a dividing wall as wide as the
+ * counters beside it. Nothing stands *in* a wall now: it is a line between two
+ * squares, and crossing it is what is refused.
+ *
+ * Two flat arrays, one per axis, indexed by **lattice** coordinate rather than
+ * by tile: `vertical[y * (width + 1) + x]` is the seam between tiles `(x-1,y)`
+ * and `(x,y)`, and `horizontal[y * width + x]` the seam between `(x,y-1)` and
+ * `(x,y)`. Storing each seam once is what makes "is there a wall between these
+ * two tiles" a single lookup with one answer — a per-tile set of four sides
+ * would store every seam twice and could disagree with itself.
+ */
+export type Walls = {
+  vertical: boolean[];
+  horizontal: boolean[];
+};
+
+/** One seam's worth of wall: which lattice line it is on, and where. */
+export type Seam = { axis: "vertical" | "horizontal"; x: number; y: number };
+
 export type Tile = {
-  /** true for the outer shell; walls are solid and can never hold appliances. */
-  wall: boolean;
-  /** true for the gap in the wall customers arrive through. */
+  /** true for the one tile inside the doorway customers arrive through. */
   door: boolean;
   /**
    * May an appliance stand here?
    *
    * A property of the tile rather than a test for "is this outside", so the
-   * patio ring is refused by the same rule that refuses a wall, and so outdoor
+   * patio ring is refused by the same rule that refuses the paving, and so outdoor
    * seating one day is a flag on some tiles rather than a special case in
    * `canPlace`. The **door is placeable**: sealing your own dining room off is
    * a thing a player is allowed to do to their own kitchen (the build phase
@@ -393,6 +416,9 @@ export type World = {
   width: number;
   height: number;
   tiles: Tile[];
+  /** The building: kitchen floor inside, patio outside. */
+  room: Rect;
+  walls: Walls;
   /** appliance id per tile index, or 0 for none. */
   applianceAt: number[];
   appliances: Map<number, Appliance>;

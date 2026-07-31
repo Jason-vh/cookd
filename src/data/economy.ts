@@ -60,7 +60,6 @@ export const PLATE_PRICE = 10;
  */
 export const STOCK_WEIGHT: Record<ApplianceKind, number> = {
   // Not goods: the level's own furniture.
-  wall: 0,
   stall: 0,
   cards: 0,
   sign: 0,

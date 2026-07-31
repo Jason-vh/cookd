@@ -29,7 +29,7 @@ import {
 import { serveTable } from "./customers";
 import { useCardStand } from "./cards";
 import { useSign } from "./sign";
-import { canPlace, itemLabel, targetAppliance, targetTile } from "../queries";
+import { canPlace, itemLabel, reachedTile, targetAppliance } from "../queries";
 
 export function interactionSystem(world: World, inputs: Inputs): void {
   for (const player of world.players) {
@@ -399,8 +399,8 @@ function tryCombine(held: Item, target: Item): Item | null {
 // --- build phase -------------------------------------------------------------
 
 function buildGrab(world: World, player: Player): void {
-  const tile = targetTile(player);
-  if (!inBounds(world, tile.x, tile.y)) return;
+  const tile = reachedTile(world, player);
+  if (!tile || !inBounds(world, tile.x, tile.y)) return;
   const idx = tileIndex(world, tile.x, tile.y);
 
   // The stall answers a grab entirely on its own terms, in both directions, so

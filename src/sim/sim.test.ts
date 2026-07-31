@@ -14,6 +14,7 @@ import {
   unreachableTables,
 } from "./queries";
 import { isDirty, specKey } from "./items";
+import { seatsAround } from "./pathing";
 import { snapshot } from "../save";
 import { plateCount, platesInWorld } from "./plates";
 import type { Appliance, ApplianceKind, Customer, Item, Player, PlayerInput, World } from "./types";
@@ -24,6 +25,7 @@ import {
   createWorld,
   emptyInput,
   isSolid,
+  PLAYER_RADIUS,
   removePlayer,
   spawnAppliance,
 } from "./world";
@@ -112,32 +114,32 @@ function hold(world: World, seconds: number, button: "use" | null = "use"): void
 // Tile coordinates from data/level.ts. The kitchen sits two columns east and
 // two rows south of the grid's origin: the patio ring is part of the world.
 const CRATE = {
-  tomato: [10, 3],
-  lettuce: [11, 3],
-  cheese: [12, 3],
-  flour: [13, 3],
-  water: [14, 3],
-  potato: [15, 3],
+  tomato: [9, 2],
+  lettuce: [10, 2],
+  cheese: [11, 2],
+  flour: [12, 2],
+  water: [13, 2],
+  potato: [14, 2],
 } as const;
-const PLATES = [16, 3] as const;
-const SINK = [17, 3] as const;
-const BIN = [20, 3] as const;
-const BOARD = [12, 5] as const;
-const COUNTER = [11, 5] as const;
+const PLATES = [15, 2] as const;
+const SINK = [16, 2] as const;
+const BIN = [19, 2] as const;
+const BOARD = [11, 4] as const;
+const COUNTER = [10, 4] as const;
 // Not in the level any more: `equip` stands them here, as a card's delivery
 // would. An oven used to be embedded in the east wall; a delivered one lands on
 // an interior tile, which is the only place the game may put anything.
-const OVEN = [20, 6] as const;
-const FRYER = [20, 9] as const;
-const PASS = [9, 6] as const;
+const OVEN = [19, 5] as const;
+const FRYER = [19, 8] as const;
+const PASS = [8, 5] as const;
 /** A table in the dining room, approached from the tile above it. */
-const TABLE = [4, 4] as const;
+const TABLE = [3, 3] as const;
 /** The dining room's other table, for tests that need two people at once. */
-const TABLE2 = [4, 8] as const;
+const TABLE2 = [3, 7] as const;
 /** The middle slot of the market stall, faced from the patio beside it. */
-const STALL = [0, 4] as const;
-/** The sign, hanging in the wall beside the door and faced from inside. */
-const SIGN = [2, 5] as const;
+const STALL = [0, 3] as const;
+/** The sign, standing against the wall beside the door, faced from the east. */
+const SIGN = [2, 4] as const;
 
 /**
  * Turn the sign: the only way in or out of service a player has.
@@ -441,15 +443,15 @@ describe("kitchen basics", () => {
     // eject them sideways out of the kitchen.
     const world = makeWorld();
     const player = world.players[0]!;
-    player.pos.x = 10.33;
-    player.pos.y = 4.32; // pressed flush against the crate row
+    player.pos.x = 9.33;
+    player.pos.y = 3.32; // pressed flush against the crate row
 
     const inputs = idle();
     inputs[0]!.move.x = 1;
     for (let i = 0; i < 60; i++) step(world, inputs);
 
-    expect(player.pos.y).toBeCloseTo(4.32, 6);
-    expect(player.pos.x).toBeGreaterThan(13);
+    expect(player.pos.y).toBeCloseTo(3.32, 6);
+    expect(player.pos.x).toBeGreaterThan(12);
     expect(player.pos.x).toBeLessThan(world.width);
   });
 
@@ -1142,7 +1144,7 @@ describe("what the kitchen says is wrong with it", () => {
     // would describe the symptoms of a single wall, so past a few it counts
     // instead — the same rule as "nothing on the menu can be made here".
     const world = makeWorld();
-    for (let x = PLATES[0]; x <= BIN[0]; x++) spawnAppliance(world, "counter", { x, y: 4 });
+    for (let x = PLATES[0]; x <= BIN[0]; x++) spawnAppliance(world, "counter", { x, y: 3 });
 
     expect(unreachableAppliances(world)).toHaveLength(5);
     expect(kitchenWarnings(world)).toContain("5 appliances can't be walked up to");
@@ -1179,6 +1181,45 @@ describe("what the kitchen says is wrong with it", () => {
     expect(plateCount(home.item)).toBe(1);
     expect(isDirty(home.item)).toBe(false);
     expect(home.item!.contents.filter((child) => child.base !== "plate")).toHaveLength(0);
+  });
+});
+
+describe("walls between blocks", () => {
+  test("a wall takes no floor: the divider is a line, not a column of squares", () => {
+    // The whole of the change, in one assertion. The dividing wall used to be a
+    // column of solid tiles as wide as the counters either side of it; the
+    // square it stood on is ordinary kitchen floor now, and the wall is the
+    // line down one edge of it.
+    const world = makeWorld();
+    expect(isSolid(world, PASS[0], PASS[1] - 1)).toBe(false);
+    expect(canPlace(world, PASS[0], PASS[1] - 1)).toBe(true);
+  });
+
+  test("a chef is stopped by the line, and goes round through the gap", () => {
+    const world = makeWorld();
+    const player = world.players[0]!;
+    const eastFrom = (y: number): number => {
+      player.pos = { x: 3.5, y };
+      player.prevPos = { ...player.pos };
+      const inputs = idle();
+      inputs[0]!.move = { x: 1, y: 0 };
+      for (let i = 0; i < 120; i++) step(world, inputs);
+      return player.pos.x;
+    };
+
+    // Walled: they come to rest flush against the seam, half a tile further
+    // east than a wall of squares would have let them.
+    expect(eastFrom(2.5)).toBeCloseTo(PASS[0] - PLAYER_RADIUS, 3);
+    // The gap beside the pass: through it, and on into the kitchen.
+    expect(eastFrom(PASS[1] - 0.5)).toBeGreaterThan(PASS[0] + 1);
+  });
+
+  test("a square against the wall has three sides, and the fourth is not one", () => {
+    // What `seatsAround` is for, and why it had to learn about walls: the tile
+    // west of the sign is paving, walkable, and on the other side of the shell.
+    // A chair there is a chair nobody can sit in.
+    const world = makeWorld();
+    expect(seatsAround(world, { x: SIGN[0], y: SIGN[1] })).toHaveLength(3);
   });
 });
 
@@ -1223,23 +1264,22 @@ describe("the patio ring", () => {
     expect(canPlace(world, world.door.x, world.door.y)).toBe(true);
   });
 
-  test("an appliance in the wall can be worked from the patio side", () => {
-    // The ring gives wall-embedded appliances a back, and that is left working.
-    // Interaction keeps its one rule — face the tile — and the walk around the
-    // building is the honest cost of using the far side of one.
-    //
-    // The park kitchen no longer *ships* one: its ovens went with the trim, and
-    // a delivered appliance always lands on an interior tile. So the rule is
-    // tested on an oven stood in the wall by hand, which is what a level author
-    // does and what the legend still allows.
+  test("an appliance against the wall has one side, and it is the inside", () => {
+    // Walls stand on the seams between tiles now, so the back of an oven on the
+    // east run is the wall itself. A chef out on the paving is facing the
+    // *square* it stands on and can no longer touch what is on it — which is
+    // the rule that used to come for free when a wall was a tile in between.
     const world = makeWorld();
-    const wall = { x: 21, y: 7 };
-    spawnAppliance(world, "oven", wall);
+    const oven = { x: 19, y: 6 };
+    spawnAppliance(world, "oven", oven);
 
     takeFrom(world, CRATE.tomato);
-    // Stand *outside* the east wall, facing back in at the oven.
-    putOn(world, [wall.x, wall.y] as const, -1, 0);
-    expect(applianceAtTile(world, wall.x, wall.y)!.item?.base).toBe("tomato");
+    putOn(world, [oven.x, oven.y] as const, -1, 0); // from the patio, through the wall
+    expect(applianceAtTile(world, oven.x, oven.y)!.item).toBeNull();
+    expect(world.players[0]!.carried).not.toBeNull();
+
+    putOn(world, [oven.x, oven.y] as const, 1, 0); // from inside the kitchen
+    expect(applianceAtTile(world, oven.x, oven.y)!.item?.base).toBe("tomato");
     expect(world.players[0]!.carried).toBeNull();
   });
 
@@ -1611,7 +1651,7 @@ describe("the dining room", () => {
     // mistake somebody will make in their first week.
     const counter = applianceAtTile(world, COUNTER[0], COUNTER[1])!;
     world.applianceAt[COUNTER[1] * world.width + COUNTER[0]] = 0;
-    counter.tile = { x: world.door.x + 1, y: world.door.y };
+    counter.tile = { x: world.door.x, y: world.door.y };
     world.applianceAt[counter.tile.y * world.width + counter.tile.x] = counter.id;
 
     expect(unreachableTables(world)).toHaveLength(2);

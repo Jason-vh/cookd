@@ -6,7 +6,8 @@ import { isDirty, isPlate, specKey } from "./items";
 import { plateCount } from "./plates";
 import { reachableFrom, seatsAround } from "./pathing";
 import { customerSpeed, eatTime, LAST_ORDERS } from "./systems/customers";
-import type { Appliance, Customer, Item, Player, Station, World } from "./types";
+import type { Appliance, Customer, Item, Player, Station, Vec2, World } from "./types";
+import { canReach } from "./walls";
 import { applianceAtTile, inBounds, tileIndex } from "./world";
 
 /**
@@ -34,16 +35,32 @@ import { applianceAtTile, inBounds, tileIndex } from "./world";
 const REACH = 0.75;
 
 /** The tile a player is pointing at — the white square in front of the chef. */
-export function targetTile(player: Player): { x: number; y: number } {
+export function targetTile(player: Player): Vec2 {
   return {
     x: Math.floor(player.pos.x + player.facing.x * REACH),
     y: Math.floor(player.pos.y + player.facing.y * REACH),
   };
 }
 
-export function targetAppliance(world: World, player: Player): Appliance | null {
+/**
+ * The tile a player is pointing at *and can touch*, or null for neither.
+ *
+ * The two came apart when walls moved onto the seams: the square in front of a
+ * chef standing against the shell is out on the patio, and reaching an oven
+ * through the back wall of the kitchen is not a thing arms do. Every rule that
+ * acts on what is faced goes through here; `targetTile` stays as it was, for
+ * the highlight and the placement ghost, which want to know where the square
+ * *is* before deciding whether to draw it.
+ */
+export function reachedTile(world: World, player: Player): Vec2 | null {
   const tile = targetTile(player);
-  return applianceAtTile(world, tile.x, tile.y);
+  const from = { x: Math.floor(player.pos.x), y: Math.floor(player.pos.y) };
+  return canReach(world, from, tile) ? tile : null;
+}
+
+export function targetAppliance(world: World, player: Player): Appliance | null {
+  const tile = reachedTile(world, player);
+  return tile ? applianceAtTile(world, tile.x, tile.y) : null;
 }
 
 /**

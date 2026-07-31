@@ -1,4 +1,4 @@
-import type { ApplianceKind, ItemSpec, Vec2 } from "../sim/types";
+import type { ApplianceKind, ItemSpec, Rect, Seam, Vec2 } from "../sim/types";
 
 /**
  * Kitchens are structured data: a rectangle for the building, a list of walls,
@@ -19,9 +19,17 @@ import type { ApplianceKind, ItemSpec, Vec2 } from "../sim/types";
  * market stall stands — the walk around the building being the honest price of
  * using it.
  */
-export type Rect = { x: number; y: number; width: number; height: number };
 
-/** A straight run of wall tiles, inclusive of both ends. */
+/**
+ * A straight run of wall along the **seams between tiles**, from one lattice
+ * corner to another.
+ *
+ * Corner `(x,y)` is the top-left corner of tile `(x,y)`, so `wall(8, 2, 8, 4)`
+ * is the line between columns 7 and 8 for the two tile rows 2 and 3 — the far
+ * end names the corner the wall stops at, not the last tile it covers. Runs
+ * meet end to end, which is why they are polylines rather than tile ranges: a
+ * wall is a line on the floor plan, and this is how one is drawn.
+ */
 export type WallRun = { from: Vec2; to: Vec2 };
 
 /** Something the level stands on a tile before anybody has played a day. */
@@ -42,9 +50,12 @@ export type LevelDef = {
   biome: string;
   /** The whole grid, patio included. */
   size: { width: number; height: number };
-  /** The building. Kitchen floor inside, walls around it, patio beyond. */
+  /** The building. Kitchen floor inside, walls on its edges, patio beyond. */
   room: Rect;
-  /** The gap in the shell customers arrive through. */
+  /**
+   * The tile just inside the way in. The wall it stands against is the one with
+   * the hole in it — see `doorSeam`.
+   */
   door: Vec2;
   /** Interior walls. The shell comes from `room`, and `door` is its one hole. */
   walls: WallRun[];
@@ -95,49 +106,58 @@ export const crate = (base: string, x: number, y: number): Placement => ({
 
 /** Every wall in this level: the shell the room implies, then the interior ones. */
 export function wallRuns(level: LevelDef): WallRun[] {
-  const x0 = level.room.x - 1;
-  const y0 = level.room.y - 1;
-  const x1 = level.room.x + level.room.width;
-  const y1 = level.room.y + level.room.height;
+  const { x, y, width, height } = level.room;
   return [
-    wall(x0, y0, x1, y0),
-    wall(x0, y1, x1, y1),
-    wall(x0, y0, x0, y1),
-    wall(x1, y0, x1, y1),
+    wall(x, y, x + width, y),
+    wall(x, y + height, x + width, y + height),
+    wall(x, y, x, y + height),
+    wall(x + width, y, x + width, y + height),
     ...level.walls,
   ];
 }
 
-/** The tiles a run covers. Diagonal runs are not a thing a wall can be. */
-export function runTiles(line: WallRun): Vec2[] {
-  const stepX = Math.sign(line.to.x - line.from.x);
-  const stepY = Math.sign(line.to.y - line.from.y);
-  const length = Math.max(Math.abs(line.to.x - line.from.x), Math.abs(line.to.y - line.from.y));
-  return Array.from({ length: length + 1 }, (_, i) => ({
-    x: line.from.x + stepX * i,
-    y: line.from.y + stepY * i,
-  }));
+/** The seams a run covers. Diagonal runs are not a thing a wall can be. */
+export function runSeams(line: WallRun): Seam[] {
+  const [x0, x1] = [Math.min(line.from.x, line.to.x), Math.max(line.from.x, line.to.x)];
+  const [y0, y1] = [Math.min(line.from.y, line.to.y), Math.max(line.from.y, line.to.y)];
+  if (x0 === x1) {
+    return Array.from({ length: y1 - y0 }, (_, i) => ({
+      axis: "vertical" as const,
+      x: x0,
+      y: y0 + i,
+    }));
+  }
+  if (y0 === y1) {
+    return Array.from({ length: x1 - x0 }, (_, i) => ({
+      axis: "horizontal" as const,
+      x: x0 + i,
+      y: y0,
+    }));
+  }
+  return [];
 }
 
 export const PARK_KITCHEN: LevelDef = {
-  // `-2` because the patio ring moved every tile in the kitchen two columns
-  // east and two rows south. A save from before it describes a kitchen whose
-  // coordinates no longer mean the same thing.
-  id: "park-kitchen-2",
+  // `-3` because walls moved onto the seams between tiles, which gave the room
+  // back the ring of squares its own shell used to stand on and moved every
+  // tile in the kitchen one column west and one row north. A save from before
+  // it describes a kitchen whose coordinates no longer mean the same thing, and
+  // there is no honest way to shift them.
+  id: "park-kitchen-3",
   name: "Park Kitchen",
   biome: "park",
   dayLength: 150,
   // Two spare over the seat count, as ever — the rule survives the kitchen
   // getting smaller, which is the point of stating it as a rule.
   plates: 4,
-  size: { width: 24, height: 13 },
-  // Patio (x 0..1) | dining room (x 3..8) | dividing wall (x 9) | kitchen
-  // (x 10..20) | patio again (x 22..23).
-  room: { x: 3, y: 3, width: 18, height: 7 },
-  door: { x: 2, y: 6 },
-  // The divider, stopping either side of the walk-through gap at (9,5). What
+  size: { width: 22, height: 11 },
+  // Patio (x 0..1) | dining room (x 2..7) | the divider, on the seam at x = 8 |
+  // kitchen (x 8..19) | patio again (x 20..21).
+  room: { x: 2, y: 2, width: 18, height: 7 },
+  door: { x: 2, y: 5 },
+  // The divider, stopping either side of the walk-through gap at row 4. What
   // fills the rest of it is two ordinary counters — see the pass, below.
-  walls: [wall(9, 3, 9, 4), wall(9, 8, 9, 9)],
+  walls: [wall(8, 2, 8, 4), wall(8, 7, 8, 9)],
   //
   // The sink starts next to the plate stack, so washing up and putting away is
   // one move by default. Whether that is where it belongs — against the run to
@@ -156,84 +176,87 @@ export const PARK_KITCHEN: LevelDef = {
   appliances: [
     // The patio furniture, which belongs to the place rather than to anybody's
     // build: the stall on the west apron, the card stand below it.
-    ...run("stall", 0, 3, 3, "y"),
-    ...run("cards", 0, 7, 2, "y"),
-    // The sign hangs *in* the wall beside the door — an appliance on a wall
-    // tile, which stays solid and part of the shell the renderer bakes.
-    at("sign", 2, 5),
+    ...run("stall", 0, 2, 3, "y"),
+    ...run("cards", 0, 6, 2, "y"),
+    // The sign stands against the wall beside the door, on the first tile
+    // inside it: a wall is a line between squares now, so there is nothing to
+    // hang it *in* — and a chef opening the day is somebody walking to the door
+    // either way.
+    at("sign", 2, 4),
     // The back run: crates, then wash-up.
-    crate("tomato", 10, 3),
-    crate("lettuce", 11, 3),
-    at("plates", 16, 3),
-    at("sink", 17, 3),
-    ...run("counter", 18, 3, 2),
-    at("bin", 20, 3),
+    crate("tomato", 9, 2),
+    crate("lettuce", 10, 2),
+    at("plates", 15, 2),
+    at("sink", 16, 2),
+    ...run("counter", 17, 2, 2),
+    at("bin", 19, 2),
     // The island, and the worktop below it.
-    at("counter", 11, 5),
-    at("board", 12, 5),
-    at("counter", 13, 5),
-    ...run("counter", 11, 8, 3),
+    at("counter", 10, 4),
+    at("board", 11, 4),
+    at("counter", 12, 4),
+    ...run("counter", 10, 7, 3),
     // **The pass is a place, not an appliance**: two ordinary counters standing
-    // in the dividing wall, which players can lift for a wide opening between
-    // the rooms or fill in beside for a single narrow one.
-    ...run("counter", 9, 6, 2, "y"),
+    // against the dividing wall, which players can lift for a wide opening
+    // between the rooms or fill in beside for a single narrow one.
+    ...run("counter", 8, 5, 2, "y"),
     // The dining room.
-    at("table", 4, 4),
-    at("table", 4, 8),
+    at("table", 3, 3),
+    at("table", 3, 7),
   ],
   spawns: [
-    { x: 12, y: 6 },
-    { x: 15, y: 6 },
-    { x: 18, y: 6 },
+    { x: 11, y: 5 },
+    { x: 14, y: 5 },
+    { x: 17, y: 5 },
   ],
 };
 
 export const BEACH_SHACK: LevelDef = {
-  id: "beach-shack-1",
+  id: "beach-shack-2",
   name: "Beach Shack",
   biome: "beach",
   dayLength: 150,
   plates: 4,
-  size: { width: 20, height: 12 },
+  size: { width: 18, height: 10 },
   // The park kitchen's opposite bargain: **a big deck and a small galley.**
   // Three tables standing in the open against six columns of kitchen, where the
   // park has two tables and eleven. Seats pull customers in, so this room is
   // busier from day one and has less floor to solve it with — the same dials
   // the shop hands a player, set differently before they arrive.
   //
-  // Patio (x 0..1) | dining room (x 3..9) | dividing wall (x 10) | galley
-  // (x 11..16) | patio again (x 18..19).
-  room: { x: 3, y: 2, width: 14, height: 8 },
-  door: { x: 2, y: 6 },
-  // The divider, broken by the two pass counters and the gap at (10,5).
-  walls: [wall(10, 2, 10, 2), wall(10, 4, 10, 4), wall(10, 6, 10, 6), wall(10, 8, 10, 9)],
+  // Patio (x 0..1) | dining room (x 2..8) | the divider, on the seam at x = 9 |
+  // galley (x 9..15) | patio again (x 16..17).
+  room: { x: 2, y: 1, width: 14, height: 8 },
+  door: { x: 2, y: 5 },
+  // The divider, in four pieces: the gap at row 4, and the two rows the pass
+  // counters stand against.
+  walls: [wall(9, 1, 9, 2), wall(9, 3, 9, 4), wall(9, 5, 9, 6), wall(9, 7, 9, 9)],
   appliances: [
-    ...run("stall", 0, 3, 3, "y"),
-    ...run("cards", 0, 7, 2, "y"),
-    at("sign", 2, 5),
+    ...run("stall", 0, 2, 3, "y"),
+    ...run("cards", 0, 6, 2, "y"),
+    at("sign", 2, 4),
     // The galley: crates and bin along the top, wash-up along the bottom.
-    crate("tomato", 11, 2),
-    crate("lettuce", 12, 2),
-    ...run("counter", 13, 2, 3),
-    at("bin", 16, 2),
-    at("board", 13, 4),
-    at("plates", 11, 9),
-    at("sink", 12, 9),
-    ...run("counter", 13, 9, 3),
+    crate("tomato", 10, 1),
+    crate("lettuce", 11, 1),
+    ...run("counter", 12, 1, 3),
+    at("bin", 15, 1),
+    at("board", 12, 3),
+    at("plates", 10, 8),
+    at("sink", 11, 8),
+    ...run("counter", 12, 8, 3),
     // The pass, either side of the gap.
-    at("counter", 10, 3),
-    at("counter", 10, 7),
+    at("counter", 9, 2),
+    at("counter", 9, 6),
     // Every table has four free sides on purpose: this is the room that seats
     // [parties](../../docs/dining-room.md), and a kitchen that cannot cook two
     // dishes at once is exactly the wrong kitchen to be handed one.
-    at("table", 5, 3),
-    at("table", 8, 5),
-    at("table", 5, 7),
+    at("table", 4, 2),
+    at("table", 7, 4),
+    at("table", 4, 6),
   ],
   spawns: [
-    { x: 13, y: 5 },
-    { x: 15, y: 5 },
-    { x: 13, y: 7 },
+    { x: 12, y: 4 },
+    { x: 14, y: 4 },
+    { x: 12, y: 6 },
   ],
 };
 

@@ -14,16 +14,38 @@ import { canvas2d, cssHex } from "./text";
 
 // --- walls -------------------------------------------------------------------
 
-export function buildWall(height: number): THREE.Object3D {
+/**
+ * How thick a wall is, in tiles.
+ *
+ * A wall used to be a whole square, which made a dividing wall as wide as the
+ * counters either side of it and cost the kitchen a ring of floor it never got
+ * to use. They stand on the **seams between tiles** now, so this is the only
+ * place the thickness is decided — wide enough to read as masonry at this
+ * camera angle, and narrow enough that the room it divides is still one room.
+ */
+export const WALL_THICKNESS = 0.18;
+
+/**
+ * One seam's worth of wall, centred on the line and running the length of a
+ * tile.
+ *
+ * Built a little **longer** than the tile it spans, by its own thickness, so
+ * that two runs meeting at a corner overlap instead of leaving a notch. They
+ * are merged into one mesh per material on the way into the scene, so the
+ * overlap costs nothing and a mitre would cost geometry nobody can see.
+ */
+export function buildWall(height: number, axis: "vertical" | "horizontal"): THREE.Object3D {
   const group = new THREE.Group();
   // Low near-side lips are mostly top face, so they catch a lot of sun. A
   // darker paint keeps them from becoming the brightest band in the frame.
   const color = height < 0.5 ? PALETTE.wallLow : PALETTE.wall;
-  const body = mesh(roundedBox(1, height, 1, 0.05), color, "enamel");
+  const long = 1 + WALL_THICKNESS;
+  const [w, d] = axis === "vertical" ? [WALL_THICKNESS, long] : [long, WALL_THICKNESS];
+  const body = mesh(roundedBox(w, height, d, 0.04), color, "enamel");
   body.position.y = height / 2;
   group.add(body);
   if (height > 0.6) {
-    const trim = mesh(roundedBox(1.04, 0.09, 1.04, 0.03), PALETTE.wallTrim, "enamel");
+    const trim = mesh(roundedBox(w + 0.05, 0.09, d + 0.05, 0.03), PALETTE.wallTrim, "enamel");
     trim.position.y = height;
     group.add(trim);
   }
@@ -31,23 +53,25 @@ export function buildWall(height: number): THREE.Object3D {
 }
 
 /**
- * The way in: two posts and a lintel where a wall tile would otherwise be.
+ * The way in: two jambs and a lintel across the seam a wall is missing from.
  *
- * The tile itself stays walkable — this is scenery around a hole, not a wall
- * with a hole in it — so customers stream through the middle of it and the
- * paving outside leads straight to it.
+ * Scenery around a hole rather than a wall with a hole in it — nothing here is
+ * collided with, because there is simply no wall on that seam, so customers
+ * stream through the middle of it and the paving outside leads straight to it.
+ *
+ * Built for a wall running north–south; a doorway in the other axis is this,
+ * turned a quarter.
  */
 export function buildDoorway(): THREE.Object3D {
   const group = new THREE.Group();
-  // Flush with the wall it interrupts, so it reads as a gate in a wall rather
-  // than a structure standing next to one.
   const height = 1.1;
+  const depth = WALL_THICKNESS;
   for (const z of [-0.42, 0.42]) {
-    const post = mesh(roundedBox(1, height, 0.16, 0.04), PALETTE.wall, "enamel");
+    const post = mesh(roundedBox(depth, height, 0.16, 0.04), PALETTE.wall, "enamel");
     post.position.set(0, height / 2, z);
     group.add(post);
   }
-  const lintel = mesh(roundedBox(1.04, 0.14, 1.04, 0.04), PALETTE.wallTrim, "enamel");
+  const lintel = mesh(roundedBox(depth + 0.05, 0.14, 1 + depth, 0.04), PALETTE.wallTrim, "enamel");
   lintel.position.y = height + 0.07;
   group.add(lintel);
   return group;

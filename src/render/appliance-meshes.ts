@@ -427,7 +427,6 @@ type Look = {
 
 const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // Enamel bodies for anything that would really be enamelled steel.
-  wall: { body: [PALETTE.wood, "wood"] },
   // Built by `buildStall`, and labelled with a price rather than a name.
   stall: { body: [PALETTE.stallBody, "wood"] },
   // Built by `buildCardStand`, and labelled with whatever is on the card.

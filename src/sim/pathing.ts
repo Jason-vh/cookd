@@ -1,13 +1,19 @@
 import type { Vec2, World } from "./types";
+import { wallBetween } from "./walls";
 import { inBounds, isSolid, tileIndex } from "./world";
 
 /**
  * Grid pathfinding for customers, and the reachability check the build phase
  * uses to warn about a walled-off dining room.
  *
- * Both are the same breadth-first flood fill over non-solid tiles, which is why
- * they live together: the rule that decides where a customer *can* go and the
- * warning that tells a player they have blocked it must never disagree.
+ * Both are the same breadth-first flood fill over steps somebody could take,
+ * which is why they live together: the rule that decides where a customer *can*
+ * go and the warning that tells a player they have blocked it must never
+ * disagree.
+ *
+ * A **step**, not a tile: walls live on the seams between squares, so "can I be
+ * there" and "can I get there from here" are different questions and only the
+ * second one is the one worth asking.
  *
  * BFS rather than A*: the grid is a couple of hundred tiles and a search costs
  * microseconds. A* would be faster per search and a great deal more code to be
@@ -30,7 +36,7 @@ export function reachableFrom(world: World, origin: Vec2): Set<number> {
     for (const step of NEIGHBOURS) {
       const x = at.x + step.x;
       const y = at.y + step.y;
-      if (!inBounds(world, x, y) || isSolid(world, x, y)) continue;
+      if (!canStep(world, at, x, y)) continue;
       const index = tileIndex(world, x, y);
       if (seen.has(index)) continue;
       seen.add(index);
@@ -63,7 +69,7 @@ export function pathTo(world: World, from: Vec2, to: Vec2): Vec2[] | null {
     for (const step of NEIGHBOURS) {
       const x = at.x + step.x;
       const y = at.y + step.y;
-      if (!inBounds(world, x, y) || isSolid(world, x, y)) continue;
+      if (!canStep(world, at, x, y)) continue;
       const index = tileIndex(world, x, y);
       if (cameFrom.has(index)) continue;
       cameFrom.set(index, tileIndex(world, at.x, at.y));
@@ -99,10 +105,19 @@ export function seatsAround(world: World, tile: Vec2): Vec2[] {
   for (const step of NEIGHBOURS) {
     const x = tile.x + step.x;
     const y = tile.y + step.y;
-    if (!inBounds(world, x, y) || isSolid(world, x, y)) continue;
+    // The wall check is what stops a counter against the shell being "reachable"
+    // from the patio on the other side of it, which is a chair nobody can sit
+    // in and a warning the build phase would never give.
+    if (!canStep(world, tile, x, y)) continue;
     seats.push({ x, y });
   }
   return seats;
+}
+
+/** May somebody standing on `from` walk onto `(x,y)`? */
+function canStep(world: World, from: Vec2, x: number, y: number): boolean {
+  if (!inBounds(world, x, y) || isSolid(world, x, y)) return false;
+  return !wallBetween(world, from, { x, y });
 }
 
 const NEIGHBOURS: Vec2[] = [

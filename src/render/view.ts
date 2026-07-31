@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { EffectCue, World } from "../sim/types";
 import { applianceAtTile, playerById } from "../sim/world";
+import { doorSeam, horizontalWall, verticalWall } from "../sim/walls";
 import { biome as lookupBiome } from "../data/biomes";
 import { cameraYaw } from "../orientation";
 import { lerp } from "./anim";
@@ -37,32 +38,6 @@ import { createPost, postEnabled, type Post } from "./post";
  *
  * Art direction lives in `palette.ts` (colour) and `meshes.ts` (form).
  */
-/**
- * The rectangle the walls enclose, in tiles.
- *
- * "The kitchen" and "the world" used to be the same rectangle, and several
- * things quietly relied on it. They stopped being the same the day the patio
- * ring became real tiles, so the building has to be found rather than assumed.
- */
-function wallBounds(world: World): { minX: number; minY: number; maxX: number; maxY: number } {
-  let minX = world.width;
-  let minY = world.height;
-  let maxX = 0;
-  let maxY = 0;
-  for (let y = 0; y < world.height; y++) {
-    for (let x = 0; x < world.width; x++) {
-      if (!world.tiles[y * world.width + x]?.wall) continue;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  return minX > maxX
-    ? { minX: 0, minY: 0, maxX: world.width - 1, maxY: world.height - 1 }
-    : { minX, minY, maxX, maxY };
-}
-
 /**
  * Which of the four corners a yaw is looking from, as a value that can be
  * compared. Only which side of each axis the camera is on matters.
@@ -156,14 +131,12 @@ export class View {
   private buildKitchenShell(world: World): void {
     const shell = new THREE.Group();
 
-    // The kitchen is no longer the whole grid: the patio ring is part of the
-    // world now, and it is paved by the biome rather than tiled by the kitchen.
-    // Measured from the walls rather than passed in, because a floor is the
-    // thing inside walls — and a level with a different ring would otherwise
-    // have to remember to say so somewhere else as well.
-    const room = wallBounds(world);
-    const width = room.maxX - room.minX + 1;
-    const height = room.maxY - room.minY + 1;
+    // The kitchen is not the whole grid: the patio ring is part of the world
+    // too, and it is paved by the biome rather than tiled by the kitchen. The
+    // building says where it is — the renderer used to go looking for it by
+    // scanning for wall tiles, which stopped being a thing to find the day
+    // walls moved onto the seams.
+    const { x, y, width, height } = world.room;
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(width, height),
@@ -174,7 +147,7 @@ export class View {
       }),
     );
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(room.minX + width / 2, 0.004, room.minY + height / 2);
+    floor.position.set(x + width / 2, 0.004, y + height / 2);
     floor.receiveShadow = true;
     shell.add(floor);
 
@@ -195,7 +168,7 @@ export class View {
    * the walls are rebuilt when that answer changes.
    *
    * Rebuilt rather than toggled because they are baked into one merged mesh per
-   * material, which is what keeps a hundred wall tiles off the draw call
+   * material, which is what keeps a hundred wall segments off the draw call
    * budget. It happens on a keypress, four times around, and never during play.
    */
   private buildWalls(world: World): void {
@@ -205,31 +178,43 @@ export class View {
     const yaw = this.rig.facing;
     this.wallCorner = corner(yaw);
 
-    const room = wallBounds(world);
+    const room = world.room;
     // The near edges are the ones whose outside faces the camera: with the
-    // camera at +x/+z those are the last column and the last row, and each
-    // quarter turn hands the lip to the next two runs.
-    const nearX = Math.sin(yaw) > 0 ? room.maxX : room.minX;
-    const nearY = Math.cos(yaw) > 0 ? room.maxY : room.minY;
+    // camera at +x/+z those are the east and south lines of the shell, and each
+    // quarter turn hands the lip to the next two runs. Only the shell gets it:
+    // an interior wall cut to a lip would be a divider you could see over from
+    // one side of the room and not the other.
+    const nearX = Math.sin(yaw) > 0 ? room.x + room.width : room.x;
+    const nearY = Math.cos(yaw) > 0 ? room.y + room.height : room.y;
 
     const group = new THREE.Group();
     for (let y = 0; y < world.height; y++) {
-      for (let x = 0; x < world.width; x++) {
-        const tile = world.tiles[y * world.width + x];
-        if (tile?.door) {
-          // The gap customers arrive through. A frame around it is what stops
-          // it reading as a hole somebody forgot to wall up.
-          const frame = buildDoorway();
-          frame.position.set(x + 0.5, 0, y + 0.5);
-          group.add(frame);
-          continue;
-        }
-        if (!tile?.wall) continue;
-        const wall = buildWall(x === nearX || y === nearY ? 0.26 : 1.1);
-        wall.position.set(x + 0.5, 0, y + 0.5);
+      for (let x = 0; x <= world.width; x++) {
+        if (!verticalWall(world, x, y)) continue;
+        const wall = buildWall(x === nearX ? 0.26 : 1.1, "vertical");
+        wall.position.set(x, 0, y + 0.5);
         group.add(wall);
       }
     }
+    for (let y = 0; y <= world.height; y++) {
+      for (let x = 0; x < world.width; x++) {
+        if (!horizontalWall(world, x, y)) continue;
+        const wall = buildWall(y === nearY ? 0.26 : 1.1, "horizontal");
+        wall.position.set(x + 0.5, 0, y);
+        group.add(wall);
+      }
+    }
+
+    // The gap customers arrive through. A frame around it is what stops it
+    // reading as a hole somebody forgot to wall up.
+    const gap = doorSeam(world.room, world.door);
+    const frame = buildDoorway();
+    if (gap.axis === "vertical") frame.position.set(gap.x, 0, gap.y + 0.5);
+    else {
+      frame.position.set(gap.x + 0.5, 0, gap.y);
+      frame.rotation.y = Math.PI / 2;
+    }
+    group.add(frame);
 
     const baked = mergeStatic(group);
     this.walls.push(...baked);

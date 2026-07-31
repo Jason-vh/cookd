@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
-import { canPlace, targetTile } from "../sim/queries";
+import { canPlace, reachedTile } from "../sim/queries";
 import type { World } from "../sim/types";
 import { applianceAtTile } from "../sim/world";
 import type { ApplianceViews } from "./appliance-views";
@@ -44,10 +44,17 @@ export class HighlightViews {
         this.meshes.set(player.id, mesh);
       }
 
-      const tile = targetTile(player);
-      const inside = tile.x >= 0 && tile.y >= 0 && tile.x < world.width && tile.y < world.height;
+      // Nothing to point at through a wall: the square goes out rather than
+      // sitting on a tile the chef cannot touch.
+      const tile = reachedTile(world, player);
+      const inside =
+        tile !== null &&
+        tile.x >= 0 &&
+        tile.y >= 0 &&
+        tile.x < world.width &&
+        tile.y < world.height;
       mesh.visible = inside;
-      if (!inside) continue;
+      if (!tile || !inside) continue;
 
       const appliance = applianceAtTile(world, tile.x, tile.y);
       const height = appliance ? applianceDef(appliance.kind).height + 0.1 : 0.03;

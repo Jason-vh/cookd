@@ -91,8 +91,8 @@ The white square in front of your chef is what you'll interact with.
 6. **Take it to the table that ordered it.** Customers walk in through the park
    gate, sit down, and a bubble appears over their table showing the dish they
    want and a ring counting down their patience. Placing the plate on that
-   table feeds them. The two counters in the dividing wall are the **pass** —
-   one player can plate and slide, another can run.
+   table feeds them. The two counters standing where the dividing wall stops are
+   the **pass** — one player can plate and slide, another can run.
 
    **Not everybody waits the same.** Somebody hurrying up the path in a dark
    coat has half the patience and pays for it; somebody ambling in will wait,
@@ -132,7 +132,7 @@ The white square in front of your chef is what you'll interact with.
    **swap**. Tables are appliances too, so where the dining room goes is your
    decision.
 
-   **The sign hangs in the wall beside the door**, and it is how a day begins
+   **The sign stands against the wall beside the door**, and it is how a day begins
    and ends. Face it, `Grab`, and the restaurant is open — there is no button
    and no menu item for it. Turning it back over mid-service is **last orders**:
    nobody new comes in, and the day ends once the room has emptied, so closing

@@ -328,7 +328,6 @@ function parseLayout(value: unknown): Layout | null {
  * is now a build error naming the key.
  */
 const APPLIANCE_KINDS: Record<ApplianceKind, true> = {
-  wall: true,
   stall: true,
   cards: true,
   sign: true,

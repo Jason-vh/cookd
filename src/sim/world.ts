@@ -1,9 +1,10 @@
 import { applianceDef } from "../data/appliances";
-import { runTiles, wallRuns, type LevelDef } from "../data/level";
+import { runSeams, wallRuns, type LevelDef } from "../data/level";
 import { STARTING_RECIPES } from "../data/progression";
 import { plateCount, stockPlates } from "./plates";
 import { nextRandom } from "./random";
 import { restockStall } from "./shop";
+import { createWalls, doorSeam, setHorizontalWall, setVerticalWall } from "./walls";
 import type {
   Appliance,
   ApplianceKind,
@@ -60,10 +61,16 @@ export function applianceAtTile(world: World, x: number, y: number): Appliance |
   return id === 0 ? null : (world.appliances.get(id) ?? null);
 }
 
-/** Solid tiles block player movement. */
+/**
+ * Is this square occupied?
+ *
+ * Only appliances occupy squares. Walls used to as well, and the difference is
+ * the whole of the change that put them on the seams between tiles: a wall is
+ * not something a tile *is*, so it cannot be answered for one. Whether a wall
+ * stands in the way is a question about a **step** — see `sim/walls.ts`.
+ */
 export function isSolid(world: World, x: number, y: number): boolean {
   if (!inBounds(world, x, y)) return true;
-  if (world.tiles[tileIndex(world, x, y)]?.wall) return true;
   return (world.applianceAt[tileIndex(world, x, y)] ?? 0) !== 0;
 }
 
@@ -138,11 +145,9 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     // on it. The ring is what makes "outside" a place rather than a painted
     // backdrop — the tiles collision allows and the paving a player can see are
     // the same thing.
-    tiles: Array.from({ length: width * height }, () => ({
-      wall: false,
-      door: false,
-      placeable: false,
-    })),
+    tiles: Array.from({ length: width * height }, () => ({ door: false, placeable: false })),
+    room: { ...level.room },
+    walls: createWalls(width, height),
     applianceAt: Array.from({ length: width * height }, () => 0),
     appliances: new Map(),
     layoutVersion: 0,
@@ -171,8 +176,8 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     const tile = world.tiles[tileIndex(world, placement.at.x, placement.at.y)];
     // An immovable appliance owns the tile it stands on: nothing may be built
     // there, for the same reason nothing may be built on the paving around the
-    // stall. A wall tile keeps everything it already is — the sign hangs in one.
-    if (tile && !tile.wall && !applianceDef(placement.kind).movable) tile.placeable = false;
+    // stall.
+    if (tile && !applianceDef(placement.kind).movable) tile.placeable = false;
     spawnAppliance(world, placement.kind, placement.at, placement.source ?? null);
   }
 
@@ -194,30 +199,26 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
  * Stamp the level's geometry: floor inside the room, walls around and through
  * it, and the one hole customers arrive by.
  *
- * The door is written last on purpose. It stands in the shell, and describing
- * it as a gap the wall run works around would be two facts that have to agree;
- * this way there is one, and it wins.
+ * The doorway is taken out last on purpose. It interrupts the shell, and
+ * authoring the shell in two pieces around it would be two facts that have to
+ * agree; this way there is one, and the hole is punched afterwards.
  */
 function buildRoom(world: World, level: LevelDef): void {
   for (let y = level.room.y; y < level.room.y + level.room.height; y++) {
     for (let x = level.room.x; x < level.room.x + level.room.width; x++) {
-      world.tiles[tileIndex(world, x, y)] = { wall: false, door: false, placeable: true };
+      world.tiles[tileIndex(world, x, y)] = { door: false, placeable: true };
     }
   }
   for (const line of wallRuns(level)) {
-    for (const tile of runTiles(line)) {
-      world.tiles[tileIndex(world, tile.x, tile.y)] = {
-        wall: true,
-        door: false,
-        placeable: false,
-      };
+    for (const seam of runSeams(line)) {
+      if (seam.axis === "vertical") setVerticalWall(world, seam.x, seam.y, true);
+      else setHorizontalWall(world, seam.x, seam.y, true);
     }
   }
-  world.tiles[tileIndex(world, level.door.x, level.door.y)] = {
-    wall: false,
-    door: true,
-    placeable: true,
-  };
+  const gap = doorSeam(level.room, level.door);
+  if (gap.axis === "vertical") setVerticalWall(world, gap.x, gap.y, false);
+  else setHorizontalWall(world, gap.x, gap.y, false);
+  world.tiles[tileIndex(world, level.door.x, level.door.y)] = { door: true, placeable: true };
 }
 
 /**

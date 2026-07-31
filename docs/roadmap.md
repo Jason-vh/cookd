@@ -111,9 +111,9 @@ rather than a property of one interaction.
 
 `canPlace()` lives in `sim/queries.ts` and is used by both the rule and the
 ghost, so the preview and the placement can never disagree. It asks the *tile*
-whether it is placeable rather than asking whether it is a wall, which is what
-keeps the patio ring out of the kitchen without the function growing a concept
-of "outside".
+whether it is placeable rather than asking where the building ends, which is
+what keeps the patio ring out of the kitchen without the function growing a
+concept of "outside".
 
 ## Saving
 

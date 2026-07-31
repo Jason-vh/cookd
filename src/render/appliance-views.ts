@@ -4,7 +4,13 @@ import { RECIPE_BY_ID } from "../data/recipes";
 import type { Appliance, Offer, Recipe, World } from "../sim/types";
 import { playerById } from "../sim/world";
 import { deliveryLabel, missingFor } from "../sim/cards";
-import { canPlace, targetTile, unreachableAppliances, unreachableTables } from "../sim/queries";
+import {
+  canPlace,
+  reachedTile,
+  targetTile,
+  unreachableAppliances,
+  unreachableTables,
+} from "../sim/queries";
 import { offerLabel, offerPrice } from "../sim/shop";
 import { chopLift, ease, workPhase } from "./anim";
 import { Dial } from "./dial";
@@ -511,7 +517,9 @@ export class ApplianceViews {
 
     if (held) {
       const tile = targetTile(held);
-      const valid = canPlace(world, tile.x, tile.y);
+      // A wall between chef and square is the same answer as an occupied one:
+      // it would not go there. The ghost still shows *where*, and hovers.
+      const valid = reachedTile(world, held) !== null && canPlace(world, tile.x, tile.y);
       const inGrid = tile.x >= 0 && tile.y >= 0 && tile.x < world.width && tile.y < world.height;
       // The ghost always answers "where would this go"; whether it *settles* or
       // stays hovering answers "can it". Two questions, two channels — plus the

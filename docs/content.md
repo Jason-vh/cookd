@@ -291,25 +291,50 @@ Kitchens are structured data (`data/level.ts`): a rectangle for the building, a
 list of walls, and a list of what stands where.
 
 ```ts
-size: { width: 24, height: 13 },
-room: { x: 3, y: 3, width: 18, height: 7 },
-door: { x: 2, y: 6 },
-walls: [wall(9, 3, 9, 4), wall(9, 8, 9, 9)],
+size: { width: 22, height: 11 },
+room: { x: 2, y: 2, width: 18, height: 7 },
+door: { x: 2, y: 5 },
+walls: [wall(8, 2, 8, 4), wall(8, 7, 8, 9)],
 appliances: [
-  ...run("stall", 0, 3, 3, "y"),
-  at("sign", 2, 5),
-  crate("tomato", 10, 3),
-  at("plates", 16, 3),
-  at("sink", 17, 3),
-  ...run("counter", 18, 3, 2),
-  at("table", 4, 4),
+  ...run("stall", 0, 2, 3, "y"),
+  at("sign", 2, 4),
+  crate("tomato", 9, 2),
+  at("plates", 15, 2),
+  at("sink", 16, 2),
+  ...run("counter", 17, 2, 2),
+  at("table", 3, 3),
   ...
 ],
 ```
 
 The shell comes from `room` and `door` punches its one hole, so the only walls
 worth writing down are the interior ones — here, the divider either side of the
-walk-through gap at `(9,5)`.
+walk-through gap.
+
+### Walls are between blocks
+
+A wall is a **line on the seam between two tiles**, not a tile of its own:
+`wall(8, 2, 8, 4)` runs down the lattice line at `x = 8`, past the two tile rows
+2 and 3, and the far end names the corner it stops at rather than the last
+square it covers. Runs meet end to end, because that is how a wall is drawn on
+a floor plan.
+
+They used to be **solid squares**, and it cost a square everywhere the building
+had an edge: a dividing wall as wide as the counters either side of it, and a
+ring of floor around the kitchen that existed only to be a wall. Moving them
+onto the seams handed all of it back — the park kitchen is the same size on the
+outside and a column and a row bigger on the inside.
+
+What it costs is that walls stop being a thing a *tile* can be, so nothing can
+ask `isSolid` about them: they are a fact about a **step**, and every rule that
+moves or reaches goes through `sim/walls.ts` instead. Pathing, the seat search
+and collision all say where they are coming from now, and one rule had to be
+added that a tile wall gave away free — a chef facing a wall can no longer chop
+on the board standing behind it (`canReach`).
+
+The door is the **absence** of a segment: `door` names the tile just inside it,
+the seam it stands against is the one left open, and the frame the renderer
+draws straddles that seam. Two facts that have to agree would be one too many.
 
 They **used to be ASCII pictures**, and a picture is a lovely thing to read
 right up until it has to say something that is not one-thing-per-cell.
@@ -319,6 +344,8 @@ checks that counted `$` in the source text because the grid could not be asked
 how many stall slots it had. `data/validate.ts` now builds the world and asks
 *it* — which is also how a spawn point inside a counter, or two appliances on one
 tile, became things a level cannot ship with.
+
+### The rest of the map
 
 The dining room is the western half of the **same grid** — one rectangle, one
 collision system, no new concepts. So is the **patio ring** around the outside:
@@ -340,8 +367,8 @@ had: a level says what a *new* room gets.
 ### The Beach Shack
 
 The second kitchen, and the reason the level registry exists: a fourteen by
-eight room with the galley east of a divider at `x = 10`, and the same rules to
-an opposite bargain — **a big deck and a small galley.** Three tables
+eight room with the galley east of a divider on the seam at `x = 9`, and the
+same rules to an opposite bargain — **a big deck and a small galley.** Three tables
 standing in the open against six columns of kitchen, where the park has two
 tables and eleven columns. Seats pull customers in, so the shack is busier from
 day one and has less floor to solve it with — the dials the shop hands a player,
@@ -356,9 +383,9 @@ rides the handshake, an existing room keeps the level in its save, and a guest
 who picked something else quietly loads the room's own. A level id is also what
 makes a save portable — see [the roadmap](roadmap.md#saving).
 
-**The pass is a place, not an appliance.** Those two counters at `x = 9` are
-ordinary ones that happen to stand in the dividing wall, and the gap beside them
-at `(9,5)` is how a chef walks round. There *was* a `serving` kind: it made
+**The pass is a place, not an appliance.** Those two counters at `x = 8` are
+ordinary ones standing against the dividing wall where it stops, and the gap
+beside them is how a chef walks round. There *was* a `serving` kind: it made
 sense when food vanished through a hatch, and when that stopped being true it
 was left describing nothing — a counter you could not chop on and could not
 move, painted a special colour that promised a rule which no longer existed.

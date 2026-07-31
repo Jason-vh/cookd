@@ -28,7 +28,8 @@ src/
     shop.ts               the stall's stock: rolled from the seed and the day, not from play
     cards.ts              the menu: what a room has unlocked, and the stand that grows it
     day.ts                opening, closing and restarting a day, and what closing up clears
-    pathing.ts            BFS over walkable tiles: customer routes and reachability
+    pathing.ts            BFS over steps somebody could take: routes and reachability
+    walls.ts              walls, which live on the seams between tiles
     random.ts             the one PRNG — deterministic, shared with the scenery
     step.ts               fixed-timestep tick: runs the systems in order, and the service clock
     queries.ts            read-only questions about the world; safe for the renderer
@@ -87,7 +88,7 @@ src/
     dial.ts               the work gauge over a busy appliance
     popups.ts             floating "+$12" text
     appliance-meshes.ts   appliance bodies, tops and details
-    shell-meshes.ts       the kitchen's own fabric: walls, doorway, floor
+    shell-meshes.ts       the kitchen's own fabric: wall segments, doorway, floor
     person-mesh.ts        one rig, two costumes: chefs and customers
     overlay-meshes.ts     drawn over the kitchen: tile highlight, tip coins
     sprites.ts            name tags and appliance labels
@@ -141,6 +142,13 @@ continuously with per-axis collision resolution so they slide along counters.
 The pathing half of that claim came due when customers arrived, and it held:
 routing a customer to a chair is a flood fill over tiles, and because the grid
 only changes in the build phase, a route cannot go stale while it is walked.
+
+**Walls are between the blocks, not on them.** A tile can be occupied — by an
+appliance — and a *seam* between two tiles can be walled, and those are separate
+facts stored separately (`sim/walls.ts`). It costs one thing: nothing can decide
+whether a wall is in the way by looking at a square, so everything that walks or
+reaches has to say where it is coming from. It buys the room every square its
+own walls used to stand on, and a building whose edges are lines.
 
 **DOM for chrome, the scene for anything about a place.** Timers, money and
 the event log are things browsers are excellent at, and WebGL text is a trap.

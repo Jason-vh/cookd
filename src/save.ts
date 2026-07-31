@@ -354,8 +354,10 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
     // looking oven players walked straight through. Last writer wins would be
     // just as arbitrary; first wins at least matches the file's own order.
     if (placed.has(index)) continue;
-    // A wall tile is not a place; the level owns those.
-    if (world.tiles[index]?.wall) continue;
+    // The patio is not a place a build may reach; the level owns what stands
+    // out there. A save should never name one, and one that does is describing
+    // a kitchen from before its walls moved.
+    if (!world.tiles[index]?.placeable) continue;
     placed.set(index, saved);
   }
 

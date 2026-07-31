@@ -78,7 +78,7 @@ describe("what makes a sound", () => {
   test("a burn is one sound, not one a frame", () => {
     const kitchen = world();
     const watcher = listening(kitchen);
-    const counter = applianceAtTile(kitchen, 11, 5)!;
+    const counter = applianceAtTile(kitchen, 10, 4)!;
 
     counter.item = { id: 3, base: "pizza", processes: ["sauced", "topped", "baked"], contents: [] };
     expect(watcher.listen(kitchen, [0])).toEqual([]);

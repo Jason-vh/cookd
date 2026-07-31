@@ -4,6 +4,7 @@ import { DT } from "../sim/step";
 import { beginDay } from "../sim/day";
 import type { Appliance, Effect, Inputs, Player, PlayerInput, World } from "../sim/types";
 import { mintPlate } from "../sim/plates";
+import { wallBetween } from "../sim/walls";
 import { emptyInput, playerById } from "../sim/world";
 import { Host, TARGET_QUEUE } from "./host";
 import { LocalGame } from "./local";
@@ -433,7 +434,8 @@ function standFacing(
       const x = appliance.tile.x + dx!;
       const y = appliance.tile.y + dy!;
       const tile = world.tiles[y * world.width + x];
-      if (!tile || tile.wall || world.applianceAt[y * world.width + x]) continue;
+      if (!tile || world.applianceAt[y * world.width + x]) continue;
+      if (wallBetween(world, appliance.tile, { x, y })) continue;
       player.pos = { x: x + 0.5, y: y + 0.5 };
       player.prevPos = { ...player.pos };
       player.facing = { x: appliance.tile.x - x, y: appliance.tile.y - y };

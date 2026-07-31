@@ -63,7 +63,6 @@ const PLAIN = { patience: 1, upgrades: null } as const;
 
 // prettier-ignore
 const DEFS = {
-  wall: { ...PLAIN, stations: [], speed: 1, label: "Wall", color: 0x4a4a55, height: 1.15, acceptsItems: false, movable: false, price: 0 },
   // The stall is a place, not an appliance: it stands where the level puts it,
   // cannot be lifted, holds nothing and does its whole job through `Grab`.
   stall: { ...PLAIN, stations: [], speed: 1, label: "Stall", color: 0x9c5f4a, height: 0.78, acceptsItems: false, movable: false, price: 0 },

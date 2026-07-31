@@ -1,12 +1,14 @@
 import type { Inputs, Player, World } from "../types";
+import { horizontalWall, verticalWall } from "../walls";
 import { PLAYER_RADIUS, PLAYER_SPEED, isSolid } from "../world";
 
 const DEADZONE = 0.18;
 
 /**
  * Free movement on a tile-aligned grid: the player is a circle, every solid
- * tile is a unit AABB. Axes are resolved separately so sliding along counters
- * feels smooth (the Overcooked/PlateUp feel).
+ * tile is a unit AABB, and every wall is a line between two of them. Axes are
+ * resolved separately so sliding along counters feels smooth (the
+ * Overcooked/PlateUp feel).
  *
  * **Chefs do not collide with each other**, and that is a netcode decision
  * rather than a design one. Your own chef is simulated *now*; everybody else
@@ -73,6 +75,14 @@ function clamp(value: number, min: number, max: number): number {
  * essential: without it, floating-point results like `2.32 - 0.32 = 1.9999...`
  * make a player standing flush against a counter appear to overlap the tile
  * above it, and the resolution then teleports them sideways.
+ *
+ * Two things stop the leading edge, and they stop it in the same place: an
+ * appliance standing in the square it has entered, and a **wall on the seam it
+ * has just crossed**. The seam is the boundary of that same square — the one
+ * behind the edge in the direction of travel — so a wall between `tx-1` and
+ * `tx` and a counter standing on `tx` are both resolved to `tx - r`. That is
+ * why walls needed no new resolution maths when they stopped being tiles: they
+ * are the same line, with nothing behind it.
  */
 const EPSILON = 1e-6;
 
@@ -85,10 +95,11 @@ function moveAxis(world: World, player: Player, dx: number, dy: number): void {
 
   if (dx !== 0) {
     const tx = Math.floor(dx > 0 ? player.pos.x + r - EPSILON : player.pos.x - r + EPSILON);
+    const seam = dx > 0 ? tx : tx + 1;
     const minY = Math.floor(player.pos.y - r + EPSILON);
     const maxY = Math.floor(player.pos.y + r - EPSILON);
     for (let ty = minY; ty <= maxY; ty++) {
-      if (!isSolid(world, tx, ty)) continue;
+      if (!isSolid(world, tx, ty) && !verticalWall(world, seam, ty)) continue;
       player.pos.x = dx > 0 ? tx - r : tx + 1 + r;
       return;
     }
@@ -96,10 +107,11 @@ function moveAxis(world: World, player: Player, dx: number, dy: number): void {
   }
 
   const ty = Math.floor(dy > 0 ? player.pos.y + r - EPSILON : player.pos.y - r + EPSILON);
+  const seam = dy > 0 ? ty : ty + 1;
   const minX = Math.floor(player.pos.x - r + EPSILON);
   const maxX = Math.floor(player.pos.x + r - EPSILON);
   for (let tx = minX; tx <= maxX; tx++) {
-    if (!isSolid(world, tx, ty)) continue;
+    if (!isSolid(world, tx, ty) && !horizontalWall(world, tx, seam)) continue;
     player.pos.y = dy > 0 ? ty - r : ty + 1 + r;
     return;
   }

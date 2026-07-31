@@ -139,13 +139,13 @@ describe("a file we cannot trust", () => {
     expect(onGrid.length).toBe(target.appliances.size);
   });
 
-  test("an appliance out of bounds or inside a wall is dropped", () => {
+  test("an appliance out of bounds or out on the paving is dropped", () => {
     const save: Save = {
       ...good,
       appliances: [
         { kind: "oven", x: -1, y: 3 },
         { kind: "oven", x: 9999, y: 3 },
-        { kind: "oven", x: 2, y: 2 }, // the level's outer wall
+        { kind: "oven", x: 1, y: 5 }, // the patio, which no build may reach
         { kind: "oven", x: 5, y: 5 },
       ],
     };
