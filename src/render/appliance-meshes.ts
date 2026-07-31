@@ -356,11 +356,15 @@ function buildSign(parts: ApplianceParts, h: number): void {
     group.add(hook);
   }
 
-  // Its own group, so `appliance-views.ts` can turn it over without touching
-  // the hooks it hangs from.
+  // Where the board hangs, and then the board itself — two groups, because
+  // turning it over lifts it off the wall as well as rotating it, and animating
+  // both on one node would mean `appliance-views.ts` knowing where the wall is.
+  const hanger = new THREE.Group();
+  hanger.position.set(0, h - 0.44, -0.36);
+  group.add(hanger);
+
   const board = new THREE.Group();
-  board.position.set(0, h - 0.44, -0.36);
-  group.add(board);
+  hanger.add(board);
   parts.board = board;
 
   const frame = mesh(roundedBox(0.74, 0.56, 0.05, 0.03), PALETTE.woodDark, "wood");
@@ -368,6 +372,11 @@ function buildSign(parts: ApplianceParts, h: number): void {
 
   // One material per face, both repainted together: the two faces exist so the
   // board has thickness, not so they can disagree.
+  //
+  // The back is turned about **x**, not about y, because that is the axis the
+  // board is turned over on — a back face mirrored the other way would come up
+  // upside down halfway through the flip, which is the one frame of the
+  // animation a player is actually looking at.
   const faces: THREE.MeshStandardMaterial[] = [];
   for (const z of [0.031, -0.031]) {
     const face = new THREE.Mesh(
@@ -375,7 +384,7 @@ function buildSign(parts: ApplianceParts, h: number): void {
       new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 }),
     );
     face.position.z = z;
-    face.rotation.y = z > 0 ? 0 : Math.PI;
+    face.rotation.x = z > 0 ? 0 : Math.PI;
     board.add(face);
     faces.push(face.material);
   }

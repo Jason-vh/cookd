@@ -291,13 +291,18 @@ export class ApplianceViews {
     if (before > 0.5 && visual.signTurn <= 0.5 && visual.boardFaces) {
       paintSign(visual.boardFaces, showing);
     }
-    // Flat on a wall, a board cannot swing about its middle without half of it
-    // passing through the masonry — so the turn is drawn as its *width*: edge-on
-    // at the halfway point, which is where the paint changes, and open again on
-    // the far side. From any corner the camera can stand at, that is the picture
-    // a rotation would have drawn anyway.
+    // Turned end over end, and lifted off the wall while it turns — which is
+    // both what a person does to a sign on two hooks, and the only way a board
+    // this size can rotate 6cm from a wall without half of it passing through
+    // the masonry. The lift peaks exactly where the board is edge-on and is zero
+    // at both ends, so it is back on its hooks the moment it stops.
+    //
+    // Squashing its width was the first attempt and it read as the sign
+    // *inverting* rather than turning: a flat thing narrowing to a line and
+    // widening again is a scale, and the eye knows it.
     if (visual.board) {
-      visual.board.scale.x = Math.max(0.02, Math.abs(Math.cos(visual.signTurn * Math.PI)));
+      visual.board.rotation.x = visual.signTurn * Math.PI;
+      visual.board.position.z = Math.sin(visual.signTurn * Math.PI) * 0.3;
     }
   }
 
