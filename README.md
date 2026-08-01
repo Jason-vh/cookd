@@ -36,7 +36,9 @@ bun run build        # typecheck + production bundle
 bun start            # build, then serve everything from one process
 ```
 
-Open the client, pick a name, a kitchen code and **where the kitchen is** — the
+Open the client, pick a name, **your chef** — one of eight outfits and four
+hats, remembered in this browser and carried into whichever kitchen you walk
+into — a kitchen code, and **where the kitchen is** — the
 city park, the beach shack, the highway stop, or **Surprise me** for a kitchen
 nobody drew — and share the URL — the code lives in the hash (`/#KITCHEN`), so
 the link *is* the invite. A surprise kitchen is built from that code, so the
@@ -91,6 +93,11 @@ a key can only ever do one job. The gamepad layout is fixed.
 clock, the fryer, the dining room — for everybody in the room, and the other
 chefs are told whose menu it is. Reading the controls during a rush used to cost
 you the rush.
+
+**Nobody wears the same colour.** Your outfit is a request rather than an
+instruction: four players on one sofa share a browser, so they share one saved
+choice, and the room hands the later ones the colours still free. The hat is
+always yours — see [whose chef is whose](docs/art-direction.md#whose-chef-is-whose).
 
 **Press any button to join.** The first pad picks up player 1; any further pad
 creates a new chef when *it* is used (up to 4). A pad that is merely plugged in

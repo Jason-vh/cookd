@@ -1,4 +1,11 @@
 import * as THREE from "three";
+import {
+  chefHat,
+  chefOutfit,
+  DEFAULT_APPEARANCE,
+  type Appearance,
+  type HatId,
+} from "../data/chefs";
 import { customerKind } from "../data/customers";
 import { PALETTE } from "./palette";
 import { cylinder, mesh, roundedBox, sphere } from "./primitives";
@@ -27,10 +34,13 @@ export type ChefParts = {
  * The chef is deliberately simple geometry with clear articulation points:
  * the walk cycle and lean in `view.ts` do far more for the look than any extra
  * polygons would.
+ *
+ * What is *chosen* about them — the outfit colour and the hat — arrives as ids
+ * from `data/chefs.ts`, resolved here so an id this bundle has never heard of
+ * still produces a chef rather than an exception.
  */
-export function buildChef(index: number): ChefParts {
-  const color = PALETTE.chefs[index % PALETTE.chefs.length]!;
-  return buildPerson(color, "chef");
+export function buildChef(look: Appearance = DEFAULT_APPEARANCE): ChefParts {
+  return buildPerson(chefOutfit(look.outfit).color, "chef", undefined, chefHat(look.hat).id);
 }
 
 /**
@@ -61,7 +71,78 @@ function eye(x: number): THREE.Mesh {
   return ball;
 }
 
-function buildPerson(color: number, role: "chef" | "customer", hairColor?: number): ChefParts {
+/**
+ * The hat, in chef's whites like the apron.
+ *
+ * Shape is the whole customisation here, and the colour deliberately is not:
+ * white on the head and white on the chest is what says *staff* across a busy
+ * dining room, and a chef in a coloured hat would be one more person sitting
+ * down. The four are silhouettes rather than details, because at this size and
+ * this camera angle a silhouette is all that survives.
+ */
+function buildHat(hat: HatId): THREE.Object3D {
+  const group = new THREE.Group();
+  const white = PALETTE.chefWhites;
+
+  switch (hat) {
+    case "toque": {
+      const brim = mesh(cylinder(0.155, 0.155, 0.08), white, "cloth");
+      brim.position.y = 0.14;
+      const puff = mesh(sphere(0.15), white, "cloth");
+      puff.scale.set(1, 0.85, 1);
+      puff.position.y = 0.24;
+      group.add(brim, puff);
+      break;
+    }
+    case "cap": {
+      const dome = mesh(sphere(0.163), white, "cloth");
+      dome.scale.set(1, 0.62, 1);
+      dome.position.y = 0.08;
+      // The peak is what tells a cap from a beanie from behind a counter, so it
+      // is drawn long enough to break the silhouette.
+      const peak = mesh(roundedBox(0.2, 0.03, 0.14, 0.014), white, "cloth");
+      peak.position.set(0, 0.06, 0.15);
+      peak.rotation.x = -0.12;
+      group.add(dome, peak);
+      break;
+    }
+    case "bandana": {
+      const wrap = mesh(sphere(0.162), white, "cloth");
+      wrap.scale.set(1, 0.5, 1);
+      wrap.position.y = 0.07;
+      const knot = mesh(sphere(0.05), white, "cloth");
+      knot.position.set(0, 0.06, -0.15);
+      const tail = mesh(roundedBox(0.05, 0.03, 0.13, 0.014), white, "cloth");
+      tail.position.set(0, 0.02, -0.21);
+      tail.rotation.x = 0.3;
+      group.add(wrap, knot, tail);
+      break;
+    }
+    case "beanie": {
+      const dome = mesh(sphere(0.161), white, "cloth");
+      dome.scale.set(1, 0.78, 1);
+      dome.position.y = 0.06;
+      const fold = mesh(cylinder(0.166, 0.166, 0.06), white, "cloth");
+      fold.position.y = 0.06;
+      const bobble = mesh(sphere(0.045), white, "cloth");
+      bobble.position.y = 0.21;
+      group.add(dome, fold, bobble);
+      break;
+    }
+    default: {
+      const unreachable: never = hat;
+      throw new Error(`unhandled hat: ${String(unreachable)}`);
+    }
+  }
+  return group;
+}
+
+function buildPerson(
+  color: number,
+  role: "chef" | "customer",
+  hairColor?: number,
+  hat: HatId = "toque",
+): ChefParts {
   const root = new THREE.Group();
   // Chefs are drawn slightly larger than life against the kitchen: readability
   // of who is where beats strict scale accuracy (Overcooked does the same).
@@ -91,13 +172,7 @@ function buildPerson(color: number, role: "chef" | "customer", hairColor?: numbe
   head.add(skull);
 
   if (role === "chef") {
-    const hatBrim = mesh(cylinder(0.155, 0.155, 0.08), PALETTE.chefWhites, "cloth");
-    hatBrim.position.y = 0.14;
-    head.add(hatBrim);
-    const hatPuff = mesh(sphere(0.15), PALETTE.chefWhites, "cloth");
-    hatPuff.scale.set(1, 0.85, 1);
-    hatPuff.position.y = 0.24;
-    head.add(hatPuff);
+    head.add(buildHat(hat));
   } else {
     const hair = mesh(sphere(0.155), hairColor ?? PALETTE.hair, "cloth");
     hair.scale.set(1.03, 0.72, 1.0);

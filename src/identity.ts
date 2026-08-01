@@ -4,13 +4,14 @@
  * The kitchen itself moved to the server the moment the game became multiplayer
  * — a layout kept per-browser would mean four players each holding a different
  * opinion about where the oven is. What is genuinely per-person stays here:
- * your name today, your appearance and control preferences later.
+ * your name, how your chef is dressed, and what your keys do.
  *
  * localStorage rather than IndexedDB: this is a handful of short strings read
  * once at startup, and the synchronous API means the join screen has nothing to
  * wait for.
  */
 
+import { chefHat, chefOutfit, DEFAULT_APPEARANCE } from "./data/chefs";
 import { defaultBindings, parseBindings, type KeyBindings } from "./input/bindings";
 
 const KEY = "cookd.identity";
@@ -37,6 +38,16 @@ export type Identity = {
    */
   muted: boolean;
   /**
+   * Your chef, by id from `data/chefs.ts`.
+   *
+   * Per-browser like the keys, and for the stronger version of the same reason:
+   * it is *you*, not the room. Carried into whichever kitchen you walk into —
+   * and the outfit is only ever a request, because the room you walk into may
+   * already have somebody wearing it.
+   */
+  outfit: string;
+  hat: string;
+  /**
    * What the keys do. Per-browser for the same reason as `muted`: it is the
    * keyboard in front of *you*, and a room-mate in another country remapping
    * their `use` key has nothing to do with yours.
@@ -58,6 +69,8 @@ const FALLBACK: Identity = {
   room: "",
   level: "",
   muted: false,
+  outfit: DEFAULT_APPEARANCE.outfit,
+  hat: DEFAULT_APPEARANCE.hat,
   keys: defaultBindings(),
 };
 
@@ -76,6 +89,10 @@ export function loadIdentity(): Identity {
       room: typeof fields.room === "string" ? fields.room : "",
       level: typeof fields.level === "string" ? fields.level : "",
       muted: fields.muted === true,
+      // Resolved rather than trusted: a wardrobe that dropped a colour would
+      // otherwise leave this browser asking for one that no longer exists.
+      outfit: chefOutfit(typeof fields.outfit === "string" ? fields.outfit : "").id,
+      hat: chefHat(typeof fields.hat === "string" ? fields.hat : "").id,
       keys: parseBindings(fields.keys),
     };
   } catch {

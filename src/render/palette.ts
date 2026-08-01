@@ -132,8 +132,11 @@ export const PALETTE = {
   carton: 0xc4705c,
   cartonLip: 0xefe9dd,
 
-  // --- chefs (dusty, distinguishable without being loud) ---
-  chefs: [0x6690b5, 0xcf8163, 0x9a80b5, 0x74a37c],
+  // --- chefs ---
+  // Outfit colours are not here: a chef's is *chosen*, so it lives in
+  // `data/chefs.ts` with the wardrobe it is chosen from and travels as an id,
+  // the same move the customer coats below made. The whites are here because
+  // nobody picks them — they are the uniform.
   chefWhites: 0xf2ece0,
   skin: 0xe3bd97,
 

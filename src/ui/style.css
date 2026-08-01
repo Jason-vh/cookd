@@ -533,6 +533,42 @@ body {
   letter-spacing: 0.14em;
 }
 
+/* The wardrobe: a row of colours and a row of hats. */
+.join-swatches {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.join-card .swatch {
+  flex: 1;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: var(--swatch, #22252f);
+  cursor: pointer;
+}
+/* The selected one is ringed rather than merely brighter: on a row of colours,
+   brightness is the one signal already spoken for. */
+.join-card .swatch[aria-pressed="true"] {
+  border-color: #e8e6e1;
+}
+.join-card .swatch.hat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: #343846;
+}
+.join-card .swatch.hat[aria-pressed="true"] {
+  border-color: #e8e6e1;
+  background: #2c303c;
+}
+.join-card .swatch.hat svg {
+  width: 20px;
+  height: 20px;
+  fill: #e8e6e1;
+}
+
 /* One question at a time: making a kitchen, or walking into one. */
 .join-card [data-pane] {
   display: none;

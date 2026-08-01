@@ -7,9 +7,9 @@ import { PLAYER_RADIUS, PLAYER_SPEED } from "../sim/world";
 import { chopImpact, chopLift, ease, isChefMotion, lerp, workPhase } from "./anim";
 import { disposeSubtree } from "./dispose";
 import { setGhost } from "./ghost";
+import { chefOutfit } from "../data/chefs";
 import { buildChef, buildCustomer, type ChefParts } from "./person-mesh";
 import { makeNameTag } from "./sprites";
-import { PALETTE } from "./palette";
 
 /**
  * Chefs and customers.
@@ -31,6 +31,9 @@ type Rig = ChefParts & {
 };
 
 type ChefRig = Rig & {
+  /** What this rig was built wearing, so a change of clothes rebuilds it. */
+  outfit: string;
+  hat: string;
   /** Squash-and-stretch countdown, triggered when what they hold changes. */
   pop: number;
   lastCarried: number;
@@ -69,14 +72,6 @@ const JOSTLE_RATE = 14;
 export class PeopleViews {
   private readonly chefs = new Map<number, ChefRig>();
   private readonly customers = new Map<number, CustomerRig>();
-  /**
-   * Palette slot per player, so a name tag matches its chef.
-   *
-   * Assigned by finding the lowest free slot rather than by counting how many
-   * players there are. Counting collided: after a player left, the next to join
-   * took `size % colours`, which is the slot of somebody still standing there.
-   */
-  private readonly colors = new Map<number, number>();
 
   constructor(private readonly scene: THREE.Scene) {}
 
@@ -96,8 +91,16 @@ export class PeopleViews {
     return this.customers.get(customerId)?.root;
   }
 
+  /**
+   * The colour of somebody's chef, for anything drawn *about* them.
+   *
+   * Read off the rig rather than recomputed from the world: the outfit somebody
+   * is wearing is one fact, and a name tag or a highlight holding a second
+   * opinion about it is a tag that can disagree with the chef under it.
+   */
   colorOf(playerId: number): number {
-    return PALETTE.chefs[this.colors.get(playerId) ?? 0] ?? PALETTE.chefs[0];
+    const rig = this.chefs.get(playerId);
+    return rig ? chefOutfit(rig.outfit).color : chefOutfit("").color;
   }
 
   syncChefs(world: World, alpha: number, dt: number, time: number): void {
@@ -105,17 +108,25 @@ export class PeopleViews {
       if (world.players.some((player) => player.id === id)) continue;
       disposeSubtree(chef.root);
       this.chefs.delete(id);
-      this.colors.delete(id);
     }
 
     for (const player of world.players) {
       let chef = this.chefs.get(player.id);
+      // A rig is built from the clothes the world says they are in, and rebuilt
+      // if those change — which is how somebody who asked for blue and was
+      // given green stops being blue the moment the room answers.
+      if (chef && (chef.outfit !== player.outfit || chef.hat !== player.hat)) {
+        disposeSubtree(chef.root);
+        this.chefs.delete(player.id);
+        chef = undefined;
+      }
       if (!chef) {
-        this.colors.set(player.id, this.freeColorSlot());
-        const parts = buildChef(this.colors.get(player.id) ?? 0);
+        const parts = buildChef({ outfit: player.outfit, hat: player.hat });
         this.scene.add(parts.root);
         chef = {
           ...parts,
+          outfit: player.outfit,
+          hat: player.hat,
           phase: 0,
           pop: 0,
           lastCarried: 0,
@@ -178,15 +189,6 @@ export class PeopleViews {
       rig.nudge.z += (rig.shove.z - rig.nudge.z) * k;
       rig.root.position.set(rig.at.x + rig.nudge.x, 0, rig.at.z + rig.nudge.z);
     }
-  }
-
-  /** The lowest palette slot nobody on screen is using. */
-  private freeColorSlot(): number {
-    const taken = new Set(this.colors.values());
-    for (let slot = 0; slot < PALETTE.chefs.length; slot++) {
-      if (!taken.has(slot)) return slot;
-    }
-    return this.colors.size % PALETTE.chefs.length;
   }
 
   private syncChef(
@@ -383,7 +385,6 @@ export class PeopleViews {
     for (const person of this.customers.values()) disposeSubtree(person.root);
     this.chefs.clear();
     this.customers.clear();
-    this.colors.clear();
   }
 }
 

@@ -39,6 +39,8 @@ function frame(tick: number, players: { id: number; x: number; y: number }[] = [
       id,
       name: "Ann",
       away: false,
+      outfit: "blue",
+      hat: "toque",
       x,
       y,
       fx: 0,

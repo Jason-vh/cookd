@@ -44,6 +44,7 @@ src/
     ingredients.ts        what exists and what it is called
     appliances.ts         appliance definitions, prices, and the ApplianceKind union
     customers.ts          who walks in: patience, appetite, generosity and pace
+    chefs.ts              the wardrobe: the outfits a chef is chosen from, the hats, and who gets which
     economy.ts            the ledger: what the stall stocks, and what it pays
     progression.ts        the cards: what a kitchen starts with, what a recipe costs, and how its menu grows
     recipes.ts            transforms, combines, recipes + derived lookup maps
@@ -72,7 +73,7 @@ src/
     synth.ts            the only WebAudio in the program: a voice -> a noise
     index.ts            what the shell calls once a frame
   save.ts                 the saved-kitchen format, its parser and its migrations
-  identity.ts             what this *browser* remembers: your name, your seat count, your keys
+  identity.ts             what this *browser* remembers: your name, your chef, your keys
   orientation.ts          which corner the camera looks from, and therefore which way "up" is
   render/                 mirrors the simulation; never writes to it
     view.ts               composition root: renderer, lighting, camera, kitchen shell

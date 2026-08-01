@@ -401,6 +401,57 @@ describe("reset", () => {
   });
 });
 
+describe("getting dressed", () => {
+  test("two chefs who asked for the same outfit are still two chefs apart", () => {
+    // A sofa shares one browser, so it shares one saved preference: without
+    // this, adding a second local player would produce a twin.
+    const host = new Host();
+    const blue = { outfit: "blue", hat: "toque" };
+    host.join("Ann", blue);
+    host.join("Bea", blue);
+
+    const [ann, bea] = host.world.players;
+    expect(ann!.outfit).toBe("blue");
+    expect(bea!.outfit).not.toBe("blue");
+    // Only the outfit is rationed. A hat is yours whatever anybody else wears.
+    expect(bea!.hat).toBe("toque");
+  });
+
+  test("an outfit nobody has heard of still puts somebody in the kitchen", () => {
+    const host = new Host();
+    const id = host.join("Ann", { outfit: "sequins", hat: "sombrero" });
+    const player = host.world.players.find((p) => p.id === id)!;
+    expect(player.outfit).toBe("blue");
+    expect(player.hat).toBe("toque");
+  });
+
+  test("a reset puts the kitchen back, not the people in it", () => {
+    // Somebody looking for the chef in green after a reset should find the same
+    // person there.
+    const host = new Host();
+    host.join("Ann", { outfit: "green", hat: "beanie" });
+    host.join("Bea", { outfit: "rose", hat: "cap" });
+
+    host.reset("Ann");
+
+    expect(host.world.players.map((player) => [player.outfit, player.hat])).toEqual([
+      ["green", "beanie"],
+      ["rose", "cap"],
+    ]);
+  });
+
+  test("what somebody is wearing survives the trip through a frame", () => {
+    const host = new Host();
+    host.join("Ann", { outfit: "amber", hat: "bandana" });
+    const client = createWorld(LEVEL, 0);
+    applyLayout(client, encodeLayout(host.world));
+    applyFrame(client, encodeFrame(host.world, host.acks));
+
+    expect(client.players[0]!.outfit).toBe("amber");
+    expect(client.players[0]!.hat).toBe("bandana");
+  });
+});
+
 describe("holding a seat", () => {
   test("an away chef stands still instead of repeating its last input", () => {
     const host = new Host();

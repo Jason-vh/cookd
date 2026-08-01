@@ -71,6 +71,8 @@ function harness() {
       name: "Ann",
       players: 1,
       token: "t",
+      outfit: "blue",
+      hat: "toque",
       level: "",
     }),
     hadFrames: () => false,

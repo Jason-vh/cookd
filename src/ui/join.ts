@@ -1,3 +1,4 @@
+import { CHEF_HATS, CHEF_OUTFITS, chefHat, chefOutfit } from "../data/chefs";
 import { DEFAULT_LEVEL_ID, LEVELS, RANDOM_LEVEL_ID } from "../data/level";
 import type { InputManager } from "../input";
 import type { Identity } from "../identity";
@@ -52,6 +53,53 @@ function levelOptions(): string {
   return `${drawn}<option value="${RANDOM_LEVEL_ID}">Surprise me</option>`;
 }
 
+/**
+ * The wardrobe, above the fold and above both panes.
+ *
+ * Above them because it is the one question that means the same whether you are
+ * making a kitchen or walking into one — like your name, and unlike the level.
+ * The choice is written straight into `identity`, which the shell saves when
+ * the game starts, so it is remembered without a button of its own.
+ *
+ * Hats are drawn rather than named: picking "beanie" off a list is picking a
+ * word, and you would not find out what you had chosen until you were standing
+ * in a kitchen. The sketches are the silhouettes `person-mesh.ts` builds, at
+ * the size a button can show.
+ */
+const HAT_SKETCHES: Record<string, string> = {
+  toque: '<ellipse cx="12" cy="8" rx="7" ry="5"/><rect x="5" y="11" width="14" height="4" rx="1"/>',
+  cap: '<path d="M5 13a7 6 0 0 1 14 0z"/><rect x="11" y="12" width="10" height="3" rx="1.4"/>',
+  bandana: '<path d="M5 13a7 5 0 0 1 14 0z"/><path d="M5 12l-3 2 3 1z"/>',
+  beanie:
+    '<path d="M6 13a6 7 0 0 1 12 0z"/><rect x="5" y="13" width="14" height="3" rx="1.4"/><circle cx="12" cy="5" r="2"/>',
+};
+
+function outfitSwatches(selected: string): string {
+  return CHEF_OUTFITS.map(
+    (outfit) => `<button type="button" class="swatch" data-outfit="${outfit.id}"
+      aria-pressed="${outfit.id === selected}" title="${outfit.name}"
+      style="--swatch: #${outfit.color.toString(16).padStart(6, "0")}"></button>`,
+  ).join("");
+}
+
+function hatButtons(selected: string): string {
+  return CHEF_HATS.map(
+    (hat) => `<button type="button" class="swatch hat" data-hat="${hat.id}"
+      aria-pressed="${hat.id === selected}" title="${hat.name}">
+      <svg viewBox="0 0 24 24" aria-hidden="true">${HAT_SKETCHES[hat.id] ?? ""}</svg>
+    </button>`,
+  ).join("");
+}
+
+/** Which swatch was clicked, if the click landed on one at all. */
+function pickedFrom(event: Event, attribute: "outfit" | "hat"): string | undefined {
+  const target = event.target;
+  if (!(target instanceof Element)) return undefined;
+  // `closest`, because the click may well have landed on the SVG inside the
+  // button rather than on the button.
+  return target.closest<HTMLElement>(`[data-${attribute}]`)?.dataset[attribute];
+}
+
 function randomRoom(): string {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1
   let code = "";
@@ -101,6 +149,10 @@ export class JoinScreen {
       <div class="join-card">
         <h1>cookd</h1>
         <label>Your name<input id="join-name" maxlength="16" placeholder="Chef" autocomplete="off"></label>
+        <label>Your chef
+          <span class="join-swatches" id="join-outfits">${outfitSwatches(identity.outfit)}</span>
+          <span class="join-swatches" id="join-hats">${hatButtons(identity.hat)}</span>
+        </label>
 
         <section data-pane="create">
           <label>Where<select id="join-level">${levelOptions()}</select></label>
@@ -157,9 +209,28 @@ export class JoinScreen {
     });
     on("join-to-join", () => this.setMode("join"));
     on("join-to-create", () => this.setMode("create"));
+    this.root.querySelector("#join-outfits")!.addEventListener(
+      "click",
+      (event) => {
+        const chosen = pickedFrom(event, "outfit");
+        if (chosen) this.wear({ outfit: chefOutfit(chosen).id });
+      },
+      { signal },
+    );
+    this.root.querySelector("#join-hats")!.addEventListener(
+      "click",
+      (event) => {
+        const chosen = pickedFrom(event, "hat");
+        if (chosen) this.wear({ hat: chefHat(chosen).id });
+      },
+      { signal },
+    );
     this.root.addEventListener(
       "keydown",
       (event: KeyboardEvent) => {
+        // A focused button already does its own thing on Enter. Without this,
+        // choosing a hat with the keyboard also started the game.
+        if (event.target instanceof HTMLButtonElement) return;
         if (event.key === "Enter") this.confirm();
       },
       { signal },
@@ -179,8 +250,30 @@ export class JoinScreen {
     field.focus();
   }
 
+  /**
+   * Remember the choice and show it.
+   *
+   * Written into the shared `identity` rather than handed back through a
+   * callback: it is not an answer to the question this screen is asking, it is
+   * a thing about *you*, and the shell saves the whole identity the moment a
+   * game starts either way.
+   */
+  private wear(change: { outfit?: string; hat?: string }): void {
+    const { identity } = this.options;
+    if (change.outfit !== undefined) identity.outfit = change.outfit;
+    if (change.hat !== undefined) identity.hat = change.hat;
+    this.paint();
+  }
+
   private paint(): void {
     this.card.dataset.mode = this.mode;
+    const { outfit, hat } = this.options.identity;
+    for (const button of this.root.querySelectorAll<HTMLElement>("[data-outfit]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.outfit === outfit));
+    }
+    for (const button of this.root.querySelectorAll<HTMLElement>("[data-hat]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.hat === hat));
+    }
     // Arriving by link, the code is not a question: showing it as an editable
     // field would invite an answer nobody asked for.
     this.card.classList.toggle("linked", this.linked);

@@ -300,6 +300,17 @@ export type Player = {
    * the renderer fades them out.
    */
   away: boolean;
+  /**
+   * How they are dressed, by id from `data/chefs.ts`.
+   *
+   * Cosmetic: nothing in `sim/` reads either field. They live on the player
+   * anyway because the world is what every screen is shown — an appearance kept
+   * beside the renderer would be each browser's own opinion of somebody else's
+   * chef, and the outfit is deliberately not one: it is resolved where the
+   * players are, so two people who both chose blue are still two chefs apart.
+   */
+  outfit: string;
+  hat: string;
   pos: Vec2;
   /** Position at the start of the current tick, for render interpolation. */
   prevPos: Vec2;

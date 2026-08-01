@@ -57,8 +57,14 @@ import type {
  * counter's `topper`, which is where chopping boards live now, and the frame's
  * `pausedBy`, which is the whole room standing still. A v4 server sends neither,
  * so a v5 client would draw bare counters that chop fast and would never pause.
+ *
+ * v6 dressed the chefs: a player carries the outfit and hat they chose. It
+ * breaks the way v3's customer `kind` does — unknown *ids* are tolerated,
+ * because a wardrobe grows faster than a protocol, but a v5 server sends no
+ * outfit at all and a room full of chefs in the same colour is precisely what
+ * the field exists to prevent.
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /**
  * Ticks between broadcasts: a 60Hz simulation goes out at 20Hz.
@@ -145,6 +151,18 @@ export type FramePlayer = {
   id: number;
   name: string;
   away: boolean;
+  /**
+   * What they are wearing, by id from `data/chefs.ts`.
+   *
+   * In the frame with the name rather than in the layout, because it belongs to
+   * a *player*, and the roster is the one part of the frame that is not about
+   * this instant. Sent rather than derived for the same reason the customer's
+   * kind is: the outfit was settled where the players are, and no client can
+   * work out on its own which colour was still free at the moment somebody
+   * walked in.
+   */
+  outfit: string;
+  hat: string;
   x: number;
   y: number;
   fx: number;
@@ -255,6 +273,14 @@ export type ClientMessage =
       players: number;
       token: string;
       /**
+       * How this browser's chefs would like to be dressed.
+       *
+       * A preference, like `level` below: the room may already have somebody in
+       * blue, and the seats behind one `hello` all ask for the same thing.
+       */
+      outfit: string;
+      hat: string;
+      /**
        * Which kitchen to build if this room does not exist yet.
        *
        * A *preference*, not an instruction: a room that has been played keeps
@@ -265,7 +291,7 @@ export type ClientMessage =
        */
       level: string;
     }
-  | { t: "join"; name: string }
+  | { t: "join"; name: string; outfit: string; hat: string }
   | { t: "leave"; id: number }
   | { t: "input"; seq: number; inputs: Record<number, PlayerInput> }
   /**
@@ -386,6 +412,8 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
       id: player.id,
       name: player.name,
       away: player.away,
+      outfit: player.outfit,
+      hat: player.hat,
       x: player.pos.x,
       y: player.pos.y,
       fx: player.facing.x,
@@ -575,9 +603,17 @@ export function applyFrame(world: World, frame: Frame): void {
   for (const snapshot of frame.players) {
     let player = world.players.find((p) => p.id === snapshot.id);
     if (!player) {
-      player = adoptPlayer(world, snapshot.id, snapshot.name, { x: snapshot.x, y: snapshot.y });
+      player = adoptPlayer(
+        world,
+        snapshot.id,
+        snapshot.name,
+        { x: snapshot.x, y: snapshot.y },
+        { outfit: snapshot.outfit, hat: snapshot.hat },
+      );
     }
     player.name = snapshot.name;
+    player.outfit = snapshot.outfit;
+    player.hat = snapshot.hat;
     player.away = snapshot.away;
     player.carried = cloneItem(snapshot.carried);
     player.carriedAppliance = snapshot.carriedAppliance;

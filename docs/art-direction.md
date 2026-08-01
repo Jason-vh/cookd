@@ -388,6 +388,27 @@ is checkable, so it was checked rather than argued about.
 - **A handle is bolted to something.** The oven's floated 9cm clear of the top
   of its own door.
 
+## Whose chef is whose
+
+A player picks an **outfit colour** and a **hat** on the join screen
+(`data/chefs.ts`), and both are drawn onto the one rig everybody shares. Two
+rules keep that from costing anything the game needs:
+
+- **The uniform is not customisable.** Hats are chef's whites, like the apron,
+  because whites on the head and whites on the chest are what say *staff* from
+  the far side of the dining room. A chef in a coloured hat is one more person
+  sitting down. Shape is the whole choice, which is also why the four hats are
+  silhouettes rather than details — at this size and this camera angle, a
+  silhouette is what survives.
+- **No two chefs in a room wear the same colour.** The outfit is a *request*,
+  settled in `sim/world.ts` against who is already standing there, because four
+  players on one sofa share a browser and therefore share one saved preference.
+  Losing track of which chef is yours is the one thing a co-op kitchen cannot
+  afford, and it is why there are eight outfits: one per seat a room can hold.
+
+The colours are a different family from the customer coats in
+`data/customers.ts`, which is the same rule read from the other side.
+
 ## Gotchas discovered the hard way
 
 The ones that are about *rendering*. The rest — worlds sharing arrays,

@@ -1,3 +1,4 @@
+import { DEFAULT_APPEARANCE, type Appearance } from "../data/chefs";
 import { LEVEL, type LevelDef } from "../data/level";
 import { DT } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
@@ -76,6 +77,11 @@ export type NetWiring = {
    * on the wire.
    */
   creating?: boolean;
+  /**
+   * How this browser's chefs would like to be dressed. A preference: the room
+   * decides, because it is the one that can see who is already in blue.
+   */
+  look?: Appearance;
 };
 
 function definedInputs(inputs: Inputs): Record<number, PlayerInput> {
@@ -123,6 +129,9 @@ export class NetGame implements Game {
   /** See `NetWiring.creating`. */
   private readonly creating: boolean;
 
+  /** See `NetWiring.look`. */
+  private readonly look: Appearance;
+
   constructor(
     url: string,
     room: string,
@@ -141,6 +150,7 @@ export class NetGame implements Game {
     this.wantedPlayers = Math.max(1, players);
     this.onLevel = wiring.onLevel;
     this.creating = wiring.creating ?? false;
+    this.look = wiring.look ?? DEFAULT_APPEARANCE;
     this.now = wiring.now ?? (() => performance.now());
     this.reconciler = new Reconciler(level);
     this.world = this.reconciler.prediction;
@@ -158,6 +168,8 @@ export class NetGame implements Game {
           name: this.name,
           players: this.wantedPlayers,
           token: this.token,
+          outfit: this.look.outfit,
+          hat: this.look.hat,
           // Only heeded when this room does not exist yet: a kitchen that has
           // been played keeps its own level, and we load whatever it says.
           level: this.creating ? this.level.id : "",
@@ -348,8 +360,8 @@ export class NetGame implements Game {
 
   // --- shell actions ----------------------------------------------------------
 
-  addLocalPlayer(name: string): number | null {
-    this.connection.send({ t: "join", name });
+  addLocalPlayer(name: string, look: Appearance = this.look): number | null {
+    this.connection.send({ t: "join", name, outfit: look.outfit, hat: look.hat });
     return null; // the server answers with "joined"
   }
 

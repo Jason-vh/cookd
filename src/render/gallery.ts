@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { APPLIANCE_KINDS, applianceDef, type ApplianceKind } from "../data/appliances";
 import { biome as lookupBiome } from "../data/biomes";
+import { CHEF_HATS, CHEF_OUTFITS } from "../data/chefs";
 import { CUSTOMER_KINDS } from "../data/customers";
 import { INGREDIENTS } from "../data/ingredients";
 import { itemLabel } from "../sim/queries";
@@ -101,7 +102,14 @@ function itemEntries(): Entry[] {
 
 function peopleEntries(): Entry[] {
   return [
-    { label: "Chef", object: buildChef(0).root },
+    // One chef per hat: the wardrobe is a thing you choose from, so "what does
+    // a beanie look like" is exactly the question the gallery is for. The
+    // outfits are a colour each and need no turntable.
+    ...CHEF_HATS.map((hat, index) => ({
+      label: `Chef — ${hat.name}`,
+      object: buildChef({ outfit: CHEF_OUTFITS[index % CHEF_OUTFITS.length]!.id, hat: hat.id })
+        .root,
+    })),
     ...CUSTOMER_KINDS.map((kind, index) => ({
       label: kind.name,
       object: buildCustomer(kind.id, index).root,

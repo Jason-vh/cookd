@@ -726,7 +726,10 @@ describe("what it costs to keep everybody in step", () => {
     // The budget a frame is held to, and the one `host.test.ts` asserts against
     // a bare world. Over it means a frame has quietly started carrying
     // something; far under it means the documented figures have drifted again.
-    expect(worst).toBeLessThan(1500);
+    //
+    // Raised from 1500 when chefs started carrying their clothes: an outfit and
+    // a hat are two short ids per player, and every client is sent all of them.
+    expect(worst).toBeLessThan(1600);
   });
 });
 

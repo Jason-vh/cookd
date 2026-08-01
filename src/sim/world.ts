@@ -1,4 +1,5 @@
 import { applianceDef, type ApplianceDef } from "../data/appliances";
+import { chefHat, pickOutfit, DEFAULT_APPEARANCE, type Appearance } from "../data/chefs";
 import { runSeams, wallRuns, type LevelDef } from "../data/level";
 import { STARTING_RECIPES, cardFee } from "../data/progression";
 import { RECIPE_BY_ID } from "../data/recipes";
@@ -140,12 +141,14 @@ export function random(world: World): number {
   return next.value;
 }
 
-function makePlayer(id: number, name: string, spawn: Vec2): Player {
+function makePlayer(id: number, name: string, spawn: Vec2, look: Appearance): Player {
   const pos = { x: spawn.x + 0.5, y: spawn.y + 0.5 };
   return {
     id,
     name,
     away: false,
+    outfit: look.outfit,
+    hat: look.hat,
     pos,
     prevPos: { ...pos },
     facing: { x: 0, y: 1 },
@@ -413,9 +416,27 @@ export function playerById(world: World, id: number): Player | undefined {
   return world.players.find((player) => player.id === id);
 }
 
-export function addPlayer(world: World, level: LevelDef, name = ""): Player {
+/**
+ * Add a player, dressed in what they asked for as far as the room allows.
+ *
+ * The outfit is settled here rather than taken on trust, because this is the
+ * one place that can see who else is standing in the kitchen — and four chefs
+ * sharing a sofa share one saved preference. See `pickOutfit`.
+ */
+export function addPlayer(
+  world: World,
+  level: LevelDef,
+  name = "",
+  look: Appearance = DEFAULT_APPEARANCE,
+): Player {
   const spawn = level.spawns[world.players.length % level.spawns.length] ?? { x: 1, y: 1 };
-  const player = makePlayer(world.nextPlayerId++, name, spawn);
+  const player = makePlayer(world.nextPlayerId++, name, spawn, {
+    outfit: pickOutfit(
+      look.outfit,
+      world.players.map((other) => other.outfit),
+    ),
+    hat: chefHat(look.hat).id,
+  });
   world.players.push(player);
   return player;
 }
@@ -430,8 +451,17 @@ export function addPlayer(world: World, level: LevelDef, name = ""): Player {
  * exactly the sort of stale assumption the level registry exists to remove —
  * on any second level it would have been reading the wrong table.
  */
-export function adoptPlayer(world: World, id: number, name: string, at: Vec2): Player {
-  const player = makePlayer(id, name, { x: at.x - 0.5, y: at.y - 0.5 });
+export function adoptPlayer(
+  world: World,
+  id: number,
+  name: string,
+  at: Vec2,
+  look: Appearance = DEFAULT_APPEARANCE,
+): Player {
+  // Taken as given, not resolved: whoever is running the room has already
+  // decided who is wearing what, and a client with a second opinion would draw
+  // a chef nobody else can see.
+  const player = makePlayer(id, name, { x: at.x - 0.5, y: at.y - 0.5 }, look);
   world.players.push(player);
   world.nextPlayerId = Math.max(world.nextPlayerId, id + 1);
   return player;

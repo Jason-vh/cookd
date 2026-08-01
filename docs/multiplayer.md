@@ -88,15 +88,21 @@ Measured by `latency.test.ts`, in payload bytes — JSON, uncompressed, what
 
 | the park kitchen, mid-service, with | per frame | down, per player | up, per player |
 | --- | --- | --- | --- |
-| 1 chef in it | 895 B | 18 KB/s | — |
-| 4 chefs standing | 1282 B | 26 KB/s | — |
-| 4 chefs cooking | 1327 B | **28 KB/s** | **7 KB/s** |
+| 1 chef in it | 998 B | 20 KB/s | — |
+| 4 chefs standing | 1482 B | 30 KB/s | — |
+| 4 chefs cooking | 1532 B | **32 KB/s** | **7 KB/s** |
 
-**Chefs are what a frame grows with** — about 130 bytes each, and every client
+**Chefs are what a frame grows with** — about 160 bytes each, and every client
 is sent all of them, because everybody is sent the whole world. So a room of
-four costs the server ~105 KB/s of egress, not four times a fixed price, which
+four costs the server ~127 KB/s of egress, not four times a fixed price, which
 is the number that matters for a box holding 200 rooms. Upstream is a tick of
 input at 60Hz and nothing else.
+
+A chef got a little more expensive when they got dressed: an outfit and a hat
+are two short ids that ride along with the name, every frame, for everybody.
+They are in the frame because that is where the *roster* is — who exists is one
+fact, and splitting a player across two messages would mean drawing somebody
+before knowing what they are wearing.
 
 The dining room is a smaller part of it than it looks: the starting kitchen has
 two tables, so there are never more than two customers to describe. A room that

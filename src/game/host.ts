@@ -1,3 +1,4 @@
+import type { Appearance } from "../data/chefs";
 import { LEVEL, type LevelDef } from "../data/level";
 import { setUnlocked } from "../sim/cards";
 import { restockStall } from "../sim/shop";
@@ -153,8 +154,8 @@ export class Host {
 
   // --- players ---------------------------------------------------------------
 
-  join(name: string): number {
-    const player = addPlayer(this.world, this.level, name);
+  join(name: string, look?: Appearance): number {
+    const player = addPlayer(this.world, this.level, name, look);
     this.queues.set(player.id, []);
     this.last.set(player.id, emptyInput());
     this.acks.set(player.id, 0);
@@ -360,6 +361,10 @@ export class Host {
       id: player.id,
       name: player.name,
       away: this.away.has(player.id),
+      // Kept, not re-picked: a reset puts the kitchen back, not the people in
+      // it, and a chef who changed colour because somebody wrecked the layout
+      // would be a stranger to whoever is looking for them.
+      look: { outfit: player.outfit, hat: player.hat },
     }));
     // The menu survives. A reset un-wrecks the *layout* — it puts the walls
     // back where the level says and undoes whatever the room has done to
@@ -383,8 +388,8 @@ export class Host {
     if (!evicted) setUnlocked(this.world, unlocked, unlockedDay);
     restockStall(this.world);
     this.accumulator = 0;
-    for (const { id, name, away } of players) {
-      const player = addPlayer(this.world, this.level, name);
+    for (const { id, name, away, look } of players) {
+      const player = addPlayer(this.world, this.level, name, look);
       // addPlayer hands out a fresh id; force the old one back so connections,
       // gamepads and input queues all still point at the right chef.
       player.id = id;

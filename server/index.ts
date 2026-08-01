@@ -558,6 +558,10 @@ const listener = Bun.serve<SocketData, "/ws">({
 
         const name = sanitiseName(message.name) || "Chef";
         const token = message.token.slice(0, 64);
+        // What they asked to wear. The room settles it — see `pickOutfit` — and
+        // the seats behind one connection all ask for the same thing, because
+        // they are all the same browser.
+        const look = { outfit: message.outfit, hat: message.hat };
         const client: Client = {
           id: crypto.randomUUID(),
           room: code,
@@ -595,7 +599,7 @@ const listener = Bun.serve<SocketData, "/ws">({
         const wanted = Math.min(MAX_PER_CONNECTION, Math.max(1, message.players));
         for (let i = client.players.length; i < wanted; i++) {
           if (room.host.playerCount >= MAX_PLAYERS_PER_ROOM) break;
-          client.players.push(room.host.join(seatName(name, i)));
+          client.players.push(room.host.join(seatName(name, i), look));
         }
         // Being let in with no chef is worse than being turned away: the client
         // would sit there showing "online" with nobody to control and never
@@ -643,7 +647,10 @@ const listener = Bun.serve<SocketData, "/ws">({
           }
           if (client.players.length >= MAX_PER_CONNECTION) break;
           const base = sanitiseName(message.name) || client.name;
-          const id = room.host.join(seatName(base, client.players.length));
+          const id = room.host.join(seatName(base, client.players.length), {
+            outfit: message.outfit,
+            hat: message.hat,
+          });
           client.players.push(id);
           send(client, { t: "joined", id });
           break;

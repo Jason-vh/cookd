@@ -1,3 +1,4 @@
+import type { Appearance } from "../data/chefs";
 import type { LevelDef } from "../data/level";
 import type { Inputs, World } from "../sim/types";
 import type { MenuAction } from "./host";
@@ -38,7 +39,7 @@ export interface Game {
    * quick taps: press and release inside one frame, and the grab never happened.
    */
   update(elapsed: number, poll: () => Inputs): void;
-  addLocalPlayer(name: string): number | null;
+  addLocalPlayer(name: string, look: Appearance): number | null;
   removeLocalPlayer(id: number): void;
   menu(action: MenuAction): void;
   reset(): void;

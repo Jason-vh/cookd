@@ -1,4 +1,5 @@
 import type { ClientMessage, Frame, Layout, ServerMessage } from "./protocol";
+import type { Appearance } from "../data/chefs";
 import { parseLevelDef } from "../data/level";
 import { levelProblems } from "../data/validate";
 import { MAX_PLATES } from "../sim/plates";
@@ -215,6 +216,21 @@ export function parseInput(value: unknown): PlayerInput | null {
   return { move, grab, use, start, menu };
 }
 
+/**
+ * An outfit and a hat, by id.
+ *
+ * Shape only: whether the wardrobe has heard of them is `data/chefs.ts`'s
+ * question, and an id from a peer one deploy ahead resolves to the default
+ * rather than costing somebody entry — the same bargain `level` makes below.
+ * Absent means "no opinion", which is what an older client has.
+ */
+function parseLook(value: Record<string, unknown>): Appearance | null {
+  const outfit = value.outfit === undefined ? "" : str(value.outfit, MAX_NAME);
+  const hat = value.hat === undefined ? "" : str(value.hat, MAX_NAME);
+  if (outfit === null || hat === null) return null;
+  return { outfit, hat };
+}
+
 export function parseClientMessage(value: unknown): ClientMessage | null {
   if (!isRecord(value)) return null;
 
@@ -230,14 +246,16 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
       // question, and an unknown one falls back to the default rather than
       // refusing somebody entry over a typo.
       const level = value.level === undefined ? "" : str(value.level, MAX_NAME);
+      const look = parseLook(value);
       if (version === null || room === null || name === null || level === null) return null;
-      if (players === null || token === null) return null;
+      if (players === null || token === null || look === null) return null;
       if (players < 1 || players > MAX_SEATS) return null;
-      return { t: "hello", version, room, name, players, token, level };
+      return { t: "hello", version, room, name, players, token, level, ...look };
     }
     case "join": {
       const name = str(value.name, MAX_NAME);
-      return name === null ? null : { t: "join", name };
+      const look = parseLook(value);
+      return name === null || look === null ? null : { t: "join", name, ...look };
     }
     case "leave": {
       const id = int(value.id);
@@ -530,11 +548,12 @@ function parseFramePlayer(value: unknown): Frame["players"][number] | null {
   const id = int(value.id);
   const name = str(value.name, MAX_NAME);
   const away = bool(value.away);
+  const look = parseLook(value);
   const x = num(value.x);
   const y = num(value.y);
   const fx = num(value.fx);
   const fy = num(value.fy);
-  if (id === null || name === null || away === null) return null;
+  if (id === null || name === null || away === null || look === null) return null;
   if (x === null || y === null || fx === null || fy === null) return null;
 
   const carried = parseNullableItem(value.carried);
@@ -543,7 +562,7 @@ function parseFramePlayer(value: unknown): Frame["players"][number] | null {
   const workingOn = optionalInt(value.workingOn);
   if (carriedAppliance === undefined || workingOn === undefined) return null;
 
-  return { id, name, away, x, y, fx, fy, carried, carriedAppliance, workingOn };
+  return { id, name, away, ...look, x, y, fx, fy, carried, carriedAppliance, workingOn };
 }
 
 function parseFrameAppliance(value: unknown): Frame["appliances"][number] | null {

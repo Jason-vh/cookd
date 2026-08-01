@@ -1,3 +1,4 @@
+import { DEFAULT_APPEARANCE, type Appearance } from "../data/chefs";
 import type { Inputs, World } from "../sim/types";
 import type { Game } from "./game";
 import { Host, type MenuAction } from "./host";
@@ -21,9 +22,16 @@ export class LocalGame implements Game {
 
   private host: Host;
 
-  constructor(save?: Save | null, players = 1, level: LevelDef = LEVEL) {
+  constructor(
+    save?: Save | null,
+    players = 1,
+    level: LevelDef = LEVEL,
+    look: Appearance = DEFAULT_APPEARANCE,
+  ) {
     this.host = new Host(save, level);
-    for (let i = 0; i < players; i++) this.localIds.push(this.host.join(""));
+    // Everyone on this sofa asked for the same outfit, because they share a
+    // browser. `addPlayer` hands out the free ones — see `pickOutfit`.
+    for (let i = 0; i < players; i++) this.localIds.push(this.host.join("", look));
   }
 
   get world(): World {
@@ -42,9 +50,9 @@ export class LocalGame implements Game {
     this.host.advance(elapsed, { poll });
   }
 
-  addLocalPlayer(name: string): number | null {
+  addLocalPlayer(name: string, look: Appearance = DEFAULT_APPEARANCE): number | null {
     if (this.localIds.length >= MAX_LOCAL_PLAYERS) return null;
-    const id = this.host.join(name);
+    const id = this.host.join(name, look);
     this.localIds.push(id);
     return id;
   }

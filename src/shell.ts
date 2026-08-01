@@ -1,3 +1,4 @@
+import type { Appearance } from "./data/chefs";
 import { LEVEL, RANDOM_LEVEL_ID, levelById, type LevelDef } from "./data/level";
 import { generateLevel, seedFromCode } from "./data/generate";
 import { InputManager } from "./input";
@@ -58,7 +59,12 @@ const roomFromUrl = location.hash
   .replace(/[^A-Z0-9]/g, "");
 const forceLocal = params.has("local");
 
-let game: Game = new LocalGame(null, 1);
+/** How this browser's chefs are dressed, wherever they turn up. */
+function look(): Appearance {
+  return { outfit: identity.outfit, hat: identity.hat };
+}
+
+let game: Game = new LocalGame(null, 1, LEVEL, look());
 const view = timed("view", () => new View(canvas, game.world, LEVEL.biome));
 /** Where a *new* kitchen would be built. An existing room keeps its own. */
 /**
@@ -159,12 +165,13 @@ function goOnline(room: string, name: string, level = wantedLevel, creating = fa
         // private offline kitchen is better than a frozen one.
         if (fatal) {
           onlineSince = 0;
-          useGame(new LocalGame(null, wantedPlayers, level));
+          useGame(new LocalGame(null, wantedPlayers, level, look()));
         }
       },
       level,
       {
         creating,
+        look: look(),
         // The room exists and it is somewhere else. A room code is an
         // invitation to *their* restaurant, so we load theirs rather than
         // telling the guest they picked the wrong place — which means a whole
@@ -197,7 +204,7 @@ function fallbackIfUnreachable(now: number): void {
   }
   if (now - onlineSince < FALLBACK_AFTER) return;
   onlineSince = 0;
-  useGame(new LocalGame(null, wantedPlayers));
+  useGame(new LocalGame(null, wantedPlayers, LEVEL, look()));
   hud.notify("Could not reach that kitchen — playing offline");
 }
 
@@ -212,7 +219,7 @@ const join = new JoinScreen(document.querySelector<HTMLElement>("#join")!, {
     wantedLevel = chosenLevel(id, roomFromUrl);
     identity.level = id;
     saveIdentity(identity);
-    useGame(new LocalGame(null, 1, wantedLevel));
+    useGame(new LocalGame(null, 1, wantedLevel, look()));
   },
   // An empty level means "joining": we load our best guess so there is
   // something to predict against, and the server corrects us if the kitchen
@@ -324,9 +331,9 @@ function frame(now: number): void {
     hud.notify(muted ? "Sound off" : "Sound on");
   }
 
-  input.bindGamepads(game.localIds, () => game.addLocalPlayer(identity.name));
+  input.bindGamepads(game.localIds, () => game.addLocalPlayer(identity.name, look()));
   input.releaseGamepads(game.localIds);
-  if (input.consumeAddPlayerRequest()) game.addLocalPlayer(identity.name);
+  if (input.consumeAddPlayerRequest()) game.addLocalPlayer(identity.name, look());
   if (input.consumeDropPlayerRequest() && game.localIds.length > 1) {
     // Never drop the last one — you would be left watching a kitchen you
     // cannot reach into.

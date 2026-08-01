@@ -108,6 +108,8 @@ describe("client messages", () => {
       name: "n",
       players: 1,
       token: "",
+      outfit: "blue",
+      hat: "toque",
       level: "",
     };
     expect(parseClientMessage({ ...base, room: 7 })).toBeNull();
@@ -123,6 +125,16 @@ describe("client messages", () => {
     expect(parseClientMessage({ ...base, level: 7 })).toBeNull();
     const { level: _level, ...noLevel } = base;
     expect(parseClientMessage(noLevel)).toEqual({ ...noLevel, level: "" });
+    // A wardrobe id is checked for shape only, for the same reason and with the
+    // same tolerance: an id this bundle has never heard of is a peer a deploy
+    // ahead, and being dressed in the default beats being refused entry.
+    expect(parseClientMessage({ ...base, hat: 7 })).toBeNull();
+    const { outfit: _outfit, hat: _hat, ...bare } = base;
+    expect(parseClientMessage(bare)).toEqual({ ...bare, outfit: "", hat: "" });
+    expect(parseClientMessage({ ...base, outfit: "sequins" })).toEqual({
+      ...base,
+      outfit: "sequins",
+    });
     expect(parseClientMessage(base)).toEqual(base);
   });
 

@@ -1,6 +1,7 @@
 import { specKey } from "../sim/items";
 import type { ItemSpec } from "../sim/types";
 import { APPLIANCES, APPLIANCE_KINDS, isApplianceKind, type ApplianceKind } from "./appliances";
+import { CHEF_HATS, CHEF_OUTFITS, DEFAULT_APPEARANCE } from "./chefs";
 import { CUSTOMER_KINDS, DEFAULT_CUSTOMER_KIND } from "./customers";
 import { STALL_SLOTS, STOCK_WEIGHT } from "./economy";
 import { INGREDIENTS, PROCESSES } from "./ingredients";
@@ -161,6 +162,26 @@ export function validateContent(): string[] {
   // to be first, which is a silent tuning decision nobody made.
   if (!kindIds.has(DEFAULT_CUSTOMER_KIND)) {
     problems.push(`no customer kind "${DEFAULT_CUSTOMER_KIND}" for unknown ids to fall back to`);
+  }
+
+  // --- the wardrobe ---
+  // One outfit per seat a room can hold, so nobody is ever dressed as somebody
+  // else. `MAX_PLAYERS_PER_ROOM` lives on the server and this is the client's
+  // half of the same promise, so the number is written out rather than shared:
+  // a smaller wardrobe is a bug, a larger one is only a choice.
+  const SEATS = 8;
+  if (CHEF_OUTFITS.length < SEATS) {
+    problems.push(`only ${CHEF_OUTFITS.length} chef outfits for ${SEATS} seats`);
+  }
+  const outfitIds = new Set(CHEF_OUTFITS.map((outfit) => outfit.id));
+  if (outfitIds.size !== CHEF_OUTFITS.length) problems.push("two chef outfits share an id");
+  // The default is what an id we do not know resolves to — an older browser's
+  // saved choice, a peer a deploy ahead — so it has to name something.
+  if (!outfitIds.has(DEFAULT_APPEARANCE.outfit)) {
+    problems.push(`no chef outfit "${DEFAULT_APPEARANCE.outfit}" to fall back to`);
+  }
+  if (!CHEF_HATS.some((hat) => hat.id === DEFAULT_APPEARANCE.hat)) {
+    problems.push(`no chef hat "${DEFAULT_APPEARANCE.hat}" to fall back to`);
   }
 
   // --- the shop ---
