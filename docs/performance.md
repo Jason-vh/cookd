@@ -105,6 +105,25 @@ than by the first frame that happens to need them. Linking is what costs, the
 driver does it off-thread, and on a kitchen swap it is now free — the cache
 those programs live in is no longer thrown away with the renderer.
 
+What was left after that was the merge, and it was paying for the library's
+calling convention rather than for the work. `mergeGeometries` needs every input
+handed to it *already* sitting where it belongs, and geometry here is shared out
+of the cache in `primitives.ts` — every blade of grass in the park is the same
+`BoxGeometry` — so each of ~1,700 parts had to be deep-copied before it could be
+moved into place, and the merge then copied all of it a second time into an
+output buffer whose size was known before either copy started. `mergeStatic`
+now sizes that buffer up front and transforms each part straight into it: one
+copy, no garbage, same batches out.
+
+| CPU, main thread | before | after |
+| --- | --- | --- |
+| Page load: scenery + shell | 80.7ms | **36.3ms** |
+| Kitchen swap: scenery + shell | 32.5ms | **10.3ms** |
+| Kitchen swap: shader compile | full recompile | **0.9ms** |
+
+Measured under headless Chromium, which renders through SwiftShader — so those
+numbers are CPU-representative and every GPU number in the same run is not.
+
 ## Post-processing
 
 The chain is GTAO → bloom → grade+vignette+output → SMAA. Two things keep it
