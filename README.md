@@ -196,6 +196,14 @@ The white square in front of your chef is what you'll interact with.
     waiting, so a bigger dining room is a busier one. That is the difficulty
     dial, and it is in your hands.
 
+    **Some of the floor is outside.** The paving in front of the restaurant is a
+    **terrace**, and a table may stand on it — capacity with no room to extend
+    and no wall to build, for the same $40 as one indoors. The catch is the
+    **weather**: on a rainy day nobody sits outside, and those tables are
+    furniture in a puddle. The morning card says what today will be before the
+    stall opens, so how much of your dining room to buy outdoors is a bet you
+    place with your eyes open — see [the weather](docs/weather.md).
+
     **Some things are better rather than more.** A *steel board* chops far
     faster than a wooden one, and a *bell oven* holds a finished pizza three
     times as long before it burns. They cost a week of takings and turn up as
@@ -246,6 +254,7 @@ noticing. [A test](docs/docs.test.ts) now catches that much.
 | [Multiplayer](docs/multiplayer.md) | Three clocks, prediction, and what happens when a connection drops. |
 | [The content model](docs/content.md) | Items, transforms, combines, recipes and levels — everything that is data. Read this to add a dish. |
 | [The dining room](docs/dining-room.md) | Customers: arriving, seating, patience, eating, tips. |
+| [The weather](docs/weather.md) | What sort of day it is, and the terrace it opens and shuts. |
 | [The drive-through](docs/drive-through.md) | The kitchen with no dining room: a hatch, a lane of cars, and why it is a level rather than a window. |
 | [The shop](docs/the-shop.md) | The morning, the market stall, and the patio they stand on. |
 | [The menu](docs/the-menu.md) | Recipe cards: how a kitchen chooses what it cooks, and the equipment that comes with it. |

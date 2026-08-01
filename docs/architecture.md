@@ -31,6 +31,7 @@ src/
     pathing.ts            BFS over steps somebody could take: routes and reachability
     walls.ts              walls, which live on the seams between tiles
     lane.ts               the drive-through: where the hatch is, and where the nth car stops
+    weather.ts            what sort of day it is, rolled from the seed and the day
     random.ts             the one PRNG — deterministic, shared with the scenery
     step.ts               fixed-timestep tick: runs the systems in order, and the service clock
     queries.ts            read-only questions about the world; safe for the renderer
@@ -52,6 +53,7 @@ src/
     generate.ts           kitchens nobody drew: one template, and a seed to move it about
     walks.ts              what a cover costs to walk, for judging one against another
     biomes.ts             locations: sky, sunlight, ground and scenery recipes
+    weather.ts            the kinds of day, and what each does to a biome's light
     validate.ts           is the content coherent? checked at startup in dev
   game/                   who is running the game, and where
     host.ts               owns a world + its clock; runs in a tab or on a server

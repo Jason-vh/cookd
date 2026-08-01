@@ -377,12 +377,15 @@ export type Tile = {
    * May an appliance stand here?
    *
    * A property of the tile rather than a test for "is this outside", so the
-   * patio ring is refused by the same rule that refuses the paving, and so outdoor
-   * seating one day is a flag on some tiles rather than a special case in
-   * `canPlace`. The **door is placeable**: sealing your own dining room off is
-   * a thing a player is allowed to do to their own kitchen (the build phase
-   * warns them), it is only not a thing the game may do on their behalf — see
-   * `isFreeTile`.
+   * patio ring is refused by the same rule that refuses the paving — and so the
+   * **terrace** is some paving that changed its mind about this one field,
+   * rather than a special case in `canPlace`. That was written down as the
+   * shape outdoor seating would take before there was any, and it is the shape
+   * it took: see [weather.md](../../docs/weather.md) and `LevelDef.terrace`.
+   *
+   * The **door is placeable**: sealing your own dining room off is a thing a
+   * player is allowed to do to their own kitchen (the build phase warns them),
+   * it is only not a thing the game may do on their behalf — see `isFreeTile`.
    */
   placeable: boolean;
 };
@@ -530,6 +533,21 @@ export type World = {
   customers: Customer[];
   /** Tile customers walk in through, taken from the level. */
   door: Vec2;
+
+  /**
+   * What sort of day it is, by id from `data/weather.ts`.
+   *
+   * Rolled from `(seed, day)` and then ordinary world state, exactly as the
+   * stall's stock is: see `sim/weather.ts` for why something derivable is
+   * stored and sent rather than recomputed on each screen. It decides whether
+   * the terrace is open and how fast the door turns, so it is a rule as much as
+   * it is a sky.
+   *
+   * An id rather than the numbers, for the reason `Customer.kind` is one: the
+   * content is compiled into both ends, and a world carrying multipliers would
+   * pin one afternoon's balance into every kitchen that outlived it.
+   */
+  weather: string;
 
   phase: Phase;
   /**

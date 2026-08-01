@@ -7,6 +7,8 @@ import { plateCount, stockPlates } from "./plates";
 import { nextRandom } from "./random";
 import { restockStall } from "./shop";
 import { createWalls, edgeSeam, openSeam, setHorizontalWall, setVerticalWall } from "./walls";
+import { setWeather } from "./weather";
+import { FAIR } from "../data/weather";
 import type {
   Appliance,
   ApplianceKind,
@@ -86,6 +88,21 @@ export function isSolid(world: World, x: number, y: number): boolean {
   if (!world.tiles[tileIndex(world, x, y)]?.walkable) return true;
   const appliance = applianceAtTile(world, x, y);
   return appliance !== null && !applianceDef(appliance.kind).mounted;
+}
+
+/**
+ * Is this square outside the building?
+ *
+ * Asked of the **room**, not of a list of terrace rectangles, because that is
+ * the fact the dining room actually cares about: a table is outdoors when it is
+ * not indoors, whichever paving it happens to be standing on. It is also the
+ * only definition that keeps working when somebody carries a table out through
+ * the door and puts it down on the apron — which they cannot, today, and which
+ * is exactly the sort of thing this game says yes to eventually.
+ */
+export function outdoors(world: World, tile: Vec2): boolean {
+  const { x, y, width, height } = world.room;
+  return tile.x < x || tile.y < y || tile.x >= x + width || tile.y >= y + height;
 }
 
 /** What hangs on the wall here, over floor anybody may walk on. */
@@ -204,6 +221,10 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     customers: [],
     door: { x: level.door.x, y: level.door.y },
     lane: level.lane ? { entry: { ...level.lane.entry }, exit: { ...level.lane.exit } } : null,
+    // Overwritten by `setWeather` below, once the day is on the world to roll
+    // against. Fair rather than empty so a half-built world is never a world
+    // with a weather nothing can look up.
+    weather: FAIR.id,
     phase: "build",
     pausedBy: null,
     pausedName: "",
@@ -244,6 +265,9 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
   // `sim/plates.ts`.
   stockPlates(world, level.plates);
   restockStall(world);
+  // The same event as the delivery, and rolled from the same two numbers: what
+  // was decided about today before anybody woke up.
+  setWeather(world);
   // No cards: a fresh world wakes on the morning of day one, and the first
   // stand is day two. A restored or reset world is handed a menu and a day it
   // did not start with, and restocks for itself — see `setUnlocked`.
@@ -263,6 +287,13 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
  * makes its own hole the same way, as it is placed.
  */
 function buildRoom(world: World, level: LevelDef): void {
+  // The terrace, over the paving and under the floor: paved ground a kitchen is
+  // also allowed to build on. One field's difference from the apron beside it,
+  // which is the whole of what outdoor seating needed — see `Tile.placeable`.
+  const terrace = (x: number, y: number): boolean =>
+    (level.terrace ?? []).some(
+      (area) => x >= area.x && y >= area.y && x < area.x + area.width && y < area.y + area.height,
+    );
   // Paving first, floor over the top of it: a paved rectangle is allowed to
   // cover the building it wraps (the beach's deck does), and the floor inside
   // the walls is the more specific fact about those squares.
@@ -270,7 +301,11 @@ function buildRoom(world: World, level: LevelDef): void {
     for (let y = area.y; y < area.y + area.height; y++) {
       for (let x = area.x; x < area.x + area.width; x++) {
         if (!inBounds(world, x, y)) continue;
-        world.tiles[tileIndex(world, x, y)] = { door: false, walkable: true, placeable: false };
+        world.tiles[tileIndex(world, x, y)] = {
+          door: false,
+          walkable: true,
+          placeable: terrace(x, y),
+        };
       }
     }
   }
@@ -347,8 +382,11 @@ export function spawnAppliance(
  * phase warns them and `canPlace` permits it — but it is not a thing the game
  * gets to do on their behalf while nobody is watching.
  *
- * Neither is the **patio**, for a plainer reason: it is not placeable at all,
- * so an oven whose owner disconnected can never end up standing in the park.
+ * The **patio** is not free either, for a plainer reason: it is not placeable,
+ * so an oven whose owner disconnected cannot end up standing in the park. The
+ * *terrace* is, and that is correct rather than an oversight — it is floor the
+ * kitchen owns, and the nearest free tile to a galley is never out on it unless
+ * the building is already full.
  */
 export function isFreeTile(world: World, x: number, y: number): boolean {
   if (!inBounds(world, x, y)) return false;

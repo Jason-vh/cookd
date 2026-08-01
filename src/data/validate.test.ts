@@ -13,7 +13,7 @@ import { specKey } from "../sim/items";
 import { reachableFrom, seatsAround } from "../sim/pathing";
 import { kitchenWarnings, unreachableTables } from "../sim/queries";
 import { createWorld, tileIndex } from "../sim/world";
-import { at, LEVELS, PARK_KITCHEN, wall, type LevelDef } from "./level";
+import { at, LEVELS, PARK_KITCHEN, rect, wall, type LevelDef } from "./level";
 import { levelProblems, validateContent } from "./validate";
 
 /** Every tier-1 recipe, by id, in a stable order. */
@@ -122,6 +122,23 @@ describe("a level that does not work is caught before it ships", () => {
 
   test("more tables than the kitchen has plates to serve them on", () => {
     expect(broken({ plates: 1 })[0]).toContain("1 plates for 2 tables");
+  });
+
+  test("a terrace that is not standing on any paving", () => {
+    // A terrace only makes paving buildable. Off the paving it makes *scenery*
+    // buildable, and an oven in the long grass is a thing nothing can walk to.
+    expect(broken({ paving: [rect(0, 0, 22, 9)] }).join("\n")).toContain("terrace off the paving");
+  });
+
+  test("a terrace laid over the floor it is meant to be outside", () => {
+    expect(broken({ terrace: [rect(9, 4, 2, 2)] })[0]).toContain("terrace inside the building");
+  });
+
+  test("a delivery square standing on the terrace", () => {
+    // A stall marks its tile unbuildable for ever, and the delivery moves every
+    // morning — so on a terrace it is a square nobody can build on and nothing
+    // on screen can explain.
+    expect(broken({ terrace: [rect(0, 3, 2, 2)] }).join("\n")).toContain("a stall on the terrace");
   });
 });
 

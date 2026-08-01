@@ -37,6 +37,7 @@ function layoutWith(kind: string, x: number, y: number) {
     appliances: [{ id: 1, kind, x, y, source: null, offer: null, taken: null, card: null }],
     unlocked: ["salad"],
     unlockedDay: 0,
+    weather: "fair",
   };
 }
 

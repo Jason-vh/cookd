@@ -5,6 +5,7 @@ import { RECIPE_BY_ID } from "./data/recipes";
 import { setUnlocked } from "./sim/cards";
 import { MAX_PLATES, platesInWorld, stockPlates } from "./sim/plates";
 import { restockStall, stallSlots } from "./sim/shop";
+import { setWeather } from "./sim/weather";
 import type { ApplianceKind, ItemSpec, Vec2, World } from "./sim/types";
 import { emptyLedger, nearestFreeTile, spawnAppliance, touchLayout } from "./sim/world";
 
@@ -557,6 +558,11 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
   world.money = migrated.money;
   world.day = migrated.day;
   world.evicted = migrated.evicted;
+  // Not saved, because it is a function of the seed and the day and both are
+  // back: a room that came off disk into a different sky from the one it went
+  // to bed under would be a room where restarting the server changes the
+  // weather. The same reasoning as the stall's stock, one line instead of ten.
+  setWeather(world);
   world.today = emptyLedger(migrated.day);
   // Before either restock: the stall stocks for the menu and the stand rolls
   // against it, so a world holding the wrong one would roll the wrong shop.

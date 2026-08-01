@@ -6,8 +6,9 @@ import { MAX_PLATES, plateCount, scrape, stackPlates, stockPlates } from "../pla
 import { CAR_SPEED, LANE_QUEUE, hatchOf, laneCars, laneEnds, laneSpot } from "../lane";
 import { pathTo, reachableFrom, seatsAround } from "../pathing";
 import { unlockedRecipes } from "../cards";
+import { servesOutdoors, weatherOf } from "../weather";
 import type { Appliance, Customer, Item, Recipe, Vec2, World } from "../types";
-import { CUSTOMER_SPEED, effect, log, random, tileIndex } from "../world";
+import { CUSTOMER_SPEED, effect, log, outdoors, random, tileIndex } from "../world";
 
 /**
  * Customers: the order queue made physical.
@@ -120,13 +121,32 @@ const SEAT_PULL = 3.5;
 function arrivalInterval(world: World, reachable: Set<number>): number {
   const floor = Math.max(6, 14 - world.day * 1.5);
   const pull = QUIET_INTERVAL - SEAT_PULL * freeTables(world, reachable);
-  return Math.max(floor, pull) + random(world) * 4;
+  // The weather's second dial, and the smaller one. Its *first* is the terrace,
+  // and that already arrives here on its own: a shut terrace is fewer free
+  // tables, which is the count this line is built on. What is left for `trade`
+  // is the part that has nothing to do with seats — fewer people out walking at
+  // all — which is also the only thing weather can say to a drive-through.
+  return (Math.max(floor, pull) + random(world) * 4) * weatherOf(world).trade;
 }
 
 /**
- * Tables somebody could sit at right now: unclaimed, clear, and reachable.
+ * Is this table open for business?
  *
- * The same three conditions `claimTable` uses, because "how busy is the room"
+ * A table standing outside the walls is furniture in a puddle when the terrace
+ * is shut. Asked in one place and used by all three questions the dining room
+ * puts to the furniture — how busy the room is, where to seat somebody, and how
+ * big a party may walk up the path — because those have to agree, and a terrace
+ * that closed for seating but not for the arrival rate would be a room that
+ * kept sending people to a chair it had already withdrawn.
+ */
+function serving(world: World, table: Appliance): boolean {
+  return !outdoors(world, table.tile) || servesOutdoors(world);
+}
+
+/**
+ * Tables somebody could sit at right now: unclaimed, clear, reachable and open.
+ *
+ * The same four conditions `claimTable` uses, because "how busy is the room"
  * and "is there anywhere to put this person" have to be the same question. A
  * table with a dirty plate on it is not free — which means falling behind on
  * bussing quietly slows the door down, and catching up opens it again.
@@ -137,6 +157,7 @@ export function freeTables(world: World, reachable: Set<number>): number {
   for (const appliance of world.appliances.values()) {
     if (appliance.kind !== "table" || taken.has(appliance.id)) continue;
     if (appliance.item !== null || appliance.tip > 0) continue;
+    if (!serving(world, appliance)) continue;
     if (reachableSeats(world, appliance.tile, reachable).length === 0) continue;
     free++;
   }
@@ -220,7 +241,10 @@ function laneSystem(world: World, dt: number): void {
 function laneInterval(world: World): number {
   const floor = Math.max(6, 14 - world.day * 1.5);
   const pull = QUIET_INTERVAL - SEAT_PULL * (LANE_QUEUE - laneCars(world).length);
-  return Math.max(floor, pull) + random(world) * 4;
+  // The only thing the weather can do to a room with no chairs in it, and the
+  // reason `trade` is a column at all. A dining room has furniture to take
+  // away; a lane has nothing but the road, so the road is what gets quieter.
+  return (Math.max(floor, pull) + random(world) * 4) * weatherOf(world).trade;
 }
 
 /**
@@ -510,7 +534,7 @@ function arrive(world: World, reachable: Set<number>): void {
 function biggestTable(world: World, reachable: Set<number>): number {
   let most = 1;
   for (const appliance of world.appliances.values()) {
-    if (appliance.kind !== "table") continue;
+    if (appliance.kind !== "table" || !serving(world, appliance)) continue;
     most = Math.max(most, reachableSeats(world, appliance.tile, reachable).length);
   }
   return most;
@@ -720,6 +744,7 @@ function claimTable(world: World, reachable: Set<number>, seats = 1): Appliance 
   for (const appliance of world.appliances.values()) {
     if (appliance.kind !== "table" || taken.has(appliance.id)) continue;
     if (appliance.item !== null || appliance.tip > 0) continue;
+    if (!serving(world, appliance)) continue;
     const chairs = reachableSeats(world, appliance.tile, reachable);
     if (chairs.length < seats) continue;
     const chair = chairs[0];

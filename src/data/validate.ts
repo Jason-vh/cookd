@@ -342,6 +342,33 @@ export function levelProblems(level: LevelDef): string[] {
       say(`paving off the grid at ${area.x},${area.y}`);
     }
   }
+  // The terrace is paving that a kitchen may also build on, so it has to be
+  // paving, and it has to be outside the walls — a rectangle over the floor
+  // would be a no-op written as if it did something. Both are checked against
+  // the *level* rather than the built world, because `createWorld` stamps the
+  // floor over the top and there would be nothing left to see.
+  for (const area of level.terrace ?? []) {
+    if (area.width <= 0 || area.height <= 0) say("a terrace with no ground in it");
+    for (let y = area.y; y < area.y + area.height; y++) {
+      for (let x = area.x; x < area.x + area.width; x++) {
+        if (!level.paving.some((paved) => within(paved, x, y))) {
+          say(`terrace off the paving at ${x},${y}`);
+        }
+        if (within(room, x, y)) say(`terrace inside the building at ${x},${y}`);
+      }
+    }
+  }
+  // Level furniture marks its tile unbuildable for ever (see `createWorld`),
+  // which anywhere else is exactly right and on a terrace is a square nobody
+  // can build on and nothing can explain — the delivery it belongs to moves
+  // every morning and will never stand there again.
+  for (const placement of level.appliances) {
+    if (APPLIANCES[placement.kind].movable) continue;
+    const { x, y } = placement.at;
+    if ((level.terrace ?? []).some((area) => within(area, x, y))) {
+      say(`a ${placement.kind} on the terrace at ${x},${y}`);
+    }
+  }
   for (const line of level.walls) {
     if (line.from.x !== line.to.x && line.from.y !== line.to.y) say("a diagonal wall");
     else if (line.from.x === line.to.x && line.from.y === line.to.y) say("a wall of no length");

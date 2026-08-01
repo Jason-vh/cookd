@@ -308,6 +308,13 @@ function parseLayout(value: unknown): Layout | null {
   const unlockedDay = int(value.unlockedDay);
   if (!unlocked || unlockedDay === null || unlockedDay < 0) return null;
 
+  // The sky. Checked for shape but *not* for membership, the same way a
+  // customer's kind is: `weatherById` answers an id it has never heard of with
+  // a fair day, and refusing the whole layout would be dropping a kitchen over
+  // a word the server learned in a deploy we have not had yet.
+  const weather = str(value.weather, MAX_NAME);
+  if (weather === null) return null;
+
   const appliances = all(raw, (entry) => {
     if (!isRecord(entry)) return null;
     const id = int(entry.id);
@@ -334,7 +341,7 @@ function parseLayout(value: unknown): Layout | null {
     if (topper === undefined || (topper !== null && !isApplianceKind(topper))) return null;
     return { id, kind, x, y, source, offer, taken, topper, card };
   });
-  return appliances === null ? null : { appliances, unlocked, unlockedDay };
+  return appliances === null ? null : { appliances, unlocked, unlockedDay, weather };
 }
 
 /**

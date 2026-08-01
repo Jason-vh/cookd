@@ -1,6 +1,7 @@
 import { rentFor } from "../data/economy";
 import { RECIPE_BY_ID } from "../data/recipes";
 import { isLastOrders } from "../sim/queries";
+import { weatherOf } from "../sim/weather";
 import type { Ledger, World } from "../sim/types";
 
 /**
@@ -275,6 +276,8 @@ export class Hud {
       // yesterday's report above it: the last day's numbers are the epitaph.
       this.setBanner("title", `Day ${closed.day} \u2014 closed down`);
       this.setBanner("open", "The rent went unpaid twice, and the kitchen is repossessed");
+      // Nothing left to forecast: the kitchen is not opening again.
+      this.setBanner("weather", "");
       this.setBanner("note", "Start again from the pause menu");
       this.bannerCard.querySelector('[data-banner="note"]')?.classList.remove("urgent");
       if (hasReport) this.setReport(closed, world.money);
@@ -282,6 +285,12 @@ export class Hud {
     }
 
     this.setBanner("title", `Day ${world.day} \u2014 morning`);
+    // The forecast, above the instruction rather than below it, because it is a
+    // thing to *know before spending*: what the shop is worth this morning
+    // depends on whether anybody will be sitting outside this afternoon. This
+    // is the whole of how a player learns the terrace exists, which is why the
+    // sentence lives in `data/weather.ts` beside the numbers it describes.
+    this.setBanner("weather", weatherOf(world).note);
     // Where, not which button. The day is opened by turning the sign in the
     // doorway, so the instruction names a *place in the room* — which is the
     // whole reason the sign exists. See `sim/systems/sign.ts`.
@@ -357,6 +366,12 @@ export class Hud {
 
     const title = document.createElement("h1");
     title.dataset.banner = "title";
+    // Dressed as the footnote below it, and hidden with it when the card folds
+    // down to a strip: once the morning has been read, the sky is out of the
+    // window and does not need a caption.
+    const weather = document.createElement("p");
+    weather.className = "banner-note";
+    weather.dataset.banner = "weather";
     const open = document.createElement("p");
     open.dataset.banner = "open";
     open.className = "banner-open";
@@ -374,7 +389,7 @@ export class Hud {
     const note = document.createElement("p");
     note.className = "banner-note";
     note.dataset.banner = "note";
-    this.bannerCard.replaceChildren(report, title, open, note);
+    this.bannerCard.replaceChildren(report, title, weather, open, note);
   }
 
   private setBanner(key: string, value: string): void {

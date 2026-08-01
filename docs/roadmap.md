@@ -36,7 +36,20 @@ Near term:
   is both kinds of restaurant at once. The open design question is the one a
   dining room answers with furniture — **what a lane's difficulty dial is**, now
   that there are no tables to buy. Plates and sinks are the honest answer today,
-  and they escalate the loop rather than the demand.
+  and they escalate the loop rather than the demand. The [weather](weather.md)
+  reaches it too, through `trade` — but that is a dial the *day* turns rather
+  than one the room does.
+
+- **The weather is in**, and with it the [terrace](weather.md): the paving
+  outside is somewhere a table may stand, and a rainy day is a day nobody sits
+  at one. It cost a content table, a roll from `(seed, day)` beside the shop's,
+  one field on `LevelDef` and one line in the layout message — because the tiles
+  were already carrying `walkable` and `placeable` as separate facts, and
+  outdoor seating turned out to be exactly what the note on `placeable`
+  predicted it would be: some of them changing their mind about the second one.
+  What is left is the *visual* half, and it is the same missing piece as the
+  burn effects — **rain** wants a particle system, so today a rainy day is a
+  grey one and the morning card is what names it.
 - **Verify the gamepad mapping** on real hardware, add per-player join/leave UI
   and rumble on burn/serve.
 - **Multiplayer polish:** there is still no spectator mode and no proper

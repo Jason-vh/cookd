@@ -192,6 +192,13 @@ export function generateLevel(seed: number): LevelDef {
     size: { width: width + MARGIN * 2, height: height + MARGIN * 2 },
     room: rect(MARGIN, MARGIN, width, height),
     paving: [rect(0, 0, width + MARGIN * 2, height + MARGIN * 2)],
+    // The terrace: the outermost row of paving along the south face, in front
+    // of the dining half rather than the galley. Not rolled, and the note at
+    // the top of this file says why — outdoor seats are capacity, and capacity
+    // is the shop's dial rather than the seed's. What it *is* is the outer ring,
+    // because `deliverySquares` walks the inner one: the two must never overlap,
+    // since a delivery square marks its tile unbuildable for ever.
+    terrace: [rect(0, MARGIN + height + 1, MARGIN + dining, 1)],
     door,
     walls: divider(split, north, south, new Set([gap, ...passes])),
     appliances,

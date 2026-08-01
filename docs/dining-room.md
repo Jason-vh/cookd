@@ -248,6 +248,24 @@ them can also tell you how far you have to walk. The bubble used to float over
 the *table*, which was right while a table was one order and became ambiguous
 the day three people sat at one — so it moved to the head it belongs over.
 
+## Some of the seats are outside
+
+A table may stand on the **terrace** — the paving in front of the restaurant —
+and from the dining room's point of view it is an ordinary table with one extra
+condition on it: `serving()`, which is false out there on a day the weather has
+shut the terrace.
+
+One predicate, asked in all three places the room puts a question to its
+furniture — how busy it is, where to seat somebody, and how big a party may walk
+up the path. They have to agree: a terrace that closed for seating but not for
+the arrival rate would be a room that kept sending people to a chair it had
+already withdrawn. And because arrivals scale with free tables, closing the
+terrace makes a room smaller *and* quieter through the machinery that was
+already here, rather than through a rule about demand.
+
+See [the weather](weather.md) for what that bargain costs and why the choice is
+made in the morning rather than during service.
+
 ## The tip is why bussing is not a chore
 
 Payment is split. The **base reward** lands on delivery, on the chef who ran the

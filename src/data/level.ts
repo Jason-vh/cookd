@@ -67,6 +67,31 @@ export type LevelDef = {
    */
   paving: Rect[];
   /**
+   * The **terrace**: paving a kitchen is also allowed to build on.
+   *
+   * The whole of outdoor seating, and it is one field because the tiles were
+   * already carrying the distinction — `walkable` and `placeable` are separate
+   * facts, and the apron has only ever been the first without the second. A
+   * terrace square is both, so `canPlace` needs no idea of "outside" and the
+   * ghost, the placement rule and the save all follow for free.
+   *
+   * Anything may be built out here, not only tables. A fryer on the terrace is
+   * a strange kitchen with a long walk, and the build phase's promise is that
+   * you may make one — refusing it would be a rule to explain in exchange for
+   * nothing. What makes it *seating* is the weather: a table standing outside
+   * the walls cannot be sat at when the terrace is shut. See
+   * [weather.md](../../docs/weather.md).
+   *
+   * Must be paved, must be outside the building, and must not have any of the
+   * level's own immovable furniture standing on it — a delivery square marks
+   * its tile unbuildable for ever, which on a terrace is a hole nobody can
+   * explain. `validate.ts` insists on all three.
+   *
+   * Absent for a kitchen with no outside to sit in, which is what the highway
+   * stop is.
+   */
+  terrace?: Rect[];
+  /**
    * The tile just inside the way in. The wall it stands against is the one with
    * the hole in it — see `doorSeam`.
    */
@@ -190,6 +215,15 @@ export const PARK_KITCHEN: LevelDef = {
   door: { x: 2, y: 5 },
   // The apron, all the way to the edge of the grid.
   paving: [rect(0, 0, 22, 11)],
+  // The **terrace**: the two rows of paving south of the dining room, which
+  // were the deadest ground on the map — walked across on the way in and used
+  // for nothing else. Eight squares by two, reached out of the door and round
+  // the corner, so an outdoor cover costs a walk that an indoor one does not.
+  // Off the row customers arrive along (y = 5) and clear of every square the
+  // level lands its delivery on, because a delivery square is unbuildable for
+  // ever. Adding it only *widens* what a save may describe, so no id bump:
+  // every kitchen already built restores into it unchanged.
+  terrace: [rect(0, 9, 8, 2)],
   // The divider, stopping either side of the walk-through gap at row 4. What
   // fills the rest of it is two ordinary counters — see the pass, below.
   walls: [wall(8, 2, 8, 4), wall(8, 7, 8, 9)],
@@ -221,7 +255,10 @@ export const PARK_KITCHEN: LevelDef = {
     at("stall", 2, 1),
     at("stall", 1, 8),
     at("stall", 0, 2),
-    at("stall", 3, 9),
+    // Moved off the south apron when that became the terrace: this square is
+    // only ever the *first* morning's, and there is no delivery on the first
+    // morning, so the one lasting thing it does is mark a tile unbuildable.
+    at("stall", 6, 1),
     at("stall", 4, 1),
     // The sign hangs on the wall beside the door, on the first tile inside it,
     // so opening the day is somebody walking to the door. It has to be against
@@ -269,6 +306,12 @@ export const BEACH_SHACK: LevelDef = {
   room: { x: 2, y: 1, width: 14, height: 8 },
   door: { x: 2, y: 5 },
   paving: [rect(0, 0, 18, 10)],
+  // The boardwalk: one row of decking along the south face, in front of the
+  // deck rather than the galley. A single row on purpose — the sea wall is at
+  // its back, so a table out here has two free sides and seats a couple, where
+  // the same table inside seats a party of four. The beach sells space and
+  // charges for it, and this is that bargain again outdoors.
+  terrace: [rect(0, 9, 9, 1)],
   // The divider, in four pieces: the gap at row 4, and the two rows the pass
   // counters stand against.
   walls: [wall(9, 1, 9, 2), wall(9, 3, 9, 4), wall(9, 5, 9, 6), wall(9, 7, 9, 9)],
@@ -279,7 +322,8 @@ export const BEACH_SHACK: LevelDef = {
     at("stall", 1, 2),
     at("stall", 1, 8),
     at("stall", 2, 0),
-    at("stall", 3, 9),
+    // Off the boardwalk, for the reason the park's moved off its terrace.
+    at("stall", 4, 0),
     at("stall", 0, 0),
     at("sign", 2, 4),
     // The galley: crates and bin along the top, wash-up along the bottom.
@@ -340,6 +384,10 @@ export const HIGHWAY_STOP: LevelDef = {
   // than a quarter of an hour later.
   plates: 4,
   size: { width: 20, height: 10 },
+  // **No terrace.** Nobody gets out of the car, so there is nothing a table out
+  // here could be for, and the forecourt is a lane rather than a garden. The
+  // weather still reaches this kitchen — through `trade`, which is the half of
+  // it that has nothing to do with seats. See docs/weather.md.
   // Forecourt (x 0..1) | the galley (x 2..17) | forecourt again (x 18..19),
   // with the lane along the south apron at y = 8.
   room: { x: 2, y: 2, width: 16, height: 6 },
@@ -457,6 +505,10 @@ export function parseLevelDef(value: unknown): LevelDef | null {
   if (!size || !room || !door) return null;
 
   const paving = list(value.paving, LIMITS.paving, parseRect);
+  // Absent is a kitchen with nowhere to sit outside, which is most of them.
+  // Present but malformed is a file we do not understand.
+  const terrace = value.terrace === undefined ? [] : list(value.terrace, LIMITS.paving, parseRect);
+  if (!terrace) return null;
   const walls = list(value.walls, LIMITS.walls, parseWallRun);
   const spawns = list(value.spawns, LIMITS.spawns, parseVec);
   const appliances = list(value.appliances, LIMITS.appliances, parsePlacement);
@@ -474,6 +526,7 @@ export function parseLevelDef(value: unknown): LevelDef | null {
     size,
     room,
     paving,
+    ...(terrace.length > 0 ? { terrace } : {}),
     door,
     walls,
     ...(lane ? { lane } : {}),

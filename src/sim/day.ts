@@ -2,6 +2,7 @@ import { rentFor } from "../data/economy";
 import { platesInWorld, stockPlates } from "./plates";
 import { kitchenWarnings } from "./queries";
 import { restockStall } from "./shop";
+import { setWeather } from "./weather";
 import type { World } from "./types";
 import { emptyLedger, log } from "./world";
 
@@ -110,6 +111,10 @@ export function endDay(world: World): void {
   // day it now is. An unbought card leaves with the pallets, like every other
   // thing nobody carried in: there is another one tomorrow.
   restockStall(world);
+  // And the sky it will all happen under, from the same two numbers. Rolled
+  // here rather than at opening so the morning card can say what today is going
+  // to be *before* anybody spends the takings on another outdoor table.
+  setWeather(world);
 }
 
 /**

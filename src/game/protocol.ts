@@ -63,8 +63,14 @@ import type {
  * because a wardrobe grows faster than a protocol, but a v5 server sends no
  * outfit at all and a room full of chefs in the same colour is precisely what
  * the field exists to prevent.
+ *
+ * v7 put the weather in the layout, and it breaks for a harder reason than a
+ * colour. An unknown weather id is tolerated and reads as a fair day; a v6
+ * server sending none at all means every client believes the terrace is open
+ * while the server has shut it, so the tables outside are chairs one end of the
+ * link can see people being seated at and the other cannot.
  */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 /**
  * Ticks between broadcasts: a 60Hz simulation goes out at 20Hz.
@@ -143,6 +149,17 @@ export type Layout = {
    */
   unlocked: string[];
   unlockedDay: number;
+  /**
+   * What sort of day it is, by id from `data/weather.ts`.
+   *
+   * In the layout for the same reason the menu is: it changes once, in the
+   * morning, and never during service. Sent rather than derived even though
+   * every client could roll it from the seed and the day — see `sim/weather.ts`
+   * for why. It is load-bearing rather than decorative: it decides whether the
+   * tables out on the terrace can be sat at, so a client that had it wrong
+   * would watch customers walk past chairs it believes are free.
+   */
+  weather: string;
 };
 
 // --- dynamic half: sent continuously -----------------------------------------
@@ -359,7 +376,12 @@ export function encodeLayout(world: World): Layout {
       card: appliance.card,
     });
   }
-  return { appliances, unlocked: [...world.unlocked], unlockedDay: world.unlockedDay };
+  return {
+    appliances,
+    unlocked: [...world.unlocked],
+    unlockedDay: world.unlockedDay,
+    weather: world.weather,
+  };
 }
 
 /**
@@ -465,6 +487,7 @@ export function applyLayout(world: World, layout: Layout): void {
   world.applianceAt.fill(0);
   world.unlocked = [...layout.unlocked];
   world.unlockedDay = layout.unlockedDay;
+  world.weather = layout.weather;
   for (const saved of layout.appliances) {
     // Bounds-checked like a save is. `restore` has always done this and the
     // wire path never did, which is an odd place to be more trusting: a save is

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { EffectCue, Rect, Seam, World } from "../sim/types";
 import { applianceAtTile, playerById } from "../sim/world";
 import { approachTile, dayProgress } from "../sim/queries";
+import { weatherOf } from "../sim/weather";
 import { hatchOf } from "../sim/lane";
 import { edgeSeam, horizontalWall, mountSeam, verticalWall } from "../sim/walls";
 import { applianceDef } from "../data/appliances";
@@ -287,6 +288,11 @@ export class View {
 
     // After the camera, which decides where the shadow map is spent; before the
     // post chain, whose grade is part of what the hour means.
+    //
+    // The weather is set every frame rather than watched for changes: it is a
+    // pointer comparison inside, and the alternative is this file keeping its
+    // own copy of a fact the world already holds.
+    this.daylight.setWeather(weatherOf(world).sky);
     this.daylight.update(dayProgress(world), dt);
     this.post?.setGrade(this.daylight.state.grade);
 

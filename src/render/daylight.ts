@@ -1,13 +1,15 @@
 import * as THREE from "three";
 import type { Biome, DaylightKey, SkyState } from "../data/biomes";
+import { FAIR, type SkyShift } from "../data/weather";
 import { clamp01, ease, lerp } from "./anim";
 import { disposeSubtree } from "./dispose";
 
 /**
- * The sky, and the hour it is.
+ * The sky, the hour it is, and the weather it is in.
  *
  * A biome keyframes its own day (`data/biomes.ts`); this samples that curve
- * against the service clock and pushes the result at everything that cares —
+ * against the service clock, bends the result by the day's
+ * [weather](../../docs/weather.md), and pushes it at everything that cares —
  * the sun, the fill, the hemisphere wrap, the fog, the background gradient, the
  * image-based lighting and the renderer's exposure. The colour grade is the one
  * thing it does not apply itself, because that belongs to the post chain: read
@@ -83,6 +85,20 @@ const STEPS = 24;
  */
 const CATCH_UP = 1.2;
 
+/**
+ * How fast the sky changes its mind about the weather, per second.
+ *
+ * Slower than the clock's catch-up, and for the opposite reason. The hour eases
+ * because closing time hands it a whole day to travel backwards; the weather
+ * eases because it changes *once*, between two days, and a hard cut from a
+ * bright afternoon to a grey one is the one moment in the game that would look
+ * like a bug rather than like weather.
+ */
+const WEATHER_CHANGE = 0.7;
+
+/** Close enough to the target that the crossfade can stop costing a re-bake. */
+const SETTLED = 0.002;
+
 export type DaylightBounds = {
   /** Kitchen footprint in tiles, and where its centre is. */
   width: number;
@@ -120,6 +136,11 @@ export class Daylight {
 
   private time = 0;
   private step = -1;
+
+  /** The weather being drawn, and the one being drawn *toward*. See `setWeather`. */
+  private readonly shift: SkyShift = { ...FAIR.sky };
+  private target: SkyShift = FAIR.sky;
+  private settling = false;
 
   /** Live corners of the ground in shot, or null for a fixed box. See `follow`. */
   private followed: readonly THREE.Vector3[] | null = null;
@@ -206,17 +227,33 @@ export class Daylight {
   }
 
   /**
+   * What the weather is doing to the light, from today's row in
+   * `data/weather.ts`.
+   *
+   * Takes the **shift** rather than the weather, because a light does not need
+   * to know what rain is called. Compared by identity: the rows are module
+   * constants, so a frame that hands over the same weather again costs a
+   * pointer comparison.
+   */
+  setWeather(shift: SkyShift): void {
+    if (shift === this.target) return;
+    this.target = shift;
+    this.settling = true;
+  }
+
+  /**
    * Move the day toward `target` (0 at opening, 1 at closing), easing rather
    * than jumping so a rollover to the next morning dissolves.
    */
   update(target: number, dt: number): void {
+    if (this.settling) this.settling = !approach(this.shift, this.target, ease(WEATHER_CHANGE, dt));
     this.set(lerp(this.time, clamp01(target), ease(CATCH_UP, dt)));
   }
 
   /** Stand the day at one hour and leave it there. */
   set(time: number): void {
     this.time = time;
-    const state = sampleDaylight(this.keys, time, this.state);
+    const state = applyWeather(sampleDaylight(this.keys, time, this.state), this.shift);
 
     // Aim first, then stand the sun on the line: the shadow box is centred on
     // wherever the light is looking, and moving that afterwards would leave the
@@ -242,8 +279,12 @@ export class Daylight {
     this.scene.environmentIntensity = state.environmentIntensity;
     this.renderer.toneMappingExposure = state.exposure;
 
+    // The gradient and the environment map are bucketed against the clock, and
+    // a weather crossfade moves neither — so while one is running they have to
+    // be redrawn on their own account, or the sky behind a kitchen would stay
+    // yesterday's colour until the hour happened to tick over.
     const step = Math.round(time * STEPS);
-    if (step === this.step) return;
+    if (step === this.step && !this.settling) return;
     this.step = step;
     this.drawSky();
     this.bakeEnvironment();
@@ -494,6 +535,87 @@ export function sampleDaylight(
   out.grade.lift = lerp(a.grade.lift, b.grade.lift, t);
 
   return out;
+}
+
+/**
+ * Bend a sampled sky by the weather, in place.
+ *
+ * Everything cloud does to a day is one of three moves: take the sun out, put
+ * the difference back into the flat light so the frame does not simply go dark,
+ * and pull every colour in it toward one grey. So that is what this is — three
+ * moves over ten numbers, rather than a second set of keyframes per biome per
+ * weather, which would be nine days to keep in step to say the same thing three
+ * times.
+ *
+ * The sun's **direction** is deliberately untouched. It is still up there, the
+ * shadows still fall the way the hour says, and the shadow camera is still
+ * aimed at a light it can find. An overcast sky with no shadows at all reads as
+ * a renderer that has stopped working rather than as weather.
+ */
+export function applyWeather(out: SkyState, shift: SkyShift): SkyState {
+  const haze = shift.haze;
+  if (haze > 0) {
+    out.sky.top = mix(out.sky.top, shift.tint, haze);
+    out.sky.middle = mix(out.sky.middle, shift.tint, haze);
+    out.sky.horizon = mix(out.sky.horizon, shift.tint, haze);
+    out.fog.color = mix(out.fog.color, shift.tint, haze);
+    out.fill.color = mix(out.fill.color, shift.tint, haze);
+    out.ambient.sky = mix(out.ambient.sky, shift.tint, haze);
+    // The sun keeps more of its own colour than the sky does: what is left of a
+    // low sun through cloud is still warmer than the cloud.
+    out.sun.color = mix(out.sun.color, shift.tint, haze * 0.75);
+  }
+
+  out.fog.near *= shift.fog;
+  out.fog.far *= shift.fog;
+  out.sun.intensity *= shift.sun;
+  out.fill.intensity *= shift.fill;
+  out.ambient.intensity *= shift.ambient;
+  out.environmentIntensity *= shift.ambient;
+  out.exposure *= shift.exposure;
+
+  out.grade.saturation *= shift.saturation;
+  // Warmth is a push toward amber and cannot be a pull away from it, so a grey
+  // day takes the biome's warmth off rather than going cold: the clamp is the
+  // difference between an overcast park and a blue one.
+  out.grade.warmth = Math.max(0, out.grade.warmth + shift.warmth);
+  out.grade.lift += shift.lift;
+  return out;
+}
+
+/**
+ * Ease one shift toward another, in place. True once it has arrived.
+ *
+ * Every field is a plain number except the tint, which is a colour and is mixed
+ * as one — the same rule `sampleDaylight` follows, and for the same reason.
+ *
+ * Arrival is measured across the three fields that carry the change rather than
+ * on one of them, because two weathers are allowed to agree about any single
+ * number: an overcast day and a rainy one could share a haze and differ in
+ * everything else, and a crossfade that called itself finished there would snap
+ * the rest.
+ */
+function approach(out: SkyShift, to: SkyShift, t: number): boolean {
+  out.sun = lerp(out.sun, to.sun, t);
+  out.fill = lerp(out.fill, to.fill, t);
+  out.ambient = lerp(out.ambient, to.ambient, t);
+  out.fog = lerp(out.fog, to.fog, t);
+  out.tint = mix(out.tint, to.tint, t);
+  out.haze = lerp(out.haze, to.haze, t);
+  out.saturation = lerp(out.saturation, to.saturation, t);
+  out.warmth = lerp(out.warmth, to.warmth, t);
+  out.lift = lerp(out.lift, to.lift, t);
+  out.exposure = lerp(out.exposure, to.exposure, t);
+  const moved = Math.max(
+    Math.abs(out.haze - to.haze),
+    Math.abs(out.sun - to.sun),
+    Math.abs(out.saturation - to.saturation),
+  );
+  if (moved > SETTLED) return false;
+  // Snapped once it is close, so a crossfade that is over stops asking for the
+  // environment map to be baked again on every frame for ever.
+  Object.assign(out, to);
+  return true;
 }
 
 export function blankSky(): SkyState {

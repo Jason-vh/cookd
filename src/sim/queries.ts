@@ -17,7 +17,8 @@ import { customerSpeed, eatTime, LAST_ORDERS } from "./systems/customers";
 export { approachTile } from "./systems/customers";
 import type { Appliance, Customer, Item, Player, Station, Vec2, World } from "./types";
 import { canReach } from "./walls";
-import { applianceAtTile, fittedDef, inBounds, mountedAt, tileIndex } from "./world";
+import { servesOutdoors, weatherOf } from "./weather";
+import { applianceAtTile, fittedDef, inBounds, mountedAt, outdoors, tileIndex } from "./world";
 
 /**
  * Read-only questions about the world.
@@ -208,6 +209,15 @@ export function kitchenWarnings(world: World): string[] {
     if (countKind(world, "table") === 0) {
       warnings.push("No tables — nobody can sit down");
     } else {
+      // A room whose whole dining room is on the terrace, on a day the terrace
+      // is shut, has tables and no seats. It is the one way the weather can
+      // leave a kitchen unable to serve anybody, and it is worth its own
+      // sentence rather than a quiet morning nobody can account for: the fix is
+      // to carry one table back inside, which is a thing the build phase can
+      // still do at the moment this is read.
+      if (!servesOutdoors(world) && indoorTables(world) === 0) {
+        warnings.push(`${weatherOf(world).label} — every table is out on the terrace`);
+      }
       const stranded = unreachableTables(world);
       if (stranded.length > 0) {
         warnings.push(`${stranded.length} table(s) can't be reached from the door`);
@@ -249,6 +259,15 @@ export function kitchenWarnings(world: World): string[] {
   }
 
   return warnings;
+}
+
+/** Tables standing inside the walls, which no weather can take away. */
+function indoorTables(world: World): number {
+  let count = 0;
+  for (const appliance of world.appliances.values()) {
+    if (appliance.kind === "table" && !outdoors(world, appliance.tile)) count++;
+  }
+  return count;
 }
 
 /** Tables a customer cannot actually reach. Used by the build phase to warn. */
