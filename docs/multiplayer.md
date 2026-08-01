@@ -118,10 +118,10 @@ Getting there took two rounds of work, on a bare kitchen with nobody in it:
 | Idle appliances omitted | **723** |
 
 Two things get it there. The **layout** — which appliances exist, where, what
-is for sale outside and what is on the [recipe posters](the-menu.md) — is ~70% of
+is for sale outside, including the morning's [recipe card](the-menu.md) — is ~70% of
 the bytes and changes a handful of times a day, so it rides its own message and
 is sent only when it changes. The room's **menu** rides it too, for the same
-reason: `unlocked` changes every third morning and never during service, and
+reason: `unlocked` changes on a morning somebody buys a card and never during service, and
 spending twenty messages a second on it would be as silly as it would be for a
 counter. And a frame carries only appliances that are *doing something* — a kitchen is mostly idle counters, and repeating
 "still empty, still zero" twenty times a second for each of them was two thirds
@@ -133,10 +133,25 @@ depends on what somebody **did** — which slot was emptied, which card was take
 what the menu now is. A shop or a stand that is half-derived and half-synced is
 one missed field away from "my friend sees a different kitchen".
 
-`PROTOCOL_VERSION` is **2**: the menu joined the layout, and a v1 server's
-layouts are rejected wholesale by a v2 client (see `parseLayout`). Without the
-bump that is a tab sitting at "connecting" with nothing logged; with it, it is
-one sentence telling the player to refresh.
+`PROTOCOL_VERSION` is **5**. Each bump is a field an older peer cannot supply
+and a newer one cannot do without: the menu joined the layout at v2, a
+customer's kind at v3, the whole level in `welcome` at v4, and at v5 a counter's
+`topper` — where [chopping boards](the-shop.md#boards-go-on-counters) live now —
+and the frame's `pausedBy`. Layouts and frames missing them are rejected
+wholesale (see `parseLayout` and `parseFrame`), so without the bump that is a
+tab sitting at "connecting" with nothing logged; with it, it is one sentence
+telling the player to refresh.
+
+**A pause is a fact about the room.** It used to be a fact about a screen: the
+menu blanked your own input and the day, the fryer and the dining room carried
+on without you, on the grounds that a client cannot stop a kitchen four people
+are standing in. It cannot — but the *host* can, and that is where it lives now.
+Opening the menu sends a `menu` action, `step` refuses to advance a world with
+`pausedBy` set, and everybody else is shown whose menu it is. Two safeguards
+follow from a pause being state rather than a keypress: a seat that goes away or
+leaves releases it (the menu that would let go of it is on a screen that has
+gone), and a reset from an open menu comes back paused, because the menu is
+still open.
 
 The simulation runs at 60Hz and broadcasts at 20Hz — except that a **press
 brings the next frame forward**. A frame is otherwise due every third tick, so

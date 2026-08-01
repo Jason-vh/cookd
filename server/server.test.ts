@@ -128,7 +128,7 @@ describe("the handshake", () => {
     const welcome = await client.waitFor("welcome");
     expect(welcome?.t === "welcome" && welcome.you.length).toBe(2);
     expect(welcome?.t === "welcome" && welcome.level.id).toBe(LEVEL.id);
-    expect(welcome?.t === "welcome" && welcome.layout.appliances.length).toBeGreaterThan(20);
+    expect(welcome?.t === "welcome" && welcome.layout.appliances.length).toBeGreaterThan(12);
     client.close();
   });
 
@@ -418,7 +418,7 @@ describe("shutting down", () => {
         }
       };
 
-      await hold({ move: { x: 0, y: -1 } }, 64); // turn to face the board
+      await hold({ move: { x: 0, y: -1 } }, 64); // turn to face the worktop
       await hold({ grab: true }, 48); // ...and lift it
       await hold({ move: { x: 0, y: 1 } }, 64); // turn round
       await hold({ grab: true }, 48); // ...and set it down behind you
@@ -432,8 +432,8 @@ describe("shutting down", () => {
       // a file this test can read but the server would reject is not a save.
       const saved = parseSave(written);
       expect(saved?.day).toBe(1);
-      // The board is on the tile the player moved it to.
-      expect(saved?.appliances).toContainEqual({ kind: "board", x: 11, y: 6 });
+      // The worktop is on the tile the player moved it to.
+      expect(saved?.appliances).toContainEqual({ kind: "counter", x: 11, y: 6 });
     } finally {
       proc.kill();
     }

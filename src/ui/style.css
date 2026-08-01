@@ -757,3 +757,38 @@ body {
   text-align: center;
   white-space: nowrap;
 }
+
+/* --- paused by somebody else ----------------------------------------------- */
+
+/*
+ * The room is stopped and it is not your menu that stopped it.
+ *
+ * Deliberately not a dialog: there is nothing to answer, and a button would
+ * imply this screen could do something about it. It is a card over a kitchen
+ * that has gone still, which is what a pause looks like from the other side.
+ */
+#paused {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  background: rgba(10, 11, 16, 0.45);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+#paused.show {
+  display: grid;
+}
+
+#paused .card {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px 28px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-align: center;
+  box-shadow: var(--shadow);
+}

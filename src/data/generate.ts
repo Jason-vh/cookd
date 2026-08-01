@@ -1,6 +1,6 @@
 import { mulberry32 } from "../sim/random";
 import type { Vec2 } from "../sim/types";
-import { at, crate, rect, run, wall, type LevelDef, type Placement, type WallRun } from "./level";
+import { at, crate, rect, wall, type LevelDef, type Placement, type WallRun } from "./level";
 
 /**
  * Kitchens that nobody drew.
@@ -97,21 +97,20 @@ export function generateLevel(seed: number): LevelDef {
   //
   // Kept **at the prep end**, which is a measured rule rather than a taste:
   // gather-and-chop is the tightest loop in the game and it is walked for every
-  // dish, and both hand-made kitchens sit their board two squares from the
+  // dish, and both hand-made kitchens sit their worktop two squares from the
   // crate run. Rolling its column across the whole galley instead put the worst
   // seeds ten squares away — a twenty-step round trip per tomato, on day one,
   // before a player has any money to fix it with.
   // Two or three rows under the back run, never adrift in the middle of the
-  // floor. The row costs as much as the column does — a board rolled across the
-  // galley's whole height is five rows from the crates in a tall kitchen — and
-  // it leaves the middle of the galley as what it should be: the corridor.
+  // floor. The row costs as much as the column does — a worktop rolled across
+  // the galley's whole height is five rows from the crates in a tall kitchen —
+  // and it leaves the middle of the galley as what it should be: the corridor.
   const islandRow = roll.int(north + 2, Math.min(south - 2, north + 3));
   const first = split + 2;
   const last = east - 3;
   const islandX = washWest
     ? roll.int(Math.max(first, last - 3), last)
     : roll.int(first, Math.min(last, first + 3));
-  const worktopX = roll.int(split + 1, east - 3);
 
   const appliances: Placement[] = [
     // The morning's delivery and the posters, grouped around the door rather
@@ -125,15 +124,12 @@ export function generateLevel(seed: number): LevelDef {
     // The back run.
     crate("tomato", prep, north),
     crate("lettuce", prep + 1, north),
-    at("counter", prep + 2, north),
     at("plates", wash, north),
     at("sink", wash + 1, north),
     at("bin", wash + 2, north),
-    // The island, and the worktop against the far wall.
+    // The island: one worktop, kept at the prep end. A generated kitchen is
+    // thin in the same way the hand-made ones are — three counters, no board.
     at("counter", islandX, islandRow),
-    at("board", islandX + 1, islandRow),
-    at("counter", islandX + 2, islandRow),
-    ...run("counter", worktopX, south, 3),
     // The pass: ordinary counters, standing in two of the divider's holes.
     ...passes.map((y) => at("counter", split, y)),
     // Two rows stay clear, for reasons the rest of the game already states.

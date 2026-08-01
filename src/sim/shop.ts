@@ -1,5 +1,5 @@
 import { APPLIANCE_KINDS, ESSENTIAL, applianceDef, type ApplianceKind } from "../data/appliances";
-import { PLATE_PRICE, PLATE_WEIGHT, SCARCE_BELOW, SELLBACK, STOCK_WEIGHT } from "../data/economy";
+import { SCARCE_BELOW, SELLBACK, STOCK_WEIGHT } from "../data/economy";
 import { unlockedIngredients, unlockedKinds } from "./cards";
 import { ingredient } from "../data/ingredients";
 import { mulberry32 } from "./random";
@@ -68,7 +68,7 @@ export function stallSlots(world: World): Appliance[] {
 }
 
 export function offerPrice(offer: Offer): number {
-  return offer.good === "plate" ? PLATE_PRICE : applianceDef(offer.kind).price;
+  return applianceDef(offer.kind).price;
 }
 
 /** What the stall pays for one of these. Rounded down: the house rounds. */
@@ -77,7 +77,6 @@ export function sellPrice(kind: ApplianceKind): number {
 }
 
 export function offerLabel(offer: Offer): string {
-  if (offer.good === "plate") return "Plate";
   if (offer.source) return `${ingredient(offer.source.base).name} crate`;
   return applianceDef(offer.kind).label;
 }
@@ -96,11 +95,19 @@ export function isEssential(kind: ApplianceKind): boolean {
   return ESSENTIAL.includes(kind);
 }
 
-/** How many of this kind the kitchen owns, held ones included. */
+/**
+ * How many of this kind the kitchen owns, held ones included.
+ *
+ * **Fittings are counted where they sit.** A board set on a counter is not an
+ * appliance in the map any more, and a count that only walked the map would
+ * report a kitchen full of boards as owning none of them — so the stall would
+ * promise a board every morning for ever.
+ */
 export function countKind(world: World, kind: ApplianceKind): number {
   let count = 0;
   for (const appliance of world.appliances.values()) {
     if (appliance.kind === kind) count++;
+    if (appliance.topper === kind) count++;
   }
   return count;
 }
@@ -140,7 +147,7 @@ export function restockStall(world: World): void {
 
   for (const [index, slot] of slots.entries()) {
     const guaranteed = index === promised && scarce.length > 0;
-    slot.offer = guaranteed ? rollFrom(scarce, random, sources) : rollOffer(sold, random, sources);
+    slot.offer = rollFrom(guaranteed ? scarce : sold, random, sources);
     slot.taken = null;
   }
 
@@ -240,28 +247,15 @@ function soldKinds(world: World): ApplianceKind[] {
 }
 
 /**
- * One slot's worth of stock, weighted across the appliances and the plate.
+ * One slot's worth of stock, drawn from a pool by weight.
  *
- * Walks `APPLIANCE_KINDS` rather than the weight table's own keys, so the order
- * of the roll is the order of the appliance table — a fixed, shared sequence.
- * Iterating a record's keys would tie the outcome to insertion order, which is
- * stable in practice and is exactly the sort of thing that has no business
- * deciding what two different clients see in a shop.
- */
-function rollOffer(pool: ApplianceKind[], random: () => number, sources: string[]): Offer {
-  let total = PLATE_WEIGHT;
-  for (const kind of pool) total += STOCK_WEIGHT[kind];
-
-  let roll = random() * total;
-  for (const kind of pool) {
-    roll -= STOCK_WEIGHT[kind];
-    if (roll < 0) return withSource(kind, random, sources);
-  }
-  return { good: "plate" };
-}
-
-/**
- * Pick from a shortlist, still by weight.
+ * The pool is walked in `APPLIANCE_KINDS` order, so the roll follows the
+ * appliance table — a fixed, shared sequence. Iterating a record's keys would
+ * tie the outcome to insertion order, which is stable in practice and is
+ * exactly the sort of thing that has no business deciding what two different
+ * clients see in a shop.
+ *
+ * By weight rather than uniformly, even for the promised slot.
  *
  * Uniformly would have been simpler and was wrong. A lean kitchen owns one of
  * nearly everything, so "kinds you have fewer than two of" is most of the
@@ -278,6 +272,8 @@ function rollFrom(pool: ApplianceKind[], random: () => number, sources: string[]
     roll -= STOCK_WEIGHT[kind];
     if (roll < 0) return withSource(kind, random, sources);
   }
+  // A draw that fell off the end of the table, which only a pool that is empty
+  // or weightless can do. A counter is the thing every kitchen can use.
   return withSource(pool[0] ?? "counter", random, sources);
 }
 
@@ -288,7 +284,7 @@ function rollFrom(pool: ApplianceKind[], random: () => number, sources: string[]
  * cheese until a dish takes cheese, and tomatoes from the first morning.
  */
 function withSource(kind: ApplianceKind, random: () => number, sources: string[]): Offer {
-  if (kind !== "crate") return { good: "appliance", kind, source: null };
+  if (kind !== "crate") return { kind, source: null };
   const base = sources[Math.floor(random() * sources.length)] ?? "tomato";
-  return { good: "appliance", kind, source: { base, processes: [] } };
+  return { kind, source: { base, processes: [] } };
 }

@@ -11,7 +11,7 @@ import {
   customerSpeed,
   kitchenWarnings,
   mealLeft,
-  unreachableAppliances,
+  targetAppliance,
   unreachableTables,
 } from "./queries";
 import { isDirty, isPlate, makeItem, specKey } from "./items";
@@ -38,6 +38,8 @@ import {
   emptyInput,
   emptyLedger,
   isSolid,
+  pause,
+  resume,
   PLAYER_RADIUS,
   removePlayer,
   spawnAppliance,
@@ -85,7 +87,20 @@ function equip(world: World): void {
   }
   spawnAppliance(world, "oven", { x: OVEN[0], y: OVEN[1] });
   spawnAppliance(world, "fryer", { x: FRYER[0], y: FRYER[1] });
+  spawnAppliance(world, "counter", { x: COUNTER[0], y: COUNTER[1] });
+  // A board is a fitting, so "the kitchen has a board" means a counter with one
+  // set on it. `BOARD` is that counter's tile, which is what every coordinate
+  // below still means.
+  fitBoard(world, BOARD, "board");
   world.unlocked = RECIPES.map((recipe) => recipe.id);
+}
+
+/** Set a board on the counter standing at `tile`, standing one there if need be. */
+function fitBoard(world: World, tile: readonly [number, number], kind: ApplianceKind): void {
+  const host =
+    applianceAtTile(world, tile[0], tile[1]) ??
+    spawnAppliance(world, "counter", { x: tile[0], y: tile[1] });
+  host.topper = kind;
 }
 
 /** Put a world into service without going through a morning. */
@@ -299,11 +314,11 @@ describe("kitchen basics", () => {
     const counterId = player.carriedAppliance!;
     expect(world.appliances.get(counterId)!.kind).toBe("counter");
 
-    face(player, BOARD[0], BOARD[1], 0, -1);
+    face(player, OVEN[0], OVEN[1], 0, -1);
     press(world, "grab");
 
-    expect(applianceAtTile(world, BOARD[0], BOARD[1])!.id).toBe(counterId);
-    expect(world.appliances.get(player.carriedAppliance!)!.kind).toBe("board");
+    expect(applianceAtTile(world, OVEN[0], OVEN[1])!.id).toBe(counterId);
+    expect(world.appliances.get(player.carriedAppliance!)!.kind).toBe("oven");
   });
 
   test("carrying an appliance in the build phase costs no speed", () => {
@@ -554,7 +569,7 @@ describe("upgrades", () => {
 
   test("a steel board finishes a chop a wooden one is still working on", () => {
     const world = makeWorld();
-    spawnAppliance(world, "steel_board", { x: STEEL_BOARD[0], y: STEEL_BOARD[1] });
+    fitBoard(world, STEEL_BOARD, "steel_board");
     takeFrom(world, CRATE.tomato);
     putOn(world, STEEL_BOARD);
     workOn(world, STEEL_BOARD, 0.8);
@@ -922,16 +937,16 @@ describe("day loop", () => {
     hold(world, 0.2, null);
     expect(world.phase).toBe("build");
 
-    const board = applianceAtTile(world, BOARD[0], BOARD[1])!;
-    face(world.players[0]!, BOARD[0], BOARD[1], 0, -1);
+    const counter = applianceAtTile(world, COUNTER[0], COUNTER[1])!;
+    face(world.players[0]!, COUNTER[0], COUNTER[1], 0, -1);
     press(world, "grab");
-    expect(board.heldBy).toBe(0);
-    expect(applianceAtTile(world, BOARD[0], BOARD[1])).toBeNull();
+    expect(counter.heldBy).toBe(0);
+    expect(applianceAtTile(world, COUNTER[0], COUNTER[1])).toBeNull();
 
     // Drop it one tile to the right, on what used to be counter-free floor.
     face(world.players[0]!, 15, 5, 0, -1);
     press(world, "grab");
-    expect(applianceAtTile(world, 15, 5)!.id).toBe(board.id);
+    expect(applianceAtTile(world, 15, 5)!.id).toBe(counter.id);
 
     flipSign(world);
     expect(world.phase).toBe("service");
@@ -1148,7 +1163,7 @@ describe("the sign by the door", () => {
     expect(wallBetween(world, sign.tile, across(seam, sign.tile))).toBe(true);
     // So its square is ordinary floor: walk over it, build nothing on it.
     expect(isSolid(world, sign.tile.x, sign.tile.y)).toBe(false);
-    expect(canPlace(world, sign.tile.x, sign.tile.y)).toBe(false);
+    expect(canPlace(world, sign.tile.x, sign.tile.y, "counter")).toBe(false);
     // ...and it is beside the door, which is the only reason a player finds it.
     const away = Math.abs(sign.tile.x - world.door.x) + Math.abs(sign.tile.y - world.door.y);
     expect(away).toBe(1);
@@ -1174,6 +1189,11 @@ function sellOff(world: World, kinds: ApplianceKind[]): void {
   for (const appliance of doomed) {
     world.applianceAt[appliance.tile.y * world.width + appliance.tile.x] = 0;
     world.appliances.delete(appliance.id);
+  }
+  // A fitting goes with whatever it was fitted to, exactly as it does when a
+  // player lifts the counter out from under it.
+  for (const appliance of world.appliances.values()) {
+    if (appliance.topper !== null && kinds.includes(appliance.topper)) appliance.topper = null;
   }
 }
 
@@ -1241,31 +1261,22 @@ describe("what the kitchen says is wrong with it", () => {
     expect(kitchenWarnings(messy)).toEqual(["No bin — a ruined dish has nowhere to go"]);
   });
 
-  test("an appliance no chef can walk up to is named", () => {
-    // The other half of the walled-off dining room, from the kitchen's side: a
-    // bin boxed into its corner is a bin that may as well have been sold.
+  test("an appliance a chef can only reach across a corner is not a problem", () => {
+    // There used to be a warning here, and it was wrong. A chef reaches
+    // **diagonally** — `canReach` says so, and the corner rule is the reason it
+    // exists — while the warning was built on the four-way seat search the
+    // dining room uses. So a bin walled in on all four sides but open across a
+    // corner was ringed in red and named at every open, while somebody stood at
+    // the diagonal and used it.
     const world = makeWorld();
-    expect(unreachableAppliances(world)).toHaveLength(0);
-
     spawnAppliance(world, "counter", { x: BIN[0], y: BIN[1] + 1 });
-    expect(unreachableAppliances(world).map((appliance) => appliance.kind)).toEqual(["bin"]);
-    expect(kitchenWarnings(world)).toContain("Can't be walked up to: Bin");
+    spawnAppliance(world, "counter", { x: BIN[0] - 1, y: BIN[1] });
 
-    // Nobody in the room, no answer to give: reachability is measured from the
-    // chefs, and a kitchen with none of them is not a kitchen with a problem.
-    world.players = [];
-    expect(unreachableAppliances(world)).toHaveLength(0);
-  });
-
-  test("a chef who has walled themselves in has one problem, not eight", () => {
-    // Seal the whole back run behind a wall of counters. Naming five appliances
-    // would describe the symptoms of a single wall, so past a few it counts
-    // instead — the same rule as "nothing on the menu can be made here".
-    const world = makeWorld();
-    for (let x = PLATES[0]; x <= BIN[0]; x++) spawnAppliance(world, "counter", { x, y: 3 });
-
-    expect(unreachableAppliances(world)).toHaveLength(5);
-    expect(kitchenWarnings(world)).toContain("5 appliances can't be walked up to");
+    // Still usable, and the kitchen says nothing about it.
+    const player = world.players[0]!;
+    face(player, BIN[0], BIN[1], 1, -1);
+    expect(targetAppliance(world, player)!.kind).toBe("bin");
+    expect(kitchenWarnings(world)).toEqual([]);
   });
 
   test("a burnt dish costs a plate for the day, and not one minute longer", () => {
@@ -1310,7 +1321,7 @@ describe("walls between blocks", () => {
     // line down one edge of it.
     const world = makeWorld();
     expect(isSolid(world, PASS[0], PASS[1] - 1)).toBe(false);
-    expect(canPlace(world, PASS[0], PASS[1] - 1)).toBe(true);
+    expect(canPlace(world, PASS[0], PASS[1] - 1, "counter")).toBe(true);
   });
 
   test("a chef is stopped by the line, and goes round through the gap", () => {
@@ -1413,13 +1424,13 @@ describe("the paving, and the ground beyond it", () => {
   test("nothing may be built on the paving, but the doorway is the player's business", () => {
     const world = makeWorld();
     // Patio: refused, and the ghost turns red because it asks the same question.
-    expect(canPlace(world, 0, 0)).toBe(false);
-    expect(canPlace(world, world.width - 1, world.height - 1)).toBe(false);
+    expect(canPlace(world, 0, 0, "counter")).toBe(false);
+    expect(canPlace(world, world.width - 1, world.height - 1, "counter")).toBe(false);
     // Kitchen floor: allowed.
-    expect(canPlace(world, COUNTER[0], COUNTER[1])).toBe(true);
+    expect(canPlace(world, COUNTER[0], COUNTER[1], "counter")).toBe(true);
     // The doorway is allowed, deliberately: sealing your own dining room off is
     // a mistake the build phase warns about rather than prevents.
-    expect(canPlace(world, world.door.x, world.door.y)).toBe(true);
+    expect(canPlace(world, world.door.x, world.door.y, "counter")).toBe(true);
   });
 
   test("an appliance against the wall has one side, and it is the inside", () => {
@@ -2003,6 +2014,7 @@ function makeLane(): World {
   world.nextArrivalIn = Infinity;
   world.phase = "service";
   world.dayTime = world.dayLength;
+  fitBoard(world, LANE_BOARD, "board");
   return world;
 }
 
@@ -2179,5 +2191,171 @@ describe("the drive-through", () => {
     expect(kitchenWarnings(world)).toEqual([]);
     expect(applianceDef("hatch").movable).toBe(false);
     expect(snapshot(world).appliances.some((entry) => entry.kind === "hatch")).toBe(false);
+  });
+});
+
+/**
+ * A chopping board is a **fitting**: a block set on a counter's worktop, not an
+ * appliance standing on a tile of its own.
+ *
+ * It has always been *drawn* that way — a block let into a worktop, with a
+ * knife on it — and making it true costs prep capacity nothing in floor space.
+ * The rules that follow are the ones a player can feel: it only goes on a
+ * counter, it comes off before the counter does, and it travels with its host.
+ */
+/** An appliance in somebody's hands, in the morning, the way the stall hands one over. */
+function handOver(world: World, kind: ApplianceKind): Appliance {
+  world.phase = "build";
+  const player = world.players[0]!;
+  const held = spawnAppliance(world, kind, { x: 15, y: 6 }, null, player.id);
+  player.carriedAppliance = held.id;
+  return held;
+}
+
+describe("boards go on counters", () => {
+  test("a board goes on a bare counter, and nowhere else", () => {
+    const world = makeWorld();
+    const player = world.players[0]!;
+    const board = handOver(world, "board");
+
+    // Empty floor is not an answer: there is no such thing as a board on the
+    // floor, so there is no state for one and the placement is refused.
+    face(player, 15, 6, 0, -1);
+    press(world, "grab");
+    expect(player.carriedAppliance).toBe(board.id);
+    expect(applianceAtTile(world, 15, 6)).toBeNull();
+
+    // A counter is.
+    face(player, COUNTER[0], COUNTER[1], 0, -1);
+    press(world, "grab");
+    expect(player.carriedAppliance).toBeNull();
+    expect(applianceAtTile(world, COUNTER[0], COUNTER[1])!.topper).toBe("board");
+    // And it stops being a thing in its own right the moment it is fitted.
+    expect(world.appliances.has(board.id)).toBe(false);
+  });
+
+  test("a counter with a board on it chops at the board's speed", () => {
+    // The whole point of the fitting, and the reason `fittedDef` exists: every
+    // rule about work asks the host what is on it rather than what it is.
+    const fitted = makeWorld();
+    takeFrom(fitted, CRATE.tomato);
+    putOn(fitted, BOARD);
+    workOn(fitted, BOARD, 1.25);
+    expect(applianceAtTile(fitted, BOARD[0], BOARD[1])!.item!.processes).toEqual(["chopped"]);
+
+    // Take the board off and the same counter is an ordinary counter again.
+    const bare = makeWorld();
+    applianceAtTile(bare, BOARD[0], BOARD[1])!.topper = null;
+    takeFrom(bare, CRATE.tomato);
+    putOn(bare, BOARD);
+    workOn(bare, BOARD, 1.25);
+    expect(applianceAtTile(bare, BOARD[0], BOARD[1])!.item!.processes).toEqual([]);
+  });
+
+  test("the board comes off before the counter under it", () => {
+    const world = makeWorld();
+    world.phase = "build";
+    const player = world.players[0]!;
+    const host = applianceAtTile(world, BOARD[0], BOARD[1])!;
+
+    face(player, BOARD[0], BOARD[1], 0, -1);
+    press(world, "grab");
+    expect(host.topper).toBeNull();
+    expect(world.appliances.get(player.carriedAppliance!)!.kind).toBe("board");
+    // The counter stays exactly where it was: you took the thing on top of it.
+    expect(applianceAtTile(world, BOARD[0], BOARD[1])).toBe(host);
+
+    // And straight back on, with the same grab, because a fitting is only ever
+    // set on a worktop and this is the worktop in front of you.
+    press(world, "grab");
+    expect(host.topper).toBe("board");
+    expect(player.carriedAppliance).toBeNull();
+  });
+
+  test("a board travels with the counter it is fitted to", () => {
+    // Swapping an appliance onto a fitted counter lifts the counter, board and
+    // all — which is what the eye expects, and what keeps the two from having
+    // to be kept in step as separate things.
+    const world = makeWorld();
+    const player = world.players[0]!;
+    handOver(world, "bin");
+
+    face(player, BOARD[0], BOARD[1], 0, -1);
+    press(world, "grab");
+    const lifted = world.appliances.get(player.carriedAppliance!)!;
+    expect(lifted.kind).toBe("counter");
+    expect(lifted.topper).toBe("board");
+  });
+
+  test("fitting a board onto an occupied counter swaps the two boards", () => {
+    const world = makeWorld();
+    const player = world.players[0]!;
+    handOver(world, "steel_board");
+
+    face(player, BOARD[0], BOARD[1], 0, -1);
+    press(world, "grab");
+    expect(applianceAtTile(world, BOARD[0], BOARD[1])!.topper).toBe("steel_board");
+    expect(world.appliances.get(player.carriedAppliance!)!.kind).toBe("board");
+  });
+});
+
+/**
+ * Pausing, which is a fact about the **room**.
+ *
+ * It used to be a fact about a screen: the menu blanked your own input and the
+ * day, the fryer and the dining room carried on without you. That made reading
+ * the controls during a rush cost you the rush, and it made "pause" the one
+ * word in the game that meant something different to each player.
+ */
+describe("pausing the kitchen", () => {
+  test("nothing moves while it is paused, and everything resumes where it was", () => {
+    const world = makeWorld();
+    takeFrom(world, CRATE.tomato);
+    putOn(world, BOARD);
+    const board = applianceAtTile(world, BOARD[0], BOARD[1])!;
+    const clock = world.dayTime;
+
+    pause(world, 0, "Ann");
+    // Two seconds of somebody holding `Use` at a board, with the room stopped.
+    hold(world, 2);
+    expect(world.dayTime).toBe(clock);
+    expect(board.progress).toBe(0);
+    expect(board.item!.processes).toEqual([]);
+
+    resume(world);
+    hold(world, 2);
+    expect(world.dayTime).toBeLessThan(clock);
+    expect(board.item!.processes).toEqual(["chopped"]);
+  });
+
+  test("the first one in holds it, and only they let go", () => {
+    // Two chefs, one pause. A second player opening their own menu must not
+    // take the pause off the first — and closing their menu must not start the
+    // room up underneath somebody still reading theirs.
+    const world = makeWorld();
+    addPlayer(world, LEVEL, "Bo");
+    pause(world, 0, "Ann");
+    pause(world, 1, "Bo");
+    expect(world.pausedName).toBe("Ann");
+
+    resume(world, 1);
+    expect(world.pausedBy).toBe(0);
+    resume(world, 0);
+    expect(world.pausedBy).toBeNull();
+  });
+
+  test("a pause held by somebody who has gone is anybody's to clear", () => {
+    // The backstop. The only thing worse than the wrong player resuming is a
+    // kitchen that nobody can.
+    const world = makeWorld();
+    addPlayer(world, LEVEL, "Bo");
+    pause(world, 0, "Ann");
+    removePlayer(world, 0);
+    expect(world.pausedBy).toBeNull();
+
+    // ...and even if the seat vanished some other way, the room comes back.
+    pause(world, 7, "Ghost");
+    resume(world, 1);
+    expect(world.pausedBy).toBeNull();
   });
 });

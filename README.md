@@ -74,7 +74,7 @@ installs the hooks.
 | Use (hold to prep) | `X` (west) or `B` | `F` or `Left Shift` | `.` |
 | Confirm a menu, put down the report | `Y` (north) | `Enter` | `Enter` |
 | Turn the kitchen | `L1` / `R1` | `[` / `]` | `[` / `]` |
-| Pause menu | `Start` | `Esc` | `Esc` |
+| Pause menu (stops the kitchen) | `Start` | `Esc` | `Esc` |
 | Close the menu | `B` (east) or `Start` | `Esc` or `Backspace` | — |
 | Add a local player | press any button | `P` | — |
 | Remove a local player | — | `Shift`+`P` | — |
@@ -87,6 +87,11 @@ one you want, and it is yours (`Esc` cancels, `Backspace` clears, and holding
 in this browser next to your name, so they are yours rather than the room's, and
 a key can only ever do one job. The gamepad layout is fixed.
 
+**The pause menu really pauses.** Opening it stops the whole kitchen — the day
+clock, the fryer, the dining room — for everybody in the room, and the other
+chefs are told whose menu it is. Reading the controls during a rush used to cost
+you the rush.
+
 **Press any button to join.** The first pad picks up player 1; any further pad
 creates a new chef when *it* is used (up to 4). A pad that is merely plugged in
 does not take a seat — [there is a reason for that](docs/lessons.md).
@@ -97,10 +102,11 @@ The white square in front of your chef is what you'll interact with.
 
 1. Take an ingredient from a crate (`Grab`).
 2. Put it on **any counter** (`Grab`), then **hold** `Use` until the dial fills.
-   A chopping board does the same job 1.75x faster. Some things are worth
-   chopping **twice** — a tomato chopped once goes in a salad, chopped again it
-   becomes pizza sauce. Keep holding and it keeps going, so let go when the dial
-   flashes.
+   A kitchen starts with three counters and no board — buy a **chopping board**
+   at the stall and set it on one, and that counter does the same job 1.75x
+   faster. Some things are worth chopping **twice** — a tomato chopped once goes
+   in a salad, chopped again it becomes pizza sauce. Keep holding and it keeps
+   going, so let go when the dial flashes.
 3. Pick it back up and combine it with something else by placing it on top.
 4. Cook where needed (fryer/oven run on their own — and **will burn**). A
    working fryer bubbles and an oven's window glows, so you can read the state
@@ -145,7 +151,8 @@ The white square in front of your chef is what you'll interact with.
    place in the kitchen.
 
    Ruined a dish? The **bin scrapes it** — the food goes and you keep the plate,
-   dirty. There is no way to throw a plate away, and no way to get another one.
+   dirty. There is no way to throw a plate away, and the only way to get more is
+   to buy another **plate stack** at the stall — they come with four on board.
 9. When the day timer hits zero — or somebody turns the sign to **Closed** — the
    **rent** comes out of the till and you wake into the next day's **morning**
    with what is left. Face any appliance and `Grab` to pick it up. A **ghost** of it
@@ -165,13 +172,16 @@ The white square in front of your chef is what you'll interact with.
    and no menu item for it. Turning it back over mid-service is **last orders**:
    nobody new comes in, and the day ends once the room has emptied, so closing
    early never takes a plate off somebody's table.
-10. **Go shopping.** Out of the door and to the left, three slots of a market
-    stall are stocked fresh each morning. Face one and `Grab`: the price comes
+10. **Go shopping.** Out of the door, four pallets of a delivery are dropped
+    fresh every morning but the first — day one has an empty patio and a till
+    with nothing in it. Face one and `Grab`: the price comes
     out of the till and the thing appears as a ghost in your hands, ready to
     place. Put it straight back on the same slot and you get every penny back;
     put *anything else* on an empty slot and the stall buys it off you for half.
-    Plates are on sale too, and they are the only way a kitchen ever gets a
-    fifth one.
+    A **chopping board** goes on a counter rather than on the floor — face the
+    counter you want it on and `Grab` — and `Grab` at a fitted counter takes the
+    board back off. **Plate stacks** are on sale too, four plates included, and
+    they are the only way a kitchen ever gets a fifth one.
 
     The stall is shuttered during service. Mornings are when a kitchen changes.
 
@@ -186,16 +196,19 @@ The white square in front of your chef is what you'll interact with.
     [upgrades](docs/the-shop.md#upgrades).
 
 11. **Choose what you cook.** You start with one dish — a garden salad — and
-    that is the whole menu. On the morning of day 2, and every third morning
-    after, **two recipe cards** stand on the apron beside the stall. Face one and
-    `Grab` to lift it (the log says who is considering what), `Grab` again to
-    take it. It is a choice *between* the two: the other card leaves with it.
+    that is the whole menu. From day two, one of the four pallets holds a
+    **recipe card** with a price on it. Buy it like anything else, carry it
+    inside and put it down: the dish joins the menu.
 
-    The card is free, and so is everything the kitchen lacks for it — pick
-    Fries and a fryer and a potato crate are delivered onto the floor before
-    service, for you to place where you want them. Ignore both cards if you
-    like; the next pair still comes on schedule. By day 10 no two kitchens are
-    the same restaurant. See [the menu](docs/the-menu.md).
+    Everything the kitchen *lacks* for it comes free — buy the Fries card and a
+    fryer and a potato crate are delivered onto the floor, around the tile you
+    chose, before service. So your first fryer arrives with the reason you
+    wanted one, and the shop is where you buy the second. Change your mind
+    while it is still in your hands and the pallet takes it back at full price.
+
+    Ignore it if you like; there is another one tomorrow, and the money is
+    better spent on a table. By day 10 no two kitchens are the same restaurant.
+    See [the menu](docs/the-menu.md).
 
 Grabbed the wrong thing? Put it back where you got it: a **source takes back
 exactly what it hands out**, so an untouched tomato returns to its crate and a

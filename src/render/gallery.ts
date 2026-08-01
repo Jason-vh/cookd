@@ -64,6 +64,7 @@ function sampleAppliance(kind: ApplianceKind, source: ItemSpec | null): Applianc
     overcook: 0,
     justFinished: false,
     motion: null,
+    topper: null,
     source,
     offer: null,
     taken: null,

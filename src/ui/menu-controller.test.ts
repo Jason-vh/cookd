@@ -90,11 +90,17 @@ describe("opening and closing", () => {
     expect(state.open).toBe(false);
   });
 
-  test("the world keeps running, but your chef stands still", () => {
-    // Pausing cannot mean "time stops" — online one player cannot stop a
-    // kitchen four people are standing in — so it means the same thing offline.
-    const { control } = controller();
+  test("the whole kitchen stops, and your chef stands still as well", () => {
+    // Pausing used to mean only the second half: the day, the fryer and the
+    // dining room carried on, so reading the controls during a rush cost you
+    // the rush. It is the room that stops now — the action goes to the host and
+    // travels like any other — and the chef is still blanked, because the
+    // pause takes a round trip online and the frames in between must not be
+    // steered by somebody reading a menu.
+    const { control, acted } = controller();
     play(control, { menu: true });
+    expect(acted).toEqual(["pause"]);
+
     const inputs = play(control, { move: { x: 1, y: 0 }, grab: true });
     expect(inputs[0]).toEqual({
       move: { x: 0, y: 0 },
@@ -103,6 +109,10 @@ describe("opening and closing", () => {
       start: false,
       menu: false,
     });
+
+    nav(control, {}); // release the key that opened it
+    nav(control, { menu: true });
+    expect(acted).toEqual(["pause", "resume"]);
   });
 });
 
@@ -116,7 +126,7 @@ describe("controls that mean two things", () => {
     play(control, { menu: true });
     nav(control, {}); // release the key that opened it
     nav(control, { confirm: true });
-    expect(acted).toEqual(["restartDay"]);
+    expect(acted).toEqual(["pause", "restartDay", "resume"]);
     expect(state.open).toBe(false);
 
     // Six frames of the key still being down, which is how long a press lasts.
@@ -178,7 +188,7 @@ describe("navigation", () => {
     play(control, { menu: true });
     nav(control, {});
     nav(control, { confirm: true });
-    expect(acted).toEqual([]);
+    expect(acted).toEqual(["pause", "resume"]);
     expect(resets()).toBe(1);
   });
 

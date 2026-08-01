@@ -4,6 +4,7 @@ import { isBurnt, isDirty, isPlate, makeItem, specKey } from "../items";
 import {
   MAX_CARRIED_PLATES,
   MAX_PLATES,
+  STACK_PLATES,
   emptyAppliance,
   mintPlate,
   plateCount,
@@ -26,6 +27,7 @@ import {
   tileIndex,
   touchLayout,
 } from "../world";
+
 import { serveHatch, serveTable } from "./customers";
 import { useCardStand } from "./cards";
 import { useSign } from "./sign";
@@ -453,7 +455,13 @@ function buildGrab(world: World, player: Player): void {
       player.carriedAppliance = null;
       return;
     }
-    if (!canPlace(world, tile.x, tile.y)) return;
+    // A board is set on a worktop, not on the floor, so it never reaches the
+    // grid rules below — there is no tile for it to occupy.
+    if (applianceDef(appliance.kind).fitting) {
+      fitTopper(world, player, appliance, faced);
+      return;
+    }
+    if (!canPlace(world, tile.x, tile.y, appliance.kind)) return;
     // The placing player usually clips into the tile they're facing (reach is
     // larger than their radius), so they are excluded here and shoved clear
     // afterwards instead.
@@ -485,7 +493,15 @@ function buildGrab(world: World, player: Player): void {
   }
 
   const appliance = applianceAtTile(world, tile.x, tile.y);
-  if (!appliance || !applianceDef(appliance.kind).movable) return;
+  if (!appliance) return;
+  // The board comes off before the counter under it does. It is the thing on
+  // top, it is what the hand reaches, and taking it first is what makes a
+  // fitting reversible without a second verb.
+  if (appliance.topper !== null) {
+    liftTopper(world, player, appliance);
+    return;
+  }
+  if (!applianceDef(appliance.kind).movable) return;
   // `heldBy` first: `emptyAppliance` sends any plates to a stack that is still
   // standing on the grid, and this one no longer is. Lift the only plate stack
   // in the kitchen and its plates travel with it rather than evaporating.
@@ -494,6 +510,40 @@ function buildGrab(world: World, player: Player): void {
   world.applianceAt[idx] = 0;
   touchLayout(world);
   player.carriedAppliance = appliance.id;
+}
+
+// --- fittings ----------------------------------------------------------------
+
+/**
+ * Set a carried board down on the counter in front of you.
+ *
+ * The board stops being an entity here: it becomes the host's `topper`, which
+ * is the one representation of a fitted board there is. A counter that already
+ * has one **swaps** — the old board comes up as the new one goes down — for the
+ * same reason dropping an appliance on an occupied tile swaps: rearranging is
+ * mostly exchanging two things, and the alternative is hunting for somewhere to
+ * park one.
+ */
+function fitTopper(world: World, player: Player, fitting: Appliance, host: Appliance | null): void {
+  if (!host || !applianceDef(host.kind).worktop) {
+    log(world, `${applianceDef(fitting.kind).label} goes on a counter`);
+    return;
+  }
+  const displaced = host.topper;
+  host.topper = fitting.kind;
+  world.appliances.delete(fitting.id);
+  player.carriedAppliance =
+    displaced === null ? null : spawnAppliance(world, displaced, host.tile, null, player.id).id;
+  touchLayout(world);
+}
+
+/** Take the board off a counter and into your hands, as a held appliance again. */
+function liftTopper(world: World, player: Player, host: Appliance): void {
+  const kind = host.topper;
+  if (kind === null) return;
+  host.topper = null;
+  player.carriedAppliance = spawnAppliance(world, kind, host.tile, null, player.id).id;
+  touchLayout(world);
 }
 
 // --- the stall ---------------------------------------------------------------
@@ -531,8 +581,7 @@ function useStall(world: World, player: Player, slot: Appliance): void {
     return;
   }
 
-  if (offer.good === "plate") buyPlate(world, player, slot, offer, price);
-  else buyAppliance(world, player, slot, offer, price);
+  buyAppliance(world, player, slot, offer, price);
 }
 
 /**
@@ -554,7 +603,7 @@ function buyAppliance(
   world: World,
   player: Player,
   slot: Appliance,
-  offer: Extract<Offer, { good: "appliance" }>,
+  offer: Offer,
   price: number,
 ): void {
   const home = nearestFreeTile(world, slot.tile);
@@ -562,8 +611,13 @@ function buyAppliance(
     refuse(world, slot, "Nowhere to put it");
     return;
   }
+  if (offer.kind === "plates" && platesInWorld(world) + STACK_PLATES > MAX_PLATES) {
+    refuse(world, slot, "That is all the plates a kitchen can hold");
+    return;
+  }
 
   const bought = spawnAppliance(world, offer.kind, home, offer.source, player.id);
+  if (offer.kind === "plates") stockNewStack(world, bought);
   world.money -= price;
   slot.taken = bought.id;
   player.carriedAppliance = bought.id;
@@ -573,48 +627,18 @@ function buyAppliance(
 }
 
 /**
- * A plate is bought into your hands, and is the one thing in the game that did
- * not exist a moment ago.
+ * Fill a plate stack the moment it is bought, and the only moment the kitchen
+ * ever gets more crockery.
  *
- * It goes through `mintPlate` so that the kitchen's plate count has exactly one
- * place it can grow, and so the conservation tests can follow it. There is no
- * refund: giving the money back would mean destroying the plate, and there are
- * no destruction paths.
+ * Every plate goes through `mintPlate`, so "where do plates come from" keeps
+ * one honest answer and the conservation tests can follow it. They are minted
+ * **onto the stack itself** rather than into the kitchen at large, which is
+ * what makes the purchase undoable: putting the stack back on the slot deletes
+ * it and its plates together, and the till and the crockery both end up exactly
+ * where they started.
  */
-function buyPlate(
-  world: World,
-  player: Player,
-  slot: Appliance,
-  offer: Offer,
-  price: number,
-): void {
-  if (player.carried && !isPlate(player.carried)) {
-    refuse(world, slot, "Hands full");
-    return;
-  }
-  if (platesInWorld(world) >= MAX_PLATES) {
-    refuse(world, slot, "That is all the plates a kitchen can hold");
-    return;
-  }
-
-  const plate = mintPlate(world);
-  if (player.carried) {
-    // Onto the pile, if it will go. A chef already holding four is holding four.
-    const stacked = stackPlates(plate, player.carried, MAX_CARRIED_PLATES);
-    if (!stacked) {
-      refuse(world, slot, "Hands full");
-      return;
-    }
-  } else {
-    player.carried = plate;
-  }
-
-  world.money -= price;
-  // No `taken`: a plate cannot be handed back, so the slot is simply empty.
-  slot.offer = null;
-  spend(world, slot, price);
-  log(world, `${who(player)} bought a ${offerLabel(offer)}  -$${price}`);
-  touchLayout(world);
+function stockNewStack(world: World, stack: Appliance): void {
+  for (let i = 0; i < STACK_PLATES; i++) shelvePlate(stack, mintPlate(world));
 }
 
 /**
@@ -626,7 +650,14 @@ function buyPlate(
  * shop a place to be careful rather than a place to experiment.
  */
 function sellToStall(world: World, player: Player, slot: Appliance, appliance: Appliance): void {
-  if (slot.taken !== null && slot.taken === appliance.id && slot.offer) {
+  if (slot.offer && isWhatItSold(world, slot, appliance)) {
+    // A stack bought this morning goes back with the plates it came with. Take
+    // them off first and it is no longer the thing the stall handed over — it
+    // is a stack, and an ordinary sale at half price is what a stack is worth.
+    if (appliance.kind === "plates" && plateCount(appliance.item) < STACK_PLATES) {
+      refuse(world, slot, "Put its plates back on first");
+      return;
+    }
     const price = offerPrice(slot.offer);
     world.money += price;
     slot.taken = null;
@@ -663,6 +694,23 @@ function sellToStall(world: World, player: Player, slot: Appliance, appliance: A
   slot.taken = null;
   log(world, `${who(player)} sold a ${def.label}  +$${price}`);
   touchLayout(world);
+}
+
+/**
+ * Is this the very thing the slot handed out this morning?
+ *
+ * Normally that is one identity check: the slot wrote down the id it minted.
+ * A **fitting** breaks the identity, and does so legitimately — setting a board
+ * on a counter ends the entity and lifting it off starts a new one, because a
+ * fitted board is a property of its host rather than a thing in its own right.
+ * So for those the question is asked of the *kind*, and only once the appliance
+ * the slot minted has genuinely stopped existing.
+ */
+function isWhatItSold(world: World, slot: Appliance, appliance: Appliance): boolean {
+  if (slot.taken === null) return false;
+  if (slot.taken === appliance.id) return true;
+  if (!applianceDef(appliance.kind).fitting) return false;
+  return !world.appliances.has(slot.taken) && appliance.kind === slot.offer?.kind;
 }
 
 /** A refusal that can be seen as well as read. */

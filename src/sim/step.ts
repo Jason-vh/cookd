@@ -21,6 +21,7 @@ export const DT = 1 / 60;
  */
 export function step(world: World, inputs: Inputs, dt: number = DT): void {
   world.tick++;
+  if (world.pausedBy !== null) return held(world, inputs);
 
   movementSystem(world, inputs, dt);
   interactionSystem(world, inputs);
@@ -71,9 +72,26 @@ export function step(world: World, inputs: Inputs, dt: number = DT): void {
  */
 export function predict(world: World, inputs: Inputs, dt: number = DT): void {
   world.tick++;
+  if (world.pausedBy !== null) return held(world, inputs);
   movementSystem(world, inputs, dt);
   if (world.phase === "service") interactionSystem(world, inputs);
   expire(world, dt);
+  latch(world, inputs);
+}
+
+/**
+ * A paused tick: the clock still turns, and nothing else does.
+ *
+ * The tick counter advances because it is what the wire is paced by — a server
+ * that stopped numbering its frames would look to every client like a server
+ * that had stopped sending them. The buttons are latched for the same reason
+ * they are latched in a predicted tick: whatever was held when the menu opened
+ * must not read as a fresh press the moment it closes.
+ *
+ * Log lines and cues are deliberately **not** aged out. They are things the
+ * room said, and a paused room is one nobody is reading yet.
+ */
+function held(world: World, inputs: Inputs): void {
   latch(world, inputs);
 }
 

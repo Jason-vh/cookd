@@ -261,7 +261,7 @@ export function parseClientMessage(value: unknown): ClientMessage | null {
     }
     case "menu": {
       const action = value.action;
-      if (action !== "restartDay") return null;
+      if (action !== "restartDay" && action !== "pause" && action !== "resume") return null;
       return { t: "menu", action };
     }
     case "reset":
@@ -310,7 +310,11 @@ function parseLayout(value: unknown): Layout | null {
     if (taken === undefined) return null;
     const card = optionalStr(entry.card, MAX_NAME);
     if (card === undefined) return null;
-    return { id, kind, x, y, source, offer, taken, card };
+    const topper = optionalStr(entry.topper, MAX_NAME);
+    // Checked for membership, unlike a card: a topper is looked up in the
+    // appliance table on every tick that anybody works at this counter.
+    if (topper === undefined || (topper !== null && !isApplianceKind(topper))) return null;
+    return { id, kind, x, y, source, offer, taken, topper, card };
   });
   return appliances === null ? null : { appliances, unlocked, unlockedDay };
 }
@@ -356,22 +360,18 @@ type Spec = NonNullable<Layout["appliances"][number]["source"]>;
 /**
  * What a stall slot is selling. `undefined` for "present but malformed".
  *
- * The `good` tag is checked rather than trusted, because it is what decides
- * whether a purchase hands over an appliance or mints a plate — the one wire
- * field that can add crockery to a kitchen.
+ * The kind is checked for membership rather than trusted, because it is what a
+ * purchase spawns and what a refund prices — an unknown one would reach
+ * `applianceDef` and throw inside the room tick.
  */
 function parseOffer(value: unknown): Offer | null | undefined {
   if (value === null || value === undefined) return null;
   if (!isRecord(value)) return undefined;
-  if (value.good === "plate") return { good: "plate" };
-  if (value.good !== "appliance") return undefined;
   const kind = str(value.kind, MAX_NAME);
   if (kind === null || !isApplianceKind(kind)) return undefined;
-  if (value.source === null || value.source === undefined) {
-    return { good: "appliance", kind, source: null };
-  }
+  if (value.source === null || value.source === undefined) return { kind, source: null };
   const source = parseSpec(value.source);
-  return source === undefined ? undefined : { good: "appliance", kind, source };
+  return source === undefined ? undefined : { kind, source };
 }
 
 /** Returns `undefined` for "present but malformed", distinct from a real absence. */
@@ -402,6 +402,9 @@ function parseFrame(value: unknown): Frame | null {
   if (!isRecord(value)) return null;
 
   const tick = int(value.tick);
+  const pausedBy = optionalInt(value.pausedBy);
+  const pausedName = str(value.pausedName, MAX_NAME);
+  if (pausedBy === undefined || pausedName === null) return null;
   const nextId = int(value.nextId);
   const day = int(value.day);
   const dayTime = num(value.dayTime);
@@ -443,6 +446,8 @@ function parseFrame(value: unknown): Frame | null {
 
   return {
     tick,
+    pausedBy,
+    pausedName,
     nextId,
     phase: value.phase,
     day,

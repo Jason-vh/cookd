@@ -19,6 +19,8 @@ function frame(tick: number, players: { id: number; x: number; y: number }[] = [
   return {
     tick,
     nextId: 1,
+    pausedBy: null,
+    pausedName: "",
     phase: "service",
     day: 1,
     dayTime: 100,

@@ -367,6 +367,9 @@ function frame(now: number): void {
     ping: game.ping,
     room: game.status === "local" ? "" : roomOf(),
   });
+  // Whether the pause is ours is a fact about this browser, not about the room,
+  // so the shell is the only place that can answer it.
+  hud.syncPause(game.world, menuControl.isOpen);
 }
 
 function roomOf(): string {

@@ -1,5 +1,5 @@
 import { specKey } from "../sim/items";
-import type { EffectCue, World } from "../sim/types";
+import type { EffectCue, Motion, World } from "../sim/types";
 import type { SoundName } from "./voices";
 
 /**
@@ -111,6 +111,13 @@ export class SoundWatcher {
   private listenToAppliances(world: World, sounds: SoundName[], first: boolean): void {
     for (const appliance of world.appliances.values()) {
       if (appliance.justFinished && !first) sounds.push("done");
+      if (appliance.motion !== null && !first) {
+        const sound = WORK_SOUND[appliance.motion];
+        // Paced off the world's own tick and off the appliance's id, so a
+        // kitchen with three things going at once is a rhythm rather than
+        // three sounds landing on the same frame and phasing into one.
+        if ((world.tick + appliance.id) % WORK_PERIOD[appliance.motion] === 0) sounds.push(sound);
+      }
 
       const ruined = appliance.item?.processes.includes("burnt") === true;
       const was = this.burnt.has(appliance.id);
@@ -129,6 +136,42 @@ export class SoundWatcher {
     this.customers = present;
   }
 }
+
+/**
+ * What each kind of work sounds like while it is being done.
+ *
+ * A `Record` over the union rather than a switch, so a new motion is a build
+ * error naming the key instead of a silent appliance — the same reason
+ * `wire.ts` lists its unions this way.
+ */
+const WORK_SOUND: Record<Motion, SoundName> = {
+  chop: "chop",
+  knead: "chop",
+  mix: "chop",
+  scrub: "scrub",
+  fry: "sizzle",
+  bake: "sizzle",
+};
+
+/**
+ * How many ticks between one work sound and the next, per motion.
+ *
+ * In **ticks** rather than seconds because this file is pure and the world's
+ * clock is the only one it has — which is also what makes it frame-rate
+ * independent, and what makes a paused kitchen fall silent for free.
+ *
+ * Hand work is fast and unattended work is not: a knife knocks about five times
+ * a second, and a fryer that hissed at that rate would be the loudest thing in
+ * the room for the whole of its cycle.
+ */
+const WORK_PERIOD: Record<Motion, number> = {
+  chop: 12,
+  knead: 16,
+  mix: 14,
+  scrub: 18,
+  fry: 22,
+  bake: 30,
+};
 
 /**
  * One cue, as a sound.

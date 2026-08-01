@@ -11,7 +11,7 @@ import {
 } from "./recipes";
 import { specKey } from "../sim/items";
 import { reachableFrom, seatsAround } from "../sim/pathing";
-import { kitchenWarnings, unreachableAppliances, unreachableTables } from "../sim/queries";
+import { kitchenWarnings, unreachableTables } from "../sim/queries";
 import { createWorld, tileIndex } from "../sim/world";
 import { at, LEVELS, PARK_KITCHEN, wall, type LevelDef } from "./level";
 import { levelProblems, validateContent } from "./validate";
@@ -34,8 +34,12 @@ describe("every level ships a kitchen that works", () => {
     test(`${level.name} opens with nothing wrong with it`, () => {
       const world = createWorld(level, level.spawns.length);
       expect(kitchenWarnings(world)).toEqual([]);
-      expect(unreachableAppliances(world)).toEqual([]);
       expect(unreachableTables(world)).toEqual([]);
+      // Nothing a chef has to face is walled in. This is asked of the *level*
+      // rather than of a running kitchen for a reason — see `levelProblems`,
+      // and the note in `kitchenWarnings` about why the same question stopped
+      // being asked of a room somebody has been rearranging.
+      expect(levelProblems(level)).toEqual([]);
       // Every table in the open, so a level can seat the parties it will be
       // sent. One against a wall is a legitimate thing for a *player* to build
       // and a poor thing to ship.

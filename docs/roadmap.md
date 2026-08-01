@@ -71,7 +71,8 @@ Near term:
 - **A menu cap** — [recipe cards](the-menu.md) ship without one: nothing stops a
   room unlocking the whole library. Deferred on purpose until the library is
   bigger than about five dishes, because "which five do we keep" is only a
-  decision when keeping one means dropping another. There is no hook for it.
+  decision when keeping one means dropping another. Cards cost money now, which
+  is a soft cap and may well be enough.
 - **More content** — soups (pots + liquids), drinks, sides.
 - **Juice.** The [sounds are in](sound.md) — pickup, serve, tip, burn, door
   chime, the day opening and closing, synthesised rather than sampled. What is
@@ -89,16 +90,23 @@ Bigger:
 
 - **Delta frames and interest management.** Only send what changed, and only to
   players who can see it. Neither is needed at one kitchen per room.
-- **Kitchen validation in build mode is done**, both halves. The *content* half
-  (`kitchenWarnings`) says at day open when a dish on the room's own menu cannot
-  be made here, derived from the recipes rather than from a list of appliances.
-  The **reachability** half (`unreachableAppliances`) runs the dining room's
-  flood fill from the chefs instead of the door, so an oven walled in behind a
-  run of counters is named the same way a stranded table is — and pulses under
-  the same red ring. Both stayed warnings: see the note on `ESSENTIAL` for why
-  refusing the sale is the wrong instrument. What is *not* checked is anything
-  about how far things are from each other: a kitchen may be terribly laid out,
-  and that is the game.
+- **Kitchen validation in build mode is done**, in the one form that survives
+  contact. `kitchenWarnings` says at day open when a dish on the room's own menu
+  cannot be made here, derived from the recipes rather than from a list of
+  appliances, and `unreachableTables` says when the door cannot reach a chair.
+  Both are warnings: see the note on `ESSENTIAL` for why refusing the sale is
+  the wrong instrument.
+
+  There was a third, and it was **removed rather than tuned**: a warning about
+  appliances the *chefs* could not walk up to, built on the dining room's
+  four-way flood fill while a chef reaches diagonally. It fired on kitchens that
+  worked. A check written against a different actor's rules than the thing it is
+  checking is not a tuning error. The level content is still held to it
+  (`levelProblems`), where the question is about a building nobody has
+  rearranged yet.
+
+  What is *not* checked is anything about how far things are from each other: a
+  kitchen may be terribly laid out, and that is the game.
 - **A run-based meta layer** à la PlateUp. [Procedural
   kitchens](content.md#kitchens-nobody-drew) are in — one template, seeded from
   the room code — but they are worth much less on their own than they look. A

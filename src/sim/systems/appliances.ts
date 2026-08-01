@@ -1,8 +1,8 @@
-import { applianceDef } from "../../data/appliances";
 import { BURNT } from "../../data/ingredients";
 import { BURN_INDEX, TRANSFORM_INDEX } from "../../data/recipes";
 import { specKey } from "../items";
 import type { Appliance, Item, Transform, World } from "../types";
+import { fittedDef } from "../world";
 
 /**
  * Advances every loaded appliance:
@@ -12,6 +12,10 @@ import type { Appliance, Item, Transform, World } from "../types";
  *
  * Work is matched by **station** (`prep` / `fry` / `bake`), not by appliance
  * kind, so any counter can be prepped on — a chopping board is just faster.
+ *
+ * Which is why every question here goes through `fittedDef`: a board is a
+ * *fitting* on a counter now, so the counter's own row is the wrong answer for
+ * any counter somebody has put one on.
  */
 export function applianceSystem(world: World, dt: number): void {
   const working = new Set<number>();
@@ -30,7 +34,7 @@ export function applianceSystem(world: World, dt: number): void {
     }
 
     const key = specKey(item);
-    const speed = applianceDef(appliance.kind).speed;
+    const speed = fittedDef(appliance).speed;
     const transform = findTransform(appliance, key);
 
     if (transform) {
@@ -97,7 +101,7 @@ function applyOutput(item: Item, transform: Transform): void {
 }
 
 function findTransform(appliance: Appliance, itemKey: string): Transform | undefined {
-  for (const station of applianceDef(appliance.kind).stations) {
+  for (const station of fittedDef(appliance).stations) {
     const transform = TRANSFORM_INDEX.get(`${station}|${itemKey}`);
     if (transform) return transform;
   }
@@ -112,7 +116,7 @@ function findTransform(appliance: Appliance, itemKey: string): Transform | undef
  * the same number rather than a second table of burn times to keep in step.
  */
 function findBurnTime(appliance: Appliance, itemKey: string): number | undefined {
-  const def = applianceDef(appliance.kind);
+  const def = fittedDef(appliance);
   for (const station of def.stations) {
     const burnAfter = BURN_INDEX.get(`${station}|${itemKey}`);
     if (burnAfter !== undefined) return burnAfter * def.patience;

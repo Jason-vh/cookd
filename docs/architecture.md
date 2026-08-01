@@ -22,7 +22,7 @@ incomplete.
 src/
   sim/                    pure simulation — no DOM, no three.js
     types.ts              World, Player, Customer, Item, Appliance, PlayerInput
-    world.ts              world construction from a level, tile/collision helpers, PRNG
+    world.ts              world construction from a level, tile/collision helpers, fittings, pausing, PRNG
     items.ts              item identity + canonical keys
     plates.ts             the crockery, and the promise that none of it is ever destroyed
     shop.ts               the stall's stock: rolled from the seed and the day, not from play
@@ -39,14 +39,13 @@ src/
       interaction.ts      grab/place/combine/deliver, build-phase appliance moving
       appliances.ts       transforms (chop/fry/bake) and burning
       customers.ts        arrivals, the door queue, seating, patience, eating, tips — and the lane of cars, for a kitchen with a hatch instead
-      cards.ts            arming and taking a recipe card
       sign.ts             the sign by the door: opening the day, and last orders
   data/                   content — plain data, no logic
     ingredients.ts        what exists and what it is called
     appliances.ts         appliance definitions, prices, and the ApplianceKind union
     customers.ts          who walks in: patience, appetite, generosity and pace
     economy.ts            the ledger: what the stall stocks, and what it pays
-    progression.ts        the cards: what a kitchen starts with, and how its menu grows
+    progression.ts        the cards: what a kitchen starts with, what a recipe costs, and how its menu grows
     recipes.ts            transforms, combines, recipes + derived lookup maps
     level.ts              kitchen layouts, the geometry helpers, the registry, and the parser
     generate.ts           kitchens nobody drew: one template, and a seed to move it about

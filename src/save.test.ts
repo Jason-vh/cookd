@@ -3,7 +3,7 @@ import { LEVEL } from "./data/level";
 import { generateLevel, seedFromCode } from "./data/generate";
 import { platesInWorld } from "./sim/plates";
 import { restockStall } from "./sim/shop";
-import { createWorld } from "./sim/world";
+import { createWorld, spawnAppliance } from "./sim/world";
 import { BACKFILL_RECIPES } from "./data/progression";
 import { Host } from "./game/host";
 import { SCHEMA, migrate, parseSave, restore, saveSignature, snapshot, type Save } from "./save";
@@ -494,3 +494,88 @@ describe("a generated kitchen", () => {
     expect(generateLevel(seedFromCode("TACOS"))).not.toEqual(generated);
   });
 });
+
+/**
+ * A chopping board is a fitting, so a save has to write it down as a property
+ * of the counter it is on rather than as a thing standing on a tile.
+ */
+describe("fittings survive the night", () => {
+  test("a board comes back on the counter it was on", () => {
+    const built = world();
+    const counter = [...built.appliances.values()].find((a) => a.kind === "counter")!;
+    counter.topper = "steel_board";
+
+    const restored = world();
+    expect(restore(restored, snapshot(built, LEVEL), LEVEL).ok).toBe(true);
+    const back = [...restored.appliances.values()].filter((a) => a.topper !== null);
+    expect(back).toHaveLength(1);
+    expect(back[0]!.kind).toBe("counter");
+    expect(back[0]!.topper).toBe("steel_board");
+    expect(back[0]!.tile).toEqual(counter.tile);
+    // And it is not *also* an appliance standing somewhere.
+    expect([...restored.appliances.values()].some((a) => a.kind === "steel_board")).toBe(false);
+  });
+
+  test("a board somebody was carrying is parked, not lost", () => {
+    // A fitting in a hand looks like the half-chopped tomato a save throws
+    // away, and it is not: it is an appliance somebody paid for, so it is put
+    // down on the nearest bare worktop exactly as a disconnect would put it.
+    const built = world();
+    const home = [...built.appliances.values()].find((a) => a.kind === "counter")!;
+    const carried = spawnAppliance(built, "board", home.tile, null, 0);
+    expect(carried.heldBy).toBe(0);
+
+    const restored = world();
+    expect(restore(restored, snapshot(built, LEVEL), LEVEL).ok).toBe(true);
+    expect(applianceTopper(restored, home.tile.x, home.tile.y)).toBe("board");
+  });
+
+  test("two carried boards land on two different counters", () => {
+    const built = world();
+    const counters = [...built.appliances.values()].filter((a) => a.kind === "counter");
+    expect(counters.length).toBeGreaterThan(1);
+    spawnAppliance(built, "board", counters[0]!.tile, null, 0);
+    spawnAppliance(built, "steel_board", counters[1]!.tile, null, 1);
+
+    const restored = world();
+    expect(restore(restored, snapshot(built, LEVEL), LEVEL).ok).toBe(true);
+    const fitted = [...restored.appliances.values()]
+      .map((a) => a.topper)
+      .filter((topper) => topper !== null)
+      .sort();
+    expect(fitted).toEqual(["board", "steel_board"]);
+  });
+
+  test("fitting one marks the room dirty, or nobody's board is ever written down", () => {
+    const built = world();
+    const before = saveSignature(built);
+    [...built.appliances.values()].find((a) => a.kind === "counter")!.topper = "board";
+    expect(saveSignature(built)).not.toBe(before);
+  });
+
+  test("a v6 kitchen's boards become counters with boards on them", () => {
+    // Boards used to stand on tiles of their own. Migrating them to a counter
+    // with a board fitted keeps the tile, the speed and the money — a schema
+    // bump is not an excuse to take somebody's restaurant away.
+    const built = world();
+    const old: Save = {
+      ...snapshot(built, LEVEL),
+      schema: 6,
+      appliances: [
+        { kind: "board", x: 10, y: 4 },
+        { kind: "counter", x: 11, y: 4 },
+      ],
+    };
+    const migrated = migrate(old)!;
+    expect(migrated.appliances).toContainEqual({ kind: "counter", x: 10, y: 4, topper: "board" });
+
+    const restored = world();
+    expect(restore(restored, migrated, LEVEL).ok).toBe(true);
+    expect(applianceTopper(restored, 10, 4)).toBe("board");
+  });
+});
+
+function applianceTopper(target: ReturnType<typeof world>, x: number, y: number): string | null {
+  const found = [...target.appliances.values()].find((a) => a.tile.x === x && a.tile.y === y);
+  return found?.topper ?? null;
+}

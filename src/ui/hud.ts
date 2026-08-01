@@ -29,6 +29,8 @@ export class Hud {
   private readonly notice: HTMLElement;
   private readonly banner: HTMLElement;
   private readonly bannerCard: HTMLElement;
+  private readonly paused: HTMLElement;
+  private readonly pausedCard: HTMLElement;
   private readonly connectionNode: HTMLElement | null;
   /**
    * The stat nodes, looked up once.
@@ -74,21 +76,28 @@ export class Hud {
       <div id="log"></div>
       <div id="notice"></div>
       <div id="banner"><div class="card"></div></div>
+      <div id="paused"><div class="card"></div></div>
     `;
     const stats = root.querySelector("#stats");
     const log = root.querySelector("#log");
     const notice = root.querySelector("#notice");
     const banner = root.querySelector("#banner");
     const card = banner?.querySelector(".card");
+    const paused = root.querySelector("#paused");
+    const pausedCard = paused?.querySelector(".card");
     if (
       !(stats instanceof HTMLElement) ||
       !(log instanceof HTMLElement) ||
       !(notice instanceof HTMLElement) ||
       !(banner instanceof HTMLElement) ||
-      !(card instanceof HTMLElement)
+      !(card instanceof HTMLElement) ||
+      !(paused instanceof HTMLElement) ||
+      !(pausedCard instanceof HTMLElement)
     ) {
       throw new Error("hud markup is missing a node it just wrote");
     }
+    this.paused = paused;
+    this.pausedCard = pausedCard;
     this.log = log;
     this.notice = notice;
     this.banner = banner;
@@ -140,6 +149,23 @@ export class Hud {
           : "reconnecting…";
     this.connectionNode.textContent = label;
     this.connectionNode.className = `connection ${connection.status}`;
+  }
+
+  /**
+   * Somebody else has the kitchen stopped.
+   *
+   * Only for *somebody else*: whoever paused is looking at the menu they paused
+   * with, and telling them their own menu is open would be the game explaining
+   * a thing they are holding. `ours` is the shell's to answer — the world knows
+   * a room is paused and by whom, and which of those chefs is on this screen is
+   * exactly the sort of thing the simulation has no business knowing.
+   */
+  syncPause(world: World, ours: boolean): void {
+    const show = world.pausedBy !== null && !ours;
+    this.paused.classList.toggle("show", show);
+    if (!show) return;
+    const text = `${world.pausedName} paused the kitchen`;
+    if (this.pausedCard.textContent !== text) this.pausedCard.textContent = text;
   }
 
   /**

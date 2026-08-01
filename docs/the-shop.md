@@ -3,7 +3,9 @@
 # The shop
 
 A day begins in the **build phase**, and standing on the paving outside there is
-a **delivery**: three things on pallets, for sale, drawn as themselves. The two are one feature:
+a **delivery**: four things on pallets, for sale, drawn as themselves — appliances,
+plates, and the [recipe cards](the-menu.md) that used to have a wall of their
+own. The two are one feature:
 money had nowhere to go, so it meant nothing, and a build phase that arrived as
 the aftermath of a day was a place to tidy up rather than a place to decide.
 
@@ -101,7 +103,7 @@ something to read, and reading it is not a reason to lose it.
 ## The delivery
 
 The shop is a **place, not a menu** — and, as of the third attempt at it, not an
-object either. Three squares of paving outside the door, one thing standing on
+object either. Four squares of paving outside the door, one thing standing on
 each of them, gone the moment the day opens. See
 [below](#there-is-no-shop) for why the shop is nothing at all.
 
@@ -113,6 +115,10 @@ Everything it does, it does through `Grab`:
 | empty-handed | stocked, too dear | a log line naming the price, and the label flashes red |
 | carrying what you just bought | the slot you bought it from | **full refund** — this is undo, not commerce |
 | carrying anything else | empty | sold, for **half** of list price |
+
+A recipe card is bought and carried on exactly those rows: it is a movable good
+like the oven, and putting it down *inside* is what spends it. See
+[the menu](the-menu.md#a-card-is-a-good).
 
 Buying an appliance hands over a held ghost, exactly as lifting one off the
 kitchen floor does — so the thing you have just bought is already answering
@@ -188,17 +194,14 @@ build-phase mistake that silently ends the run, so it is said out loud rather
 than prevented.* The shop added a dozen more ways to reach the same place, and
 they are all that same sentence.
 
-That sentence now has a twin from the other side of the pass. The same flood
-fill run from **the chefs** rather than from the door answers "can anybody
-actually walk up to this", so an oven boxed in by a run of counters is named —
-`Can't be walked up to: Oven` — and pulses under the same red ring a stranded
-table does. Past three names it becomes a count instead: a chef who has walled
-*themselves* in has one problem, not eight, and listing their whole kitchen
-would bury the wall they are standing behind.
-
-Measured from where the chefs are standing, not from a spawn point: by day open
-they have spent a morning walking around, and the spawn tile is a fact about the
-level rather than about the room as it is now. An empty room is asked nothing.
+That sentence had a twin from the other side of the pass — the same flood fill
+run from the chefs, naming an oven boxed in by a run of counters — and the twin
+has been **removed**. It was built on the four-way search the dining room uses,
+and a chef reaches *diagonally*, so it fired on kitchens that worked perfectly
+well. See [pathing](dining-room.md#pathing-and-why-it-is-allowed-to-be-this-simple)
+for the full story;
+the short version is that a warning which cannot be trusted is worse than none,
+because it is the one that teaches players to read past all the others.
 
 The menu warnings are the ones that earn their place. Customers order from what
 the **day** has unlocked, not from what the kitchen can cook — so a room that
@@ -213,6 +216,28 @@ any hand-kept copy of it goes stale the day somebody adds a dish.
 
 One fault, one sentence: a kitchen that can cook *nothing* says so once rather
 than listing every dish as a separate symptom.
+
+### The first morning is empty
+
+Nothing is delivered on day one. No goods, no card, and **no pallets** — the
+paving outside is bare paving, exactly as it is during service.
+
+A kitchen opens with $0, so a day-one delivery is four things a room cannot buy,
+and the first thing it would ever learn about the shop is a refusal. Worse, it
+is four things to walk out and look at on the one morning when everything worth
+knowing is inside the walls: one dish, one room, and a sign by the door. Day one
+is the thinnest the game will ever be, and that has to include the half of it
+that is outside.
+
+It is also just true. A delivery arrives because there is a restaurant to
+deliver to, and on the first morning there is not one yet — you open it that
+day. The van comes tomorrow, once somebody has ordered something.
+
+So it is one rule, `FIRST_DELIVERY_DAY` in `data/economy.ts`, asked by both the
+roll and the renderer: no offers land, the squares stay where the level put them
+and nothing is drawn on them. The same shape as the two rent-free days, and for
+the same reason — *the days a room has no say in are the days it is not charged
+for and not sold to.*
 
 ### Stock
 
@@ -248,22 +273,28 @@ one place the shop is trying to teach you what the kitchen is missing. It is a
 content, identical in every room, and a shop that edited them would be a shop
 whose tuning depended on who had been playing.
 
-One slot every morning is promised to a kind the kitchen owns fewer than two of
-*and has a use for*, and which is **not an upgrade** — see below.
-Three duds is a shop players stop walking to, and a shop nobody walks to is a
-feature that has quietly stopped existing. That slot is still rolled *by
-weight* — evenly made a fryer as likely as a counter, because a lean kitchen is
+Two of the four squares are spoken for. One is promised to a kind the kitchen
+owns fewer than two of *and has a use for*, and which is **not an upgrade** —
+see below. The other holds a [recipe card](the-menu.md), whenever the library
+has anything left to offer. Four duds is a shop players stop walking to, and a
+shop nobody walks to is a feature that has quietly stopped existing; the two
+promises leave two wildcards, so a morning is legible without being fixed.
+
+They are never the same square, and neither square is fixed: both are rolled,
+or a guarantee would always be sitting in the same place and stop reading as
+luck. The promised slot is still rolled *by weight* — evenly made a fryer as likely as a counter, because a lean kitchen is
 short of nearly everything, and throughput turned up on four mornings in six.
 
 The two rules together do something neither was designed for, and it is worth
 keeping. On a lean kitchen the shortlist is most of the catalogue, so the early
 shop offers roughly evenly — it shows you what you are missing. As the kitchen
 fills up the shortlist empties and the tiers come through as written. Measured
-over four hundred mornings:
+over four hundred mornings, on the three-square delivery — **due a re-measure**
+now that there are four squares and one of them holds a card:
 
 | | day one | settled |
 | --- | --- | --- |
-| staples (counter, crate, table, plate) | ~11% each | ~16% each |
+| staples (counter, crate, table) | ~11% each | ~16% each |
 | capacity (board, sink, plates, bin) | ~12% each | ~7% each |
 | throughput (fryer, oven) | ~6% / ~2% | ~4% each |
 
@@ -282,7 +313,7 @@ same job done better by one person.
 
 | | | |
 | --- | --- | --- |
-| **Steel board** $110 | prep at 2.75x, against the wooden board's 1.75x | speed |
+| **Steel board** $70 | prep at 2.75x, against the wooden board's 1.75x | speed |
 | **Bell oven** $320 | bakes slightly faster, and holds a finished dish **three times as long** before it burns | time |
 
 They are built out of columns that already existed — `speed`, and a new
@@ -306,6 +337,9 @@ Three rules keep them from disturbing anything already here:
 - **Never delivered.** A recipe card delivers *the cheapest movable appliance
   that offers the station*, which was written before upgrades existed and turns
   out to be exactly the rule that stops a free card handing over the good oven.
+  It is load-bearing now that a card is the ordinary way to get your first of a
+  station: it is all that stands between a $100 card and a $320 oven, so it has
+  a test of its own.
 - **As rare as throughput**, and several days dearer. A slot holding one is a
   thing to plan a week around, which is why it is worth seeing before it is
   affordable.
@@ -316,16 +350,60 @@ column sits in, and a column typed by its own keys is a circular type — so
 `data/validate.ts` checks what the type would have: that it names a real kind,
 that it does the same job, that it costs more, and that it is not somehow worse.
 
-### Plates are the exception
+### Boards go on counters
 
-A single plate is a shop item, and it is the **only path in the game that
-creates one**. It goes through `mintPlate` in `sim/plates.ts` — named, exported,
-one caller — so that "where do plates come from" stays a question with one
-honest answer rather than a `makeItem` call somewhere in a shop.
+A chopping board is a **fitting**: it is set on a counter's worktop, and the
+counter then chops at the board's speed. It owns no tile of its own.
+
+That is what a board has always *looked* like — the model is a block let into a
+worktop, with a knife lying on it — and making it true costs prep capacity
+nothing in floor space, which is the scarce thing in a small kitchen. It also
+makes the first board a room buys the first purchase that makes it *faster*
+rather than *bigger*, which is the distinction upgrades are about and which a
+board-shaped counter blurred.
+
+Three rules, and they are all consequences of "there is no such thing as a board
+on the floor":
+
+- **`canPlace` refuses everything but a bare worktop.** A fitting has no state
+  in which it stands on a tile, so there is no placement that could produce one.
+- **The board comes off before the counter under it.** It is the thing on top,
+  it is what the hand reaches, and taking it first is what makes fitting one
+  reversible without a second verb. To move the counter itself, swap something
+  onto it — the counter comes up board and all, which is also what happens when
+  a level, a save or a disconnect has to move one.
+- **It is a `topper` on the host, not an entity.** A fitted board is a property
+  of its counter, exactly as a crate's stock is a property of the crate. It
+  becomes an `Appliance` again only while somebody is carrying it, which is why
+  `sim/world.ts` has `fittedDef`: **every** rule about work asks the host what
+  is on it rather than what it is.
+
+Because it is only an entity while it is being carried, both of the places that
+have to deal with a *carried* appliance deal with it by putting it down on a
+worktop rather than on the floor: a player disconnecting (`returnAppliance`) and
+a save being written (`parkFittings`). A save otherwise discards everything
+mid-flight, and a board in a hand looks like one of those — it is not, it is an
+appliance somebody paid for, and losing it to a server restart is the same harm
+as losing an oven.
+
+### Plate stacks come stocked
+
+Plates used to be for sale one at a time, and they were the only offer in the
+shop that was not an appliance. That made them the only purchase the morning
+could not actually put down: the build phase understands *appliances*, so the
+grab meant to set a bought plate on a counter lifted the counter instead.
+
+So the shop sells **plate stacks**, and a stack arrives with four plates on it.
+Every one goes through `mintPlate` in `sim/plates.ts` — named, exported, one
+caller — so that "where do plates come from" stays a question with one honest
+answer rather than a `makeItem` call somewhere in a shop.
 
 Conservation means *no destruction*; creation is allowed here and has to be
-auditable. Which is also why a bought plate has **no refund**: giving the money
-back would mean destroying it.
+auditable. The undo is what makes that work both ways: putting the stack back on
+the slot it came from deletes it and its plates together, so the till and the
+crockery both end up where they started. A stack that no longer holds the plates
+it was sold with is refused — otherwise buying, unloading and refunding would
+mint four plates for nothing.
 
 ## The ledger
 
@@ -333,10 +411,10 @@ Prices are the `price` column in `data/appliances.ts`, in four tiers:
 
 | Tier | Items | What it costs you |
 | --- | --- | --- |
-| Staples | plate $10, bin $10, crate $15, counter $20 | felt on day 1–2 |
-| Capacity | table $40, board $40, sink $50, plates stack $60 | a good day's profit |
+| Staples | bin $10, crate $15, counter $20, board $25 | felt on day 1–2 |
+| Capacity | table $40, sink $50, plate stack $100 (four plates) | a good day's profit |
 | Throughput | fryer $120, oven $160 | 2–3 days of *profit* — a saving goal |
-| Upgrades | steel board $110, bell oven $320 | a week of them — a plan |
+| Upgrades | steel board $70, bell oven $320 | a week of them — a plan |
 
 The **end-of-day card** is a receipt, and it is laid out like one: what the day
 did (served, and orders lost *by recipe*), then the money in and out (earned,
@@ -379,8 +457,9 @@ already true.
 | From day 3 | `$20`, plus `$5` for each day after it |
 
 The two free mornings are the two a room has no say in: day one is one dish and
-whatever the level handed you, day two is the first recipe card. Charging before
-a kitchen has made a single decision is charging it for the tutorial.
+whatever the level handed you, day two is the first morning with money worth
+spending. Charging before a kitchen has made a single decision is charging it
+for the tutorial.
 
 The step is deliberately **shallower than the takings curve**. Parties, shorter
 arrival gaps and dearer dishes all arrive on their own, so rent is a floor under
@@ -498,7 +577,7 @@ your kitchen, on a pallet on the paving, at whatever angle it was put down at
 and a fifth off full size so the pallet under it still reads. You
 walk up to it and press `Grab`, and you are carrying it.
 
-Three things make that work, and not one of them is an object:
+Four things make that work, and not one of them is an object:
 
 - **The rule was already there.** Nothing may be placed on the paving, and never
   could be — `canPlace` asks the tile. So *anything standing outside is not
@@ -510,12 +589,16 @@ Three things make that work, and not one of them is an object:
   walking up to the oven is what tells you it costs $160 — and the world stays
   free of floating text, which is the rule the whole diorama is built on.
 - **They stopped having to be in a row — or in the same place twice.** The row
-  existed because a stall is a structure and structures are straight. Three
+  existed because a stall is a structure and structures are straight. Four
   independent objects can go wherever a delivery lands, so they are **rolled
   each morning**: paving within a few squares of the door, never the row people
   walk in along, each turned by its own `jitter` like everything else in the
-  game. The level still lists three squares, because a level says what a kitchen
+  game. The level still lists four squares, because a level says what a kitchen
   has; where they stand is only true of the first morning.
+- **A recipe had nowhere better to be.** The posters were the last thing outside
+  that existed because the game needed somewhere to put an offer, and the
+  delivery is where offers live. One fewer kind of place, one more thing on a
+  pallet.
 
 All the renderer draws is a **pallet** under each — about the least a delivery
 can stand on, and the one thing that says *this was dropped off* rather than
@@ -527,32 +610,36 @@ A delivery not taken in by the time you turn the sign was collected, which is
 both the truth about the simulation (the squares re-roll overnight) and the
 reason nothing out there needs a closed state at all. The shutters are gone.
 
-### The recipe posters
+### The recipe cards came in from the wall
 
-The card stand was an easel standing a tile away from the stall, saying the same
-thing as it: *something about tomorrow is waiting out here*. It is now a poster
-pasted on the **outside of the kitchen wall**, one either side of the door.
+The card stand was an easel standing a tile away from the stall; then it was a
+poster pasted on the outside of the kitchen wall, one either side of the door.
+Both said the same thing as the stall and the caravan had: *something about
+tomorrow is waiting out here*, in a structure built to say it.
 
-Posters are `mounted`, like the sign on the inside of the same masonry — they
-hang on a wall rather than standing on a square, so the paving under them is
-still paving anybody may walk across, and the level loses two obstacles it never
-wanted. `mountSeam` answers which line of shell a mounted thing is on from
-either face, so `addWalls` leaves that piece at full height and a poster is
-never stuck to a wall the camera has cut down to a lip.
+A card is a fourth square in the delivery now, with a price on it, and the wall
+is bare. That is the third time the same fault has been fixed in the same place,
+and it is the last object outside that existed only to hold an offer — see
+[the menu](the-menu.md#what-this-replaced) for what it cost the calendar.
+
+With the posters went `mounted` as a thing anything *outside* needs. The sign
+inside the door is the only mounted object left, so `mountSeam` and the
+full-height wall piece it asks for now serve one kind rather than two — kept
+because the sign genuinely hangs on masonry, not because the shop does.
 
 ### What it cost
 
 Nothing, in the end — this version is **smaller than what it replaced.** The
 stall meshes, the caravan, its hatch animation, the run query that kept five
 slices agreeing, the easel and six palette entries all went; what replaced them
-is a pallet, a poster, and `goodsModel` with the scale taken out.
+is a pallet and `goodsModel` with the scale taken out. The cards took another
+system with them when they moved onto it.
 
 Two things still had to be true, and one is new:
 
 - **A delivery nobody can reach is money nobody can spend.** `validate.ts` flood
   fills from the door and insists every piece of furniture has a square beside
-  it somebody can stand on — a poster is asked about its own square instead,
-  since that is where you stand to read it.
+  it somebody can stand on.
 - **Nothing inside the building moved**, so the level ids are unchanged and
   saves survive.
 

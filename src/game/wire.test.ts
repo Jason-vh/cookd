@@ -214,7 +214,7 @@ describe("server messages", () => {
   test("a frame carrying a busy appliance round-trips its item", () => {
     const host = new Host();
     host.join("Ann");
-    const board = [...host.world.appliances.values()].find((a) => a.kind === "board")!;
+    const board = [...host.world.appliances.values()].find((a) => a.kind === "counter")!;
     board.item = { id: 4, base: "tomato", processes: ["chopped"], contents: [] };
     board.progress = 0.5;
     board.motion = "chop";

@@ -655,7 +655,10 @@ const listener = Bun.serve<SocketData, "/ws">({
           }
           break;
         case "menu":
-          room.host.menu(message.action);
+          // Attributed to this connection's first chef, which is who the pause
+          // is named after on everybody else's screen. A connection may only
+          // pause as itself, for the same reason it may only move its own cook.
+          room.host.menu(message.action, client.players[0]);
           break;
         case "reset":
           room.host.reset(client.name);

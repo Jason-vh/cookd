@@ -30,13 +30,21 @@ import { emptyLedger, nearestFreeTile, spawnAppliance, touchLayout } from "./sim
  * schema bump was therefore indistinguishable from "everyone loses their
  * build", and nothing said so.
  */
-export const SCHEMA = 6;
+export const SCHEMA = 7;
 
 export type SavedAppliance = {
   kind: ApplianceKind;
   x: number;
   y: number;
   source?: ItemSpec;
+  /**
+   * The fitting on this one's worktop — a chopping board.
+   *
+   * On the host rather than as a placement of its own, because that is what a
+   * fitted board *is*: a property of the counter it sits on, with no tile to be
+   * saved at. See `Appliance.topper`.
+   */
+  topper?: ApplianceKind;
 };
 
 export type Save = {
@@ -126,7 +134,8 @@ export type Save = {
 export function saveSignature(world: World): string {
   let layout = "";
   for (const appliance of world.appliances.values()) {
-    layout += `${appliance.id}:${appliance.kind}:${appliance.tile.x},${appliance.tile.y};`;
+    const fitted = appliance.topper ?? "";
+    layout += `${appliance.id}:${appliance.kind}${fitted && `+${fitted}`}:${appliance.tile.x},${appliance.tile.y};`;
   }
   const stall = takenSlots(world).join(",");
   const menu = world.unlocked.join(",");
@@ -162,13 +171,19 @@ export function snapshot(world: World, level: LevelDef = LEVEL): Save {
   const appliances: SavedAppliance[] = [];
   for (const appliance of world.appliances.values()) {
     if (!applianceDef(appliance.kind).movable) continue;
+    // A fitting has no tile of its own, so it cannot be written as a placement.
+    // Fitted ones ride their host's `topper` below; carried ones are parked on
+    // a worktop by `parkFittings`.
+    if (applianceDef(appliance.kind).fitting) continue;
     appliances.push({
       kind: appliance.kind,
       x: appliance.tile.x,
       y: appliance.tile.y,
       ...(appliance.source ? { source: appliance.source } : {}),
+      ...(appliance.topper ? { topper: appliance.topper } : {}),
     });
   }
+  parkFittings(world, appliances);
   return {
     schema: SCHEMA,
     level: level.id,
@@ -185,6 +200,44 @@ export function snapshot(world: World, level: LevelDef = LEVEL): Save {
     unlockedDay: world.unlockedDay,
     evicted: world.evicted,
   };
+}
+
+/**
+ * Put a carried board down before the lights go out.
+ *
+ * A save discards everything mid-flight — the half-chopped tomato, the order in
+ * progress, the plate on its way to a table — and a fitting in somebody's hands
+ * looks like one of those. It is not: it is an *appliance they paid for*, and
+ * losing it to a server restart is the same class of harm as losing an oven,
+ * which is precisely what `returnAppliance` exists to prevent. So it is parked
+ * rather than dropped, on the nearest bare worktop, which is exactly what a
+ * disconnect does with one.
+ *
+ * Written against the **saved entries** rather than against the world, for two
+ * reasons: `snapshot` must not mutate the kitchen it is describing, and a
+ * worktop that is not being saved is not somewhere a board can come back to.
+ * Two carried boards therefore land on two different counters, because the
+ * first one's host is no longer bare by the time the second is asked.
+ *
+ * A kitchen whose every counter is already fitted has nowhere to put it, and
+ * there the board is genuinely lost — the same answer, and the same rarity, as
+ * an appliance whose owner disconnects into a kitchen with no free floor.
+ */
+function parkFittings(world: World, appliances: SavedAppliance[]): void {
+  for (const appliance of world.appliances.values()) {
+    if (!applianceDef(appliance.kind).fitting) continue;
+    let host: SavedAppliance | null = null;
+    let best = Infinity;
+    for (const entry of appliances) {
+      if (!APPLIANCES[entry.kind].worktop || entry.topper !== undefined) continue;
+      const distance = (entry.x - appliance.tile.x) ** 2 + (entry.y - appliance.tile.y) ** 2;
+      if (distance < best) {
+        best = distance;
+        host = entry;
+      }
+    }
+    if (host) host.topper = appliance.kind;
+  }
 }
 
 // --- reading an untrusted file -------------------------------------------------
@@ -268,7 +321,23 @@ export function parseSave(value: unknown): Save | null {
 
     const source = parseSpec(entry.source);
     if (source === undefined) return null;
-    appliances.push({ kind: entry.kind, x, y, ...(source ? { source } : {}) });
+    // Absent before schema 7. Checked for membership *and* for being a fitting,
+    // because a counter claiming an oven on its worktop would be a kitchen
+    // baking on a countertop with nothing drawn to say so.
+    if (entry.topper !== undefined && !isApplianceKind(entry.topper)) return null;
+    const topper =
+      entry.topper !== undefined &&
+      isApplianceKind(entry.topper) &&
+      APPLIANCES[entry.topper].fitting
+        ? entry.topper
+        : undefined;
+    appliances.push({
+      kind: entry.kind,
+      x,
+      y,
+      ...(source ? { source } : {}),
+      ...(topper ? { topper } : {}),
+    });
   }
 
   return {
@@ -359,6 +428,20 @@ const MIGRATIONS: Record<number, (save: Save) => Save | null> = {
   // new economy with whatever that promise left them — the kindest possible
   // starting position, and the reason this needs no more than a flag.
   5: (save) => ({ ...save, schema: 6, evicted: false }),
+  // v6 stood chopping boards on the floor, as appliances in their own right. A
+  // board is a **fitting** now: a block set on a counter's worktop, which is
+  // exactly what one has always been drawn as. So the counter it looked like
+  // becomes a real counter, and the board goes on top of it — same tile, same
+  // speed, and a kitchen that comes back from disk having lost nothing.
+  6: (save) => ({
+    ...save,
+    schema: 7,
+    appliances: save.appliances.map((entry) =>
+      APPLIANCES[entry.kind].fitting
+        ? { kind: "counter", x: entry.x, y: entry.y, topper: entry.kind }
+        : entry,
+    ),
+  }),
 };
 
 export function migrate(save: Save): Save | null {
@@ -432,7 +515,15 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
   }
   for (const saved of placed.values()) {
     if ((world.applianceAt[saved.y * world.width + saved.x] ?? 0) !== 0) continue;
-    spawnAppliance(world, saved.kind, { x: saved.x, y: saved.y }, saved.source ?? null);
+    const appliance = spawnAppliance(
+      world,
+      saved.kind,
+      { x: saved.x, y: saved.y },
+      saved.source ?? null,
+    );
+    // Only onto something that can actually take one: a file naming a fitting
+    // on a fryer is a file describing a kitchen this game cannot build.
+    if (saved.topper && applianceDef(saved.kind).worktop) appliance.topper = saved.topper;
   }
   topUp(world, level);
 

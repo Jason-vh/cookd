@@ -71,8 +71,15 @@ export class HighlightViews {
         this.appliances.showLabel(appliance.id);
       }
 
-      const placing = world.phase === "build" && player.carriedAppliance !== null;
-      const blocked = placing && !canPlace(world, tile.x, tile.y);
+      // What is in your hands decides where it will go: a board wants a bare
+      // worktop where an oven wants a bare tile, so the square has to be asked
+      // about the thing being carried rather than about appliances in general.
+      const held =
+        player.carriedAppliance === null
+          ? undefined
+          : world.appliances.get(player.carriedAppliance);
+      const placing = world.phase === "build" && held !== undefined;
+      const blocked = placing && held !== undefined && !canPlace(world, tile.x, tile.y, held.kind);
       // Whose chef is pointing, except in the build phase, where what matters is
       // whether the thing in your hands will go there and not who is asking.
       const color = blocked

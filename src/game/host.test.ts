@@ -128,7 +128,7 @@ describe("protocol", () => {
     const quiet = encodeFrame(host.world, host.acks);
     expect(quiet.appliances.length).toBe(1);
 
-    const board = [...host.world.appliances.values()].find((a) => a.kind === "board")!;
+    const board = [...host.world.appliances.values()].find((a) => a.kind === "counter")!;
     board.item = { id: 1, base: "tomato", processes: [], contents: [] };
     expect(encodeFrame(host.world, host.acks).appliances.length).toBe(2);
   });
@@ -156,7 +156,7 @@ describe("protocol", () => {
     // directly would pass even if every real caller forgot.
     endDay(host.world);
     const player = host.world.players[0]!;
-    const board = [...host.world.appliances.values()].find((a) => a.kind === "board")!;
+    const board = [...host.world.appliances.values()].find((a) => a.kind === "counter")!;
     player.pos = { x: board.tile.x + 0.5, y: board.tile.y - 0.5 };
     player.facing = { x: 0, y: 1 };
 
@@ -242,7 +242,7 @@ describe("frames rebuild the world faithfully", () => {
 
     // Do some real work so there is state worth carrying: put a tomato on the
     // board, chop it, and take the kitchen into the build phase.
-    const board = [...host.world.appliances.values()].find((a) => a.kind === "board")!;
+    const board = [...host.world.appliances.values()].find((a) => a.kind === "counter")!;
     board.item = { id: 42, base: "tomato", processes: [], contents: [] };
     host.world.money = 137;
     host.world.players[0]!.carried = { id: 43, base: "plate", processes: [], contents: [] };
@@ -739,5 +739,57 @@ describe("what a client is allowed to guess at", () => {
     // Still held: the same item, not a fresh one off the crate.
     for (let i = 0; i < 20; i++) predict(world, holding);
     expect(player.carried).toBe(first);
+  });
+});
+
+/**
+ * A pause is a fact about the room, so it travels — and so it has to be
+ * survivable when whoever set it stops being in the room.
+ */
+describe("pausing a room", () => {
+  test("the clock stops for everybody, and starts again", () => {
+    const host = new Host();
+    host.join("Ann");
+    beginDay(host.world);
+    const clock = host.world.dayTime;
+
+    host.menu("pause", 0);
+    host.advance(1);
+    expect(host.world.pausedName).toBe("Ann");
+    expect(host.world.dayTime).toBe(clock);
+
+    host.menu("resume");
+    host.advance(1);
+    expect(host.world.dayTime).toBeLessThan(clock);
+  });
+
+  test("a dropped connection does not leave the room paused behind it", () => {
+    // The menu that would let them let go of it is on a screen that has gone,
+    // so a pause that outlived its owner would be a kitchen nobody can play and
+    // nobody can fix.
+    const host = new Host();
+    const ann = host.join("Ann");
+    host.join("Bo");
+    beginDay(host.world);
+
+    host.menu("pause", ann);
+    host.setAway(ann, true);
+    expect(host.world.pausedBy).toBeNull();
+
+    host.menu("pause", ann);
+    host.leave(ann);
+    expect(host.world.pausedBy).toBeNull();
+  });
+
+  test("resetting from an open menu comes back paused", () => {
+    // Reset is reached *through* the menu, and that menu is still open when the
+    // new world arrives. Coming back running would leave the player looking at
+    // a paused screen over a kitchen that was not.
+    const host = new Host();
+    const ann = host.join("Ann");
+    host.menu("pause", ann);
+    host.reset("Ann");
+    expect(host.world.pausedBy).toBe(ann);
+    expect(host.world.pausedName).toBe("Ann");
   });
 });

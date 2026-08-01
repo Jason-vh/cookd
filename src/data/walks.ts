@@ -21,9 +21,9 @@ import { createWorld } from "../sim/world";
  * solid, so the walk is between the squares you can stand on to use them.
  */
 export type Walks = {
-  /** Crate to chopping board. Walked for every ingredient of every dish. */
+  /** Crate to the prep worktop. Walked for every ingredient of every dish. */
   gather: number;
-  /** Board to the plate stack. */
+  /** The worktop to the plate stack. */
   plate: number;
   /** Plate stack to the furthest table. */
   serve: number;
@@ -37,18 +37,28 @@ export type Walks = {
 
 export function kitchenWalks(level: LevelDef): Walks {
   const world = createWorld(level, 0);
-  const board = of(world, "board")[0];
+  const counters = of(world, "counter");
   const plates = of(world, "plates")[0];
   const sink = of(world, "sink")[0];
   const tables = of(world, "table");
   const crates = of(world, "crate");
-  // A drive-through has no tables and a kitchen mid-edit may have no board.
-  // Nothing here is load-bearing enough to throw over.
-  if (!board || !plates || !sink || tables.length === 0 || crates.length === 0) {
+  // A drive-through has no tables, and a kitchen mid-edit may have no counter
+  // left. Nothing here is load-bearing enough to throw over.
+  if (!plates || !sink || counters.length === 0 || tables.length === 0 || crates.length === 0) {
     return { gather: 0, plate: 0, serve: 0, bus: 0, away: 0, total: 0 };
   }
 
-  const gather = Math.max(...crates.map((crate) => walk(world, crate, board)));
+  // Where a room would actually prep. It used to be the board, which was an
+  // appliance standing on its own tile; a board is a *fitting* now, so a
+  // starting kitchen has none and the walk is to the **counter closest to the
+  // crates** — which is the one somebody puts their first board on.
+  const gatherFrom = (counter: Appliance): number =>
+    Math.max(...crates.map((crate) => walk(world, crate, counter)));
+  const board = counters.reduce((best, counter) =>
+    gatherFrom(counter) < gatherFrom(best) ? counter : best,
+  );
+
+  const gather = gatherFrom(board);
   const plate = walk(world, board, plates);
   const serve = Math.max(...tables.map((table) => walk(world, plates, table)));
   const bus = Math.max(...tables.map((table) => walk(world, table, sink)));

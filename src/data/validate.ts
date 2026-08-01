@@ -173,6 +173,19 @@ export function validateContent(): string[] {
     }
   }
 
+  // --- fittings ---
+  // A fitting is set on a worktop and never on the floor, so it has to be
+  // carryable and it must not be somewhere another fitting could be stacked.
+  // The second is what stops a board on a board: `fitTopper` asks the host for
+  // its worktop, and a fitting that had one would swallow the next board whole.
+  for (const kind of APPLIANCE_KINDS) {
+    const def = APPLIANCES[kind];
+    if (!def.fitting) continue;
+    if (!def.movable) problems.push(`appliance "${kind}": a fitting nobody can lift`);
+    if (def.worktop) problems.push(`appliance "${kind}": a fitting that fittings go on`);
+    if (def.mounted) problems.push(`appliance "${kind}": both fitted and wall-mounted`);
+  }
+
   // --- upgrades ---
   // The `upgrades` column is a `string`, because the union it names is derived
   // from the table it sits in. These three checks are what the type would have
@@ -368,6 +381,12 @@ export function levelProblems(level: LevelDef): string[] {
     // — the stall in the market, the sign in the wall — and place themselves.
     else if (APPLIANCES[placement.kind].movable && !within(room, x, y)) {
       say(`a ${placement.kind} outside the building at ${key}`);
+    }
+    // A level stands things on tiles, and a fitting has no tile: `createWorld`
+    // would put a chopping board on the floor, which is a state nothing else in
+    // the game can produce and nothing knows how to draw.
+    if (APPLIANCES[placement.kind].fitting) {
+      say(`a ${placement.kind} at ${key} — a fitting goes on a counter, not on a tile`);
     }
   }
 

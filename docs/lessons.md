@@ -134,6 +134,24 @@ that call site does.
   kitchen* while their friends carried on without them. It looked like working
   reconnect logic in testing, because the test happened to drop the socket
   inside the six-second window.
+- **Two rules about the same square have to be the same rule.** The build phase
+  warned that an appliance could not be walked up to, and rang it in red, using
+  the dining room's four-way seat search — while a chef *reaches diagonally*,
+  which `canReach` says outright and which the corner rule exists for. So a
+  perfectly usable oven in a corner was reported broken at every opening while
+  somebody stood at the diagonal and cooked on it. The warning is gone; the
+  table one, which really is about somebody who walks four ways, stayed.
+
+  The shape to watch for: **a check written against a different actor's rules
+  than the thing it is checking.** It is not a tuning error and it cannot be
+  tuned out — the two answers were never about the same question.
+- **An offer the phase cannot put down is not an offer.** The stall sold single
+  plates, and a plate is an *item*; the build phase only understands
+  *appliances*. So the grab that should have set a bought plate on a counter
+  lifted the counter instead, which reads as the shop breaking the kitchen. It
+  sells plate *stacks* now, crockery included. The general form: **anything a
+  phase hands a player has to be something that phase's verbs can act on**, and
+  "which verbs exist right now" is a question worth asking of every new reward.
 - **Optional parameters in the middle of a signature are a trap.**
   `advance(elapsed, 8)` meant "at most 8 ticks" until polling was added, at which
   point 8 silently became the input function and the server threw every tick.
@@ -207,6 +225,8 @@ Several of these are no longer only advice:
 | Don't trust what arrives over a socket | `game/wire.ts` and `wire.test.ts` |
 | Casts hide the bugs types were meant to catch | `.oxlintrc.json` bans type assertions outright |
 | A control meaning two things needs a latch spanning the boundary | `Latch`, and `menu-controller.test.ts` — one test per historical instance |
+| A check must use the rules of whoever it is about | `unreachableTables` is the only reachability warning left |
+| The shop only sells things the morning can put down | `shop.test.ts`, "a bought stack arrives stocked" |
 | `src/sim` is pure | `layering.test.ts` |
 | The renderer reads the world and never writes it | `layering.test.ts` |
 | One list of a union, not several | `Record<K, true>` instead of `Set`, in `wire.ts` |

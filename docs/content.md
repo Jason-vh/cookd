@@ -45,12 +45,19 @@ adding "a hob that can also bake, slowly" is one line of data.
 `data/appliances.ts`:
 
 ```ts
-counter:     { stations: ["prep"], speed: 1,    ... }
-board:       { stations: ["prep"], speed: 1.75, ... }
-steel_board: { stations: ["prep"], speed: 2.75, upgrades: "board", ... }
+counter:     { stations: ["prep"], speed: 1,    worktop: true, ... }
+board:       { stations: ["prep"], speed: 1.75, fitting: true, ... }
+steel_board: { stations: ["prep"], speed: 2.75, fitting: true, upgrades: "board", ... }
 oven:        { stations: ["bake"], speed: 1,    ... }
 bell_oven:   { stations: ["bake"], speed: 1.15, patience: 3, upgrades: "oven", ... }
 ```
+
+A **fitting** is a row that describes something set on a worktop rather than
+standing on a tile: a chopping board, and nothing else so far. It has no tile of
+its own, so the counter it is on takes its stations and its speed — which is why
+every rule about work goes through `fittedDef` in `sim/world.ts` rather than
+through `applianceDef(kind)`. See [boards go on
+counters](the-shop.md#boards-go-on-counters).
 
 An **upgrade** is a row like any other: it offers the same station and is better
 at it, either in `speed` or in `patience` — the multiplier on how long finished
@@ -271,10 +278,11 @@ time and the tip are each multiplied by the kind of person who ordered it
 
 **A kitchen does not have this menu; it has the part of it that it bought.**
 Every room starts with the salad and picks the rest from [recipe
-cards](the-menu.md), so `tier` is what the card stand rolls against and `needs
-first` is what stops a dish being offered before the dish it builds on. Nothing
-here is a day number: the calendar decides only *when a choice is offered*, not
-what is on the menu.
+cards](the-menu.md), so `tier` is what the morning's card is rolled against —
+and what it is priced by — while `needs first` is what stops a dish being
+offered before the dish it builds on. Nothing here is a day number, and the
+calendar decides nothing at all: a card is offered every morning, and what a
+room cooks is what it paid for.
 
 ### What a dish needs, derived
 
@@ -355,13 +363,20 @@ is one map rather than a floor plan and a backdrop that agree by coincidence —
 and "nothing may be built on the paving" is what makes the goods out there
 legible as goods, see [the shop](the-shop.md#there-is-no-shop).
 
-**The level is a starting point, not an endpoint.** It has one board, two
-tables, four plates — and no fryer, no oven, and two crates, because a kitchen
-contains only what its menu needs and the menu is one salad. Heat and
-ingredients arrive with the [recipe cards](the-menu.md) that call for them; a
-second board or a third table comes from [the stall](the-shop.md). Both are the
-same idea: a shop nobody needs to visit teaches nothing, and a kitchen nobody
-chose is the same kitchen in every room.
+**The level is a starting point, not an endpoint.** It has **three counters** —
+one worktop and the two that make the pass — two tables and four plates, and no
+board, no fryer, no oven, and two crates, because a kitchen contains only what
+its menu needs and the menu is one salad. Heat and ingredients arrive with the
+[recipe cards](the-menu.md) that call for them — free, and only the ones it does
+not already own; a board, a fourth counter, a third table or a second oven comes
+from [the delivery](the-shop.md) at full price. Both are the same idea: a shop
+nobody needs to visit teaches nothing, and a kitchen nobody chose is the same
+kitchen in every room.
+
+The board is the sharpest version of that. A room's first one is the first
+purchase that makes it *faster* rather than *bigger*, and it goes on a counter
+it already owns — so it is a decision about the kitchen rather than an addition
+to it.
 
 Saves written against the older, richer park kitchen keep every appliance they
 had: a level says what a *new* room gets.
@@ -440,18 +455,20 @@ it. But that tolerance does not survive the room being generated: nobody chose
 this layout, so nobody can be blamed for it.
 
 So the walks are measured instead, in `generate.test.ts`, against the two
-hand-drawn kitchens as the reference: crate to board, board to plate stack,
+hand-drawn kitchens as the reference: crate to worktop, worktop to plate stack,
 plate stack to the far table, table to sink, sink back to the stack. That found
 a fault no validator could. The chopping board was rolled across the whole
 galley, in both axes, which put it up to **ten** squares from the crate run
 against a hand-made **two** — a twenty-step round trip per tomato, on day one,
 before there is any money to fix it with. Both hand-made kitchens sit their
-board two squares from the crates, and once the generator did too the worst seed
-came back to six.
+worktop two squares from the crates, and once the generator did too the worst
+seed came back to six. The metric outlived the board becoming a fitting: it asks
+for the *nearest worktop*, which is the counter somebody would put their first
+board on.
 
 Two numbers are pinned, and only two:
 
-- **crate to board**, for every seed, because chop-and-gather is walked for
+- **crate to worktop**, for every seed, because chop-and-gather is walked for
   every ingredient of every dish and is the one loop that must not be left to
   luck;
 - **the median full loop**, which has to land between the beach shack's and the

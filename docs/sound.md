@@ -59,6 +59,18 @@ Sounds come from two places, and the difference is about latency.
   rather than a round trip later. **A sound that lags your own hands is worse
   than no sound**, which is the whole reason this is two mechanisms and not one.
 
+**Work is heard while it happens**, not only when it finishes. An appliance with
+a `motion` knocks, scrubs or sizzles on a period counted in *ticks* — off
+`world.tick`, mixed with the appliance's own id so that three things going at
+once are a rhythm rather than three sounds landing on the same frame. Counting
+in ticks rather than in seconds is what keeps this module pure and frame-rate
+independent, and it is why a [paused](multiplayer.md) kitchen falls silent for
+free: a paused world's clock does not turn.
+
+The kitchen used to be silent from the moment you started holding `Use` until
+the dial completed, which made the tightest loop in the game feel like waiting
+for a progress bar rather than like doing a job.
+
 Three rules keep it from becoming a rattle:
 
 - **Hand sounds are yours only.** With four cooks in a kitchen, hearing
@@ -85,9 +97,11 @@ same resume covers.
 
 ## What is deliberately missing
 
-- **Continuous sound.** No sizzle loop, no music, no room tone. Everything is a
-  one-shot under half a second, because a loop needs a mixer, a duck, and an
-  opinion about what happens when six of them overlap.
+- **Continuous sound.** No music, no room tone, and no loops — the sizzle of a
+  working fryer is a repeated one-shot rather than a sustained sample, for the
+  same reason everything else is: a loop needs a mixer, a duck, and an opinion
+  about what happens when six of them overlap. Everything is under half a
+  second.
 - **Positional audio.** WebAudio has a panner and the kitchen has coordinates,
   so this is a hundred lines away — but the camera frames most of the room most
   of the time, and stereo panning on a screen you can see all of buys very

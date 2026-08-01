@@ -7,6 +7,23 @@ export type ApplianceDef = {
   height: number;
   /** Can a player put an item down on it? */
   acceptsItems: boolean;
+  /**
+   * Does it sit on a counter's worktop rather than on the floor?
+   *
+   * A chopping board is a *fitting*: it owns no tile, it is set on top of
+   * something that does, and the counter underneath takes on its stations and
+   * its speed. That is the honest shape of the thing — a board has always been
+   * drawn as a block let into a worktop — and it is what stops prep capacity
+   * costing floor space the kitchen has already paid for.
+   *
+   * A fitting is an `Appliance` only while somebody is **carrying** it. Once it
+   * is set down it becomes the host's `topper`, which is why `canPlace` refuses
+   * every tile that is not a bare worktop: there is no such thing as a board on
+   * the floor, so there is no state for one.
+   */
+  fitting: boolean;
+  /** Can a fitting be set on top of it? True of the things with a worktop. */
+  worktop: boolean;
   /** Which kinds of work this appliance can perform. */
   stations: Station[];
   /** Work-rate multiplier. A dedicated station beats improvising on a counter. */
@@ -68,7 +85,13 @@ export type ApplianceDef = {
  * opinion still wins — and so "this one is plain" stays the thing you do not
  * have to write down.
  */
-const PLAIN = { patience: 1, upgrades: null, mounted: false } as const;
+const PLAIN = {
+  patience: 1,
+  upgrades: null,
+  mounted: false,
+  fitting: false,
+  worktop: false,
+} as const;
 
 // prettier-ignore
 const DEFS = {
@@ -87,12 +110,16 @@ const DEFS = {
   // decides when the day happens. Opening used to be a keypress with no object
   // in the room behind it — see `sim/systems/sign.ts`.
   sign: { ...PLAIN, stations: [], speed: 1, label: "Sign", color: 0x7d5b3a, height: 1.15, acceptsItems: false, movable: false, mounted: true, price: 0 },
-  counter: { ...PLAIN, stations: ["prep"], speed: 1, label: "Counter", color: 0x9a7b58, height: 0.62, acceptsItems: true, movable: true, price: 20 },
-  board: { ...PLAIN, stations: ["prep"], speed: 1.75, label: "Chopping board", color: 0xc9a06a, height: 0.66, acceptsItems: true, movable: true, price: 40 },
+  counter: { ...PLAIN, stations: ["prep"], speed: 1, label: "Counter", color: 0x9a7b58, height: 0.62, acceptsItems: true, movable: true, worktop: true, price: 20 },
+  // A board is a **fitting**: it is set on a counter's worktop and the counter
+  // chops at the board's speed for as long as it is there. It owns no tile, so
+  // it is priced as the block it is rather than as the counter it used to come
+  // bolted to.
+  board: { ...PLAIN, stations: ["prep"], speed: 1.75, label: "Chopping board", color: 0xc9a06a, height: 0.1, acceptsItems: false, movable: true, fitting: true, price: 25 },
   // The upgrades. A steel board is the cheap one on purpose: prep is what a
   // kitchen does most of, so it is the upgrade a room can first imagine
   // wanting, and the one whose effect is felt within a minute of buying it.
-  steel_board: { ...PLAIN, stations: ["prep"], speed: 2.75, label: "Steel board", color: 0xb8b2a6, height: 0.66, acceptsItems: true, movable: true, price: 110, upgrades: "board" },
+  steel_board: { ...PLAIN, stations: ["prep"], speed: 2.75, label: "Steel board", color: 0xb8b2a6, height: 0.1, acceptsItems: false, movable: true, fitting: true, price: 70, upgrades: "board" },
   fryer: { ...PLAIN, stations: ["fry"], speed: 1, label: "Fryer", color: 0x8e8e99, height: 0.72, acceptsItems: true, movable: true, price: 120 },
   oven: { ...PLAIN, stations: ["bake"], speed: 1, label: "Oven", color: 0x6f7076, height: 0.9, acceptsItems: true, movable: true, price: 160 },
   // The bell oven buys *time*, not speed: a pizza left in it lasts three times
@@ -100,7 +127,12 @@ const DEFS = {
   // to at a particular moment, so the thing worth selling is a later moment.
   bell_oven: { ...PLAIN, stations: ["bake"], speed: 1.15, patience: 3, label: "Bell oven", color: 0x585b66, height: 0.9, acceptsItems: true, movable: true, price: 320, upgrades: "oven" },
   crate: { ...PLAIN, stations: [], speed: 1, label: "Crate", color: 0x7a5c3c, height: 0.7, acceptsItems: false, movable: true, price: 15 },
-  plates: { ...PLAIN, stations: [], speed: 1, label: "Plate stack", color: 0xbfc7cf, height: 0.7, acceptsItems: false, movable: true, price: 60 },
+  // Sold **with its plates on it** — see `STACK_PLATES`. Single plates used to
+  // be for sale beside the appliances, and they were the one purchase that put
+  // a loose *item* in your hands during a phase that only understands
+  // appliances: the grab that should have set the plate down lifted the counter
+  // instead. A stack is a thing the morning already knows how to hold.
+  plates: { ...PLAIN, stations: [], speed: 1, label: "Plate stack", color: 0xbfc7cf, height: 0.7, acceptsItems: false, movable: true, price: 100 },
   // The one station that never burns, never overflows and never punishes: the
   // pressure around a sink is that plates are finite, not that scrubbing is
   // dangerous. Somewhere to catch your breath is worth having in a game like

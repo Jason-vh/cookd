@@ -1,5 +1,6 @@
 import { adoptPlayer, touchLayout } from "../sim/world";
 import type { LevelDef } from "../data/level";
+import type { MenuAction } from "./host";
 import type {
   Appliance,
   Customer,
@@ -51,8 +52,13 @@ import type {
  *
  * v4 sends the kitchen itself in `welcome` rather than its id. See the note
  * there: the id stopped being enough the moment a level could be generated.
+ *
+ * v5 added two things that stop a kitchen from being drawable without them: a
+ * counter's `topper`, which is where chopping boards live now, and the frame's
+ * `pausedBy`, which is the whole room standing still. A v4 server sends neither,
+ * so a v5 client would draw bare counters that chop fast and would never pause.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /**
  * Ticks between broadcasts: a 60Hz simulation goes out at 20Hz.
@@ -88,6 +94,16 @@ export type LayoutAppliance = {
    */
   offer: Appliance["offer"];
   taken: number | null;
+  /**
+   * The fitting on this appliance's worktop — a chopping board, in practice.
+   *
+   * Rides the layout rather than the frame because it is exactly the sort of
+   * fact the layout is for: it changes a handful of times a morning, never
+   * during service, and it is about where things are. It is also load-bearing
+   * rather than decorative — a client that had it wrong would draw a bare
+   * counter and show the wrong dial speed on it.
+   */
+  topper: Appliance["topper"];
   /**
    * What a card stand is holding this morning.
    *
@@ -201,6 +217,17 @@ export type FrameCustomer = {
 export type Frame = {
   tick: number;
   /**
+   * Who has the room paused, and what they are called.
+   *
+   * In the frame rather than the layout because it is a thing that *happens*,
+   * to everybody, several times a session — and because the moment it changes
+   * is the moment every screen has to know. The name travels with it so that a
+   * paused room can say whose menu it is waiting on without every client
+   * keeping its own roster of who is called what.
+   */
+  pausedBy: number | null;
+  pausedName: string;
+  /**
    * The server's id counter. Carried so a client's world hands out ids from
    * where the server left off rather than from wherever `createWorld` stopped,
    * which is far behind anything the server is minting by the first customer.
@@ -255,7 +282,7 @@ export type ClientMessage =
    * by the door now, which arrives as an ordinary `input` — a grab, aimed at a
    * tile — so the protocol has one fewer way to say the same thing.
    */
-  | { t: "menu"; action: "restartDay" }
+  | { t: "menu"; action: MenuAction }
   | { t: "reset" }
   | { t: "ping"; sent: number };
 
@@ -311,6 +338,7 @@ export function encodeLayout(world: World): Layout {
       source: appliance.source,
       offer: appliance.offer,
       taken: appliance.taken,
+      topper: appliance.topper,
       card: appliance.card,
     });
   }
@@ -334,6 +362,8 @@ export function layoutVersion(world: World): number {
 export function encodeFrame(world: World, acks: Map<number, number>): Frame {
   return {
     tick: world.tick,
+    pausedBy: world.pausedBy,
+    pausedName: world.pausedName,
     nextId: world.nextId,
     phase: world.phase,
     day: world.day,
@@ -436,6 +466,7 @@ export function applyLayout(world: World, layout: Layout): void {
       source: saved.source,
       offer: saved.offer,
       taken: saved.taken,
+      topper: saved.topper,
       card: saved.card,
       armedBy: null,
       armTime: 0,
@@ -478,6 +509,8 @@ function cloneItem(item: Item | null): Item | null {
  */
 export function applyFrame(world: World, frame: Frame): void {
   world.tick = frame.tick;
+  world.pausedBy = frame.pausedBy;
+  world.pausedName = frame.pausedName;
   world.nextId = frame.nextId;
   world.phase = frame.phase;
   world.day = frame.day;

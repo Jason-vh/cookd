@@ -101,10 +101,11 @@ export class MenuController {
   /**
    * Filter a tick of gameplay input.
    *
-   * Returns idle input while the menu is open — the world keeps running, online
-   * it has to, so pausing means "your chef stands still" rather than "time
-   * stops for four people". Otherwise it blanks any control that is still held
-   * over from the menu.
+   * Returns idle input while the menu is open. The world is **paused** as well
+   * — that is `open`'s doing and it is a fact about the room, not about this
+   * screen — but the two are separate on purpose: the pause is a request that
+   * takes a round trip online, and the frames that land before it does must not
+   * be driven by a chef whose player is reading the controls.
    */
   filter(inputs: Inputs, localIds: readonly number[]): Inputs {
     if (this.menu.isOpen) return blank(inputs);
@@ -148,6 +149,10 @@ export class MenuController {
 
   private open(): void {
     this.menu.show(this.world());
+    // The whole kitchen stops, for everybody. Reading the controls during a
+    // rush used to cost you the rush; now it costs the room a minute, and the
+    // room can see whose minute it is.
+    this.act("pause");
     // Everything that could have been down when the menu opened is armed, so
     // the menu does not immediately act on the press that opened it.
     this.menuKey.arm();
@@ -157,6 +162,7 @@ export class MenuController {
 
   private close(): void {
     this.menu.hide();
+    this.act("resume");
     // ...and symmetrically: the press that closed the menu must not reach the
     // kitchen. `menuKey` and `back` are already held; arming `confirm` covers
     // closing via a confirm-shaped action below.

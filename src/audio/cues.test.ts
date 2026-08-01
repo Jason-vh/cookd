@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "../data/level";
-import type { Customer, World } from "../sim/types";
+import type { Customer, Motion, World } from "../sim/types";
 import { applianceAtTile, createWorld, effect } from "../sim/world";
 import { SoundWatcher } from "./cues";
 
@@ -78,7 +78,7 @@ describe("what makes a sound", () => {
   test("a burn is one sound, not one a frame", () => {
     const kitchen = world();
     const watcher = listening(kitchen);
-    const counter = applianceAtTile(kitchen, 10, 4)!;
+    const counter = applianceAtTile(kitchen, 11, 4)!;
 
     counter.item = { id: 3, base: "pizza", processes: ["sauced", "topped", "baked"], contents: [] };
     expect(watcher.listen(kitchen, [0])).toEqual([]);
@@ -149,5 +149,57 @@ describe("what makes a sound", () => {
 
     kitchen.players[0]!.carried = { id: 1, base: "tomato", processes: [], contents: [] };
     expect(watcher.listen(kitchen, [0])).toEqual([]);
+  });
+});
+
+/**
+ * The sound of the job being done, rather than only of it finishing.
+ *
+ * A chop used to be silent from the moment you started holding `Use` until the
+ * dial completed, which made the tightest loop in the game feel like waiting
+ * for a progress bar. The knife knocks now, and it knocks off the world's own
+ * tick — which is what keeps this pure, frame-rate independent, and silent the
+ * moment a kitchen is paused.
+ */
+describe("the sound of work being done", () => {
+  test("a working appliance knocks, repeatedly, and stops when the work does", () => {
+    const kitchen = world();
+    const counter = applianceAtTile(kitchen, 11, 4)!;
+    const watcher = listening(kitchen);
+
+    counter.motion = "chop";
+    let knocks = 0;
+    for (let i = 0; i < 120; i++) {
+      kitchen.tick++;
+      if (watcher.listen(kitchen, [0]).includes("chop")) knocks++;
+    }
+    // Several times a second, and not once a frame: this is texture, and a
+    // knife that fired on every tick would be a buzz.
+    expect(knocks).toBeGreaterThan(4);
+    expect(knocks).toBeLessThan(30);
+
+    counter.motion = null;
+    for (let i = 0; i < 60; i++) {
+      kitchen.tick++;
+      expect(watcher.listen(kitchen, [0])).toEqual([]);
+    }
+  });
+
+  test("each kind of work has its own sound", () => {
+    const kitchen = world();
+    const counter = applianceAtTile(kitchen, 11, 4)!;
+    const watcher = listening(kitchen);
+
+    const heard = (motion: Motion): Set<string> => {
+      counter.motion = motion;
+      const sounds = new Set<string>();
+      for (let i = 0; i < 120; i++) {
+        kitchen.tick++;
+        for (const sound of watcher.listen(kitchen, [0])) sounds.add(sound);
+      }
+      return sounds;
+    };
+    expect(heard("scrub")).toContain("scrub");
+    expect(heard("fry")).toContain("sizzle");
   });
 });

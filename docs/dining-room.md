@@ -285,17 +285,20 @@ steering, no avoidance. Two things make that enough:
   the first version simply does not have it. Gentle "excuse me" soft-collision
   can come later, if the room ever feels too empty without it.
 
-The same flood fill answers the build phase's two questions: **can the door
-reach every table**, and **can the chefs walk up to everything else**. A player
-*will* wall off the dining room in their first week, and the week after that
-they will box the sink into a corner. The rule is not to prevent either —
-whatever is stranded pulses red under a warning ring, the log says so when the
-day opens, and nobody is ever seated at a table nobody can walk to.
+The same flood fill answers the build phase's question: **can the door reach
+every table**. A player *will* wall off the dining room in their first week. The
+rule is not to prevent it — a stranded table pulses red under a warning ring,
+the log says so when the day opens, and nobody is ever seated at a table nobody
+can walk to. Sharing the fill with `pathTo` is what keeps the warning and the
+rule from ever disagreeing about what "reachable" means.
 
-One fill, two origins: `unreachableTables` starts at the door and looks for
-chairs, `unreachableAppliances` starts at the chefs and looks for anything they
-have to face. Sharing the fill is what keeps the warning and the rule from ever
-disagreeing about what "reachable" means.
+There was a twin of this asking whether the *chefs* could walk up to everything
+else, and it is gone. A customer walks four ways and a chef **reaches
+diagonally** (`canReach`, and the corner rule is the whole reason it exists), so
+running the dining room's fill from the kitchen answered a question nobody had
+asked: a usable oven in a corner was ringed in red while somebody stood at the
+diagonal and cooked on it. `unreachableTables` is about people who really do
+walk four ways, which is why it survived.
 
 ## The closing beat
 

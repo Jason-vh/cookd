@@ -4,7 +4,16 @@ import { restockStall } from "../sim/shop";
 import { DT, step } from "../sim/step";
 import { restartDay } from "../sim/day";
 import type { Inputs, PlayerInput, World } from "../sim/types";
-import { addPlayer, createWorld, emptyInput, log, playerById, removePlayer } from "../sim/world";
+import {
+  addPlayer,
+  createWorld,
+  emptyInput,
+  log,
+  pause,
+  playerById,
+  removePlayer,
+  resume,
+} from "../sim/world";
 import { restore, type RestoreResult, type Save } from "../save";
 
 /**
@@ -54,11 +63,18 @@ export const TARGET_QUEUE = 1;
 /**
  * What the pause menu can do to a room.
  *
- * Opening and closing used to be here too. They are the sign by the door now —
- * a menu item that opens the restaurant is the same keypress-with-nothing-
- * behind-it the sign replaced, one layer further away from the room.
+ * Opening and closing the *restaurant* used to be here too. They are the sign
+ * by the door now — a menu item that opens the restaurant is the same
+ * keypress-with-nothing-behind-it the sign replaced, one layer further away
+ * from the room.
+ *
+ * Opening and closing the *menu* is here for the opposite reason. A pause used
+ * to be a thing a client did to itself, and a client can only ever pause its
+ * own chef: the day carried on, the fryer carried on, and reading the controls
+ * during a rush cost you the rush. It is a fact about the room now, so it has
+ * to travel like one.
  */
-export type MenuAction = "restartDay";
+export type MenuAction = "restartDay" | "pause" | "resume";
 
 /**
  * Options rather than positional arguments: `advance(elapsed, 8)` used to mean
@@ -166,6 +182,9 @@ export class Host {
   setAway(id: number, away: boolean): void {
     if (!this.queues.has(id)) return;
     if (away) {
+      // Nobody may hold a room paused from behind a dropped connection: the
+      // menu that would let them let go of it is on a screen that has gone.
+      if (this.world.pausedBy === id) resume(this.world);
       this.away.add(id);
       this.queues.set(id, []);
       this.last.set(id, emptyInput());
@@ -308,8 +327,28 @@ export class Host {
 
   // --- shell actions ---------------------------------------------------------
 
-  menu(action: MenuAction): void {
-    if (action === "restartDay") restartDay(this.world);
+  /**
+   * `by` is the player who pressed it, which only the pause needs: it is the
+   * one action whose result is a sentence on everybody else's screen.
+   */
+  menu(action: MenuAction, by?: number): void {
+    switch (action) {
+      case "restartDay":
+        restartDay(this.world);
+        return;
+      case "pause": {
+        const player = by === undefined ? this.world.players[0] : playerById(this.world, by);
+        if (player) pause(this.world, player.id, player.name);
+        return;
+      }
+      case "resume":
+        resume(this.world, by);
+        return;
+      default: {
+        const never: never = action;
+        void never;
+      }
+    }
   }
 
   /**
@@ -336,6 +375,8 @@ export class Host {
     const evicted = this.world.evicted;
     const unlocked = this.world.unlocked;
     const unlockedDay = this.world.unlockedDay;
+    const paused = this.world.pausedBy;
+    const pausedName = this.world.pausedName;
     this.world = createWorld(this.level, 0);
     // A fresh world already starts on the salad, which is where a new run
     // belongs.
@@ -355,6 +396,10 @@ export class Host {
       player.away = away;
     }
     this.world.nextPlayerId = Math.max(0, ...players.map((p) => p.id + 1));
+    // Whoever reset the kitchen did it from an open menu, and that menu is
+    // still open. A new world that came back running would leave them looking
+    // at a paused screen over a kitchen that was not.
+    if (paused !== null) pause(this.world, paused, pausedName);
 
     // Queued and held inputs belong to the kitchen that just stopped existing.
     // Without this, whoever was mid-grab when someone hit reset immediately

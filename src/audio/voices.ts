@@ -37,6 +37,20 @@ export const VOICES = {
   place: { source: "triangle", from: 420, to: 320, duration: 0.07, gain: 0.16 },
 
   // --- work ---
+  // The sound of the job actually being done, repeated while it is (see
+  // `WORK_PERIOD`). The kitchen used to be silent between starting a chop and
+  // finishing it, which made holding `Use` feel like waiting rather than like
+  // working — the dial was the only thing that knew anything was happening.
+  //
+  // All three are noise rather than tone, and quiet, because they happen many
+  // times a second across a busy kitchen: this is texture, not melody, and
+  // `done` is still the only thing that rings.
+  /** Knife on a board: a short, dry knock. */
+  chop: { source: "noise", from: 2600, to: 900, duration: 0.05, gain: 0.13 },
+  /** A brush in a basin: softer, wetter, and slower than the knife. */
+  scrub: { source: "noise", from: 1100, to: 700, duration: 0.11, gain: 0.09 },
+  /** Oil, and an oven doing its work. The one work sound nobody has to hold. */
+  sizzle: { source: "noise", from: 5200, to: 3400, duration: 0.14, gain: 0.06 },
   /** A cycle of prep, frying or baking finished. The kitchen's metronome. */
   done: { source: "sine", from: 880, to: 1040, duration: 0.1, gain: 0.2, harmonic: 1.5 },
   /** Something has burnt. The one unpleasant sound in the game, and it earns it. */

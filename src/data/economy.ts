@@ -26,16 +26,6 @@ export const STALL_SLOTS = 3;
 export const SELLBACK = 0.5;
 
 /**
- * A single clean plate, and the **only** thing the game will create a plate for.
- *
- * Cheap on purpose: plate count is real capacity now, alongside tables, so one
- * more plate is the smallest interesting decision the shop can offer, and the
- * first one a player can afford. See `sim/plates.ts` for why the creation path
- * is a thing worth naming.
- */
-export const PLATE_PRICE = 10;
-
-/**
  * How often each kind turns up in a slot.
  *
  * `Record<ApplianceKind, number>` rather than a partial map, so adding an
@@ -71,7 +61,7 @@ export const STOCK_WEIGHT: Record<ApplianceKind, number> = {
   table: 5,
 
   // The middle band.
-  board: 2,
+  board: 3,
   sink: 2,
   plates: 2,
   bin: 2,
@@ -86,14 +76,6 @@ export const STOCK_WEIGHT: Record<ApplianceKind, number> = {
   steel_board: 1,
   bell_oven: 1,
 };
-
-/**
- * How likely a slot is to hold a single plate rather than an appliance.
- *
- * Weighted alongside the appliance kinds, as if it were one — it is a staple in
- * every sense that matters to the roll.
- */
-export const PLATE_WEIGHT = 5;
 
 /**
  * The stall guarantees one slot holds a kind the kitchen owns fewer than this

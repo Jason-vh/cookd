@@ -5,13 +5,7 @@ import type { Appliance, Offer, Recipe, World } from "../sim/types";
 import { playerById } from "../sim/world";
 import { inward, outward } from "../sim/walls";
 import { deliveryLabel, missingFor } from "../sim/cards";
-import {
-  canPlace,
-  reachedTile,
-  targetTile,
-  unreachableAppliances,
-  unreachableTables,
-} from "../sim/queries";
+import { canPlace, reachedTile, targetTile, unreachableTables } from "../sim/queries";
 import { offerLabel, offerPrice } from "../sim/shop";
 import { chopLift, ease, workPhase } from "./anim";
 import { setGlow } from "./glow";
@@ -20,12 +14,13 @@ import { disposeSubtree } from "./dispose";
 import { setGhost, setGhostOpacity } from "./ghost";
 import {
   buildAppliance,
+  buildFitting,
   paintSign,
   PITCH_DECK,
   type ApplianceParts,
   type SignFace,
 } from "./appliance-meshes";
-import { buildIngredientSample, buildItemModel } from "./models";
+import { buildItemModel } from "./models";
 import { buildHighlight } from "./overlay-meshes";
 import { PALETTE } from "./palette";
 import { makeCardLabel, makeLabel } from "./sprites";
@@ -75,6 +70,9 @@ type Visual = ApplianceParts & {
   refused: number;
   /** Ring shown when nobody can walk to this. Built the first time it is needed. */
   warning?: THREE.Mesh;
+  /** The fitting drawn on this one's worktop, and which kind it is. */
+  topper: Appliance["topper"];
+  topperMesh?: THREE.Object3D;
   /** Placement ghost: eased position, fade, and the pop when it lands. */
   ghost: { alpha: number; x: number; z: number; pop: number; held: boolean };
 };
@@ -82,7 +80,7 @@ type Visual = ApplianceParts & {
 export class ApplianceViews {
   private readonly visuals = new Map<number, Visual>();
 
-  /** Appliances nobody can walk to, and the layout that answer was computed for. */
+  /** Tables nobody can walk to, and the layout that answer was computed for. */
   private stranded = new Set<number>();
   private strandedFor = -1;
 
@@ -159,6 +157,7 @@ export class ApplianceViews {
       if (visual.label) visual.label.visible = false;
       setGlow(visual.root, null);
 
+      this.syncTopper(appliance, visual);
       const phase = workPhase(appliance.motion, appliance.id, time);
       this.animateParts(appliance, visual, phase, dt);
       this.syncDial(appliance, visual, dt, time);
@@ -169,16 +168,18 @@ export class ApplianceViews {
   }
 
   /**
-   * Everything nobody can walk to: tables the door cannot reach, and appliances
-   * the chefs cannot.
+   * Tables no customer can walk to.
    *
-   * Two questions with one answer on screen, deliberately. A player looking at
-   * a pulsing ring is being told "this will not work tomorrow", and which side
-   * of the pass the wall is on is the log line's business, not the room's.
+   * This used to ring appliances the *chefs* could not reach as well, and that
+   * half was simply wrong: a chef reaches diagonally (`canReach`) and the check
+   * was four-way, so a perfectly usable oven in a corner pulsed red while
+   * somebody cooked on it. It is gone — see the note in `kitchenWarnings`.
+   * A table is a different question with the same shape, and it survives
+   * because customers really do walk four ways.
    *
-   * Keyed on `layoutVersion`, so the two flood fills run when an appliance
-   * moves rather than once a frame — and they run *the instant* it moves, which
-   * is exactly when the answer can change.
+   * Keyed on `layoutVersion`, so the flood fill runs when an appliance moves
+   * rather than once a frame — and it runs *the instant* it moves, which is
+   * exactly when the answer can change.
    */
   private syncStranded(world: World): void {
     if (world.phase !== "build") {
@@ -188,11 +189,38 @@ export class ApplianceViews {
     }
     if (world.layoutVersion === this.strandedFor) return;
     this.strandedFor = world.layoutVersion;
-    this.stranded = new Set(
-      [...unreachableTables(world), ...unreachableAppliances(world)].map(
-        (appliance) => appliance.id,
-      ),
+    this.stranded = new Set(unreachableTables(world).map((appliance) => appliance.id));
+  }
+
+  /**
+   * The board on a counter's worktop, put there and taken away again.
+   *
+   * Built from the *host's* id and height, so a fitting keeps the angle it was
+   * put down at and lands on the surface rather than in it. The knife comes
+   * with it and is handed to `animateParts`, which is what makes a fitted board
+   * swing exactly as the appliance-shaped one used to.
+   *
+   * Gated on the kind rather than run every frame: a board is fitted a handful
+   * of times a morning and never during service.
+   */
+  private syncTopper(appliance: Appliance, visual: Visual): void {
+    if (visual.topper === appliance.topper) return;
+    visual.topper = appliance.topper;
+    if (visual.topperMesh) {
+      visual.root.remove(visual.topperMesh);
+      disposeSubtree(visual.topperMesh);
+      visual.topperMesh = undefined;
+      visual.knife = undefined;
+    }
+    if (appliance.topper === null) return;
+    const fitting = buildFitting(
+      appliance.topper,
+      appliance.id,
+      applianceDef(appliance.kind).height,
     );
+    visual.root.add(fitting.root);
+    visual.topperMesh = fitting.root;
+    visual.knife = fitting.knife;
   }
 
   /**
@@ -376,6 +404,7 @@ export class ApplianceViews {
       presence: 0,
       offerKey: "",
       cardKey: "",
+      topper: null,
       armed: 0,
       refused: 0,
       signFace,
@@ -593,7 +622,8 @@ export class ApplianceViews {
       const tile = targetTile(held);
       // A wall between chef and square is the same answer as an occupied one:
       // it would not go there. The ghost still shows *where*, and hovers.
-      const valid = reachedTile(world, held) !== null && canPlace(world, tile.x, tile.y);
+      const valid =
+        reachedTile(world, held) !== null && canPlace(world, tile.x, tile.y, appliance.kind);
       const inGrid = tile.x >= 0 && tile.y >= 0 && tile.x < world.width && tile.y < world.height;
       // The ghost always answers "where would this go"; whether it *settles* or
       // stays hovering answers "can it". Two questions, two channels — plus the
@@ -689,7 +719,7 @@ function signFaceOf(world: World): SignFace {
 }
 
 function offerKeyOf(offer: Offer): string {
-  return offer.good === "plate" ? "plate" : `${offer.kind}:${offer.source?.base ?? ""}`;
+  return `${offer.kind}:${offer.source?.base ?? ""}`;
 }
 
 /**
@@ -701,16 +731,8 @@ function offerKeyOf(offer: Offer): string {
  * different things. It is drawn at **very nearly full size** for the same
  * reason: the shop is not a picture of an oven, it is an oven standing outside
  * — see `GOODS_SCALE` for the fifth that comes off it and why.
- * Plates are the exception because a plate is not an appliance — it is stock,
- * and `models.ts` already knows how to draw one.
  */
 function goodsModel(offer: Offer): THREE.Object3D {
-  if (offer.good === "plate") {
-    const plate = buildIngredientSample("plate");
-    plate.scale.setScalar(0.85 * GOODS_SCALE);
-    return plate;
-  }
-
   const sample = buildAppliance({
     id: -1,
     kind: offer.kind,
@@ -720,6 +742,7 @@ function goodsModel(offer: Offer): THREE.Object3D {
     overcook: 0,
     justFinished: false,
     motion: null,
+    topper: null,
     source: offer.source,
     offer: null,
     taken: null,
@@ -745,8 +768,7 @@ const GOODS_SCALE = 0.8;
 
 /** How high the top of the goods is, pallet included, so the price sits over it. */
 function offerHeight(offer: Offer): number {
-  const model = offer.good === "plate" ? 0.12 : applianceDef(offer.kind).height;
-  return PITCH_DECK + model * GOODS_SCALE;
+  return PITCH_DECK + applianceDef(offer.kind).height * GOODS_SCALE;
 }
 
 /** The warning ring's own material, narrowed rather than asserted. */

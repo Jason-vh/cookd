@@ -4,7 +4,7 @@ import { CARD_INTERVAL, FIRST_CARD_DAY, TIER_WEIGHT } from "../data/progression"
 import { RECIPE_BY_ID, RECIPE_NEEDS, RECIPES } from "../data/recipes";
 import { mulberry32 } from "./random";
 import type { Appliance, ItemSpec, Recipe, Station, Vec2, World } from "./types";
-import { log, nearestFreeTile, spawnAppliance, touchLayout } from "./world";
+import { fittedDef, log, nearestFreeTile, spawnAppliance, touchLayout } from "./world";
 
 /**
  * The menu, and the stand that grows it.
@@ -214,12 +214,17 @@ function clearCard(stand: Appliance): void {
  * here: the cheapest movable appliance that offers the station is the one a
  * card delivers, so "the dedicated appliance for `bake`" stays a fact about
  * `data/appliances.ts` even after somebody adds a hob.
+ *
+ * Fittings are skipped. A delivery is set down on a **tile** (see `deliver`),
+ * and a board has no tile — it goes on a counter, which is a thing somebody has
+ * to already own. The counter is what answers for `prep` anyway, and it is
+ * cheaper, so this only guards against a future fitting that undercuts its host.
  */
 function applianceForStation(station: Station): ApplianceKind | null {
   let best: ApplianceKind | null = null;
   for (const kind of APPLIANCE_KINDS) {
     const def = applianceDef(kind);
-    if (!def.movable || !def.stations.includes(station)) continue;
+    if (!def.movable || def.fitting || !def.stations.includes(station)) continue;
     if (best === null || def.price < applianceDef(best).price) best = kind;
   }
   return best;
@@ -241,7 +246,7 @@ export function missingFor(world: World, recipe: Recipe): Delivery {
   const stations = new Set<Station>();
   const bases = new Set<string>();
   for (const appliance of world.appliances.values()) {
-    for (const station of applianceDef(appliance.kind).stations) stations.add(station);
+    for (const station of fittedDef(appliance).stations) stations.add(station);
     if (appliance.source && appliance.source.processes.length === 0) {
       bases.add(appliance.source.base);
     }

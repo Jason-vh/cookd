@@ -2,29 +2,46 @@
 
 # The menu
 
-Every kitchen starts with **one dish**. On the morning of day 2, and every third
-morning after it, two recipe posters go up on the outside wall either side of
-the door, and the room takes one. The card unlocks the dish *and delivers
-everything the kitchen lacks for it* — the fryer, the potato crate — free, onto
-the floor, before service.
+Every kitchen starts with **one dish**. Every morning after that, one square of
+the [delivery](the-shop.md) holds a **recipe card** with a price on it. Buy it,
+carry it inside, put it down: the dish joins the menu, and everything the
+kitchen lacks for it — the fryer, the potato crate — arrives free, on the floor,
+before service.
 
-The one-sentence version: **the level is the starting point, the cards are the
-progression, the kitchen is the record of every choice** — and by day 10, no two
-rooms are the same restaurant.
+The one-sentence version: **the menu and the kitchen grow out of the same till.**
+A card is not a schedule any more, it is a thing on a pallet with a price, and
+"second board, or fries?" is a question the game did not used to ask.
 
 ---
 
 ## What this replaced
 
-`unlockDay`. A recipe used to carry the first day it could be ordered, and
-before that it was the *position in the array*. Both made the calendar the
-author of the menu: every room on day three had pizza, whether it had an oven,
-whether anybody wanted one, and whether the last two days had gone well.
+Twice, and both times for a reason worth keeping.
 
-It is gone, and nothing replaced it inside `data/recipes.ts` except `tier` — a
-claim about how much kitchen a dish demands, which is what the card stand rolls
-against. **The order pool is now `world.unlocked`**, and there is no day-slice
-anywhere in the simulation.
+**`unlockDay`.** A recipe used to carry the first day it could be ordered.
+That made the calendar the author of the menu: every room on day three had
+pizza, whether it had an oven, whether anybody wanted one, and whether the last
+two days had gone well. It is gone, and nothing replaced it inside
+`data/recipes.ts` except `tier` — a claim about how much kitchen a dish demands.
+
+**The posters, and the card morning.** Two cards went up on the outside wall
+either side of the door, on day 2 and every third morning after it. The wall was
+wrong for exactly the reason the market stall and the supply caravan were wrong,
+which [the shop](the-shop.md#three-attempts-and-what-was-wrong-with-all-of-them)
+had already written down:
+
+> a structure that existed only because the game needed somewhere to put a
+> price.
+
+A poster is that sentence with *a recipe* on the end. Every other object outside
+the walls is something a restaurant would have anyway, and no restaurant has two
+laminated dish adverts pasted either side of its own front door. A recipe turns
+up because somebody delivered it — so it stands on a pallet, like the oven.
+
+And the cadence was `unlockDay` again, one level up. The calendar no longer said
+*which* dish, but it still said **when**, identically in every room, whatever
+had happened in the days between. Days 2, 5, 8, 11 was a schedule with a
+different author.
 
 ## Day one is the thinnest the game will ever be
 
@@ -34,59 +51,137 @@ self-paced by construction rather than by a difficulty setting, and the dining
 loop is the whole tutorial.
 
 That leans on arrival pacing rather than on content. If day one drags in
-playtests, the fix is a slightly faster day-1 arrival floor, or moving the first
-card a day earlier. Both are tuning; neither is structure.
+playtests, the fix is a slightly faster day-1 arrival floor. That is tuning; it
+is not structure.
 
-## The stand
+## A card is a good
 
-Physical, like the stall, and built from the same three rules:
-
-1. **The offer is derived, not stored.** Two cards are rolled from `(seed, day)`
-   through their own generator, never from `random(world)` — which play has
-   already consumed by the time anybody reaches the patio. Two clients on one
-   seed see one pair of cards, and there is a test with two `Host`s that says so.
-2. **The result is ordinary world state.** The cards live on the stand
-   appliances and ride the layout message, so taking one is a layout change like
-   an oven moving.
-3. **What cannot be recomputed is written down.** `world.unlocked` is the room's
-   whole history and is saved. `world.unlockedDay` is the small companion fact —
-   one number doing three jobs, all of them the same fact seen from a different
-   side:
-
-   - the newest dish keeps its launch-day share of the orders while it holds;
-   - a morning knows its offer has already been taken;
-   - a save reloaded into a card morning is not offered the pair it already spent.
-
-The easel is **always standing there** and the card is not. A stand that
-vanished entirely would be an invisible thing to walk into on paving every
-customer in the park walks over; instead it follows the stall's grammar, where
-the place is permanent and whether it is *open* is legible from across the patio.
-
-## Choosing
-
-The reset pattern, and the same two-press shape for the same reason: `Grab` is
-the button that means "yes" everywhere else in the game.
+It stands in the delivery, it costs money, and it is grabbed, carried and put
+down with the verb everything else uses. **Zero new verbs, and no new object** —
+the card was already an appliance kind; it has stopped being furniture bolted to
+a wall and become something movable.
 
 | You do | What happens |
 | --- | --- |
-| face a card, `Grab` | it lifts and sways — "Ada is considering Fries… (needs: fryer, potato crate)" |
-| `Grab` again | the dish joins the menu, and its equipment is delivered |
-| walk away, look at the other card, or wait 4s | it settles back down |
-| nothing at all | both cards leave when the day opens |
+| face the card, `Grab` | money out, and you are **carrying** it |
+| put it down inside the kitchen | the dish joins the menu, and its equipment is delivered around the tile you chose |
+| put it back on its pallet | **full refund** — undo, not commerce |
+| turn the sign while holding it | refused, exactly as it is for a held oven |
 
-**It is a choice between two, not two purchases.** Taking one takes the offer
-with it. And the choice is genuinely optional: an unpicked pair simply leaves,
-the next offer arrives on schedule regardless, and a room may consolidate on
-purpose.
+There are only two endings because the paving decides: nothing may be placed
+outside, `canPlace` asks the tile, so a card in your hands either goes in or
+goes back. Nobody has to be told that, and there is no timer, no confirmation
+and no armed state to explain.
 
-Anyone may choose, like anyone may spend the money or move the oven. The log
-names them, which is the trust model this game has everywhere.
+That deletes the whole arm-and-confirm dance the easel needed — `ARM_SECONDS`,
+`armedBy`, `armTime`, the system that watched for somebody walking away, and the
+rule that only one card could be lifted at a time. All of it existed to answer
+"did you mean it", and carrying a thing across a room already answers that.
+
+**The tile you choose is the anchor.** `unlockRecipe` takes the position it was
+committed from, and the delivery lands on the nearest free interior tiles to it
+— so where you set the card down is where the fryer arrives. Setting it down in
+the corner you want the fryer in is the same gesture as deciding.
+
+### The one refusal
+
+If there is genuinely nowhere for the equipment to go, the **placement** is
+refused out loud and you are still holding the card — which means you are still
+holding a full refund. A menu the room cannot cook and cannot diagnose is the
+one outcome worth refusing, and this version refuses it before the money is
+gone rather than after.
+
+## What a card costs
+
+`TIER_FEE` in `data/progression.ts`, by the same `tier` the roll is weighted by:
+
+| Tier | Fee | Dishes |
+| --- | --- | --- |
+| 1 | $30 | salad, fries, bread, cheese fries |
+| 2 | $60 | cheesy bread, baked potato |
+| 3 | $100 | pizza, loaded pizza |
+
+The equipment on top is **free, and only what is missing** — `missingFor` asks
+the world, so a kitchen that already owns an oven is not sent a second one, and
+a kitchen that sold its board still counts as able to prep because every counter
+can.
+
+So a card advertises its own value, and the number is not the whole story:
+
+> **Fries $30** — with fryer, potato crate
+> **Cheesy Bread $60** — with nothing
+
+Both sentences are already written by `deliveryLabel`, which was the second half
+of the poster's face and now earns its keep as the reason for a price. Waiting
+for the one that ships a fryer is a smart play, not an exploit — that is what
+the card *is*.
+
+### Cards buy stations; the shop buys throughput
+
+This is the division, and it is the point of the fee being flat:
+
+- **Your first fryer is free**, and it comes attached to the reason you wanted
+  one. A room does not buy an oven and then go looking for something to bake.
+- **Your second oven is $160**, and so is the one you buy to stop queueing
+  behind the first. Capacity is what the shop sells.
+- **Upgrades are never delivered.** A card delivers *the cheapest movable
+  appliance that offers the station*, derived from `data/appliances.ts` rather
+  than named here. That rule was written as a footnote before upgrades existed
+  and it is now load-bearing: it is the only thing standing between a $100 card
+  and a $320 bell oven, and it has a test of its own saying so.
+- **The scarcity guarantee picks up the rest.** A kitchen with one oven owns
+  fewer than two, so the morning after a card lands, the promised slot starts
+  offering the second one. The throughput tier did not die; it moved from *your
+  first* to *your next*.
+
+## Every morning, and why that is not the calendar again
+
+One of the four delivery squares holds a card whenever there is anything left to
+offer. Not day 2 and every third — **every morning there is a delivery at all**,
+which is every morning [but the first](the-shop.md#the-first-morning-is-empty).
+
+The cadence moved from the calendar to the till, which is where the
+[rent](the-shop.md#the-rent) already lives. A room that spends on cards runs a
+broad menu in a thin kitchen; a room that spends on equipment runs three dishes
+fast; a room in debt buys neither and eats the offer. Nothing is scheduled, so
+two rooms on the same seed and the same day can have completely different menus
+— which is the claim the old two-card choice was making, made by money instead
+of by a forced pick.
+
+A missed card is cheap, and that is deliberate. Yesterday's affordable dish is
+gone and a different one is standing there this morning, because the roll is a
+pure function of `(seed, day)` and nothing lingers. Daily cadence is what makes
+that fair: there is another one tomorrow.
+
+The library is eight dishes, seven of them unlockable. **Free daily cards would
+exhaust it by day nine** and hand every room the same restaurant — the fee is
+the only thing that stops a daily offer being a schedule with extra steps.
+
+The first card a room can buy lands on the morning of day 2: the first morning
+anything is delivered at all, and the first morning there is money to spend on
+it. That is exactly where `FIRST_CARD_DAY` used to put it — the same morning,
+arrived at by having earned a day's takings rather than by reading a calendar.
+
+### One slot in four
+
+The delivery is four squares now, and two of them are spoken for: the card, and
+the [scarcity guarantee](the-shop.md#stock). They are never the same square, so
+a morning reads as
+
+> a dish, a thing you are short of, and two wildcards
+
+which is a more legible delivery than four rolls, and still has room to
+surprise. The card square is rolled like the promised one, so neither is ever
+sitting in the same place twice.
+
+When the library runs out there is no card, and the morning is four goods. That
+needed no special case — it is the sentence the stands already said when there
+was nothing to choose.
 
 ## Cards deliver their needs
 
-Picking a recipe delivers, free, every requirement the kitchen lacks: appliance
-kinds and ingredient crates. Both are **derived from the recipe data**
-(`RECIPE_NEEDS` — see [the content model](content.md#what-a-dish-needs-derived)),
+Both the appliance kinds and the ingredient crates are **derived from the recipe
+data** (`RECIPE_NEEDS` — see [the content model](content.md#what-a-dish-needs-derived)),
 never listed on the card. Two opinions about what a dish needs would drift the
 day somebody changed a step.
 
@@ -95,10 +190,7 @@ day somebody changed a step.
   fryer and the oven.
 - Deliveries land on the nearest free interior tile — the same machinery that
   brings a disconnected player's oven home, so never the door and never the
-  patio. Each one is logged.
-- If there is genuinely nowhere to put something, **the pick is refused out
-  loud** rather than the equipment being dropped on the floor. A menu the room
-  cannot cook and cannot diagnose is the one outcome worth a refusal.
+  patio. Each one is logged, by name and by who chose it.
 - Players rearrange during the same morning. That is what mornings are for.
 
 ## Launch day
@@ -111,7 +203,13 @@ morning.
 Exactly one number is drawn from the stream either way. Randomness spent
 conditionally is randomness that makes two rooms on one seed diverge.
 
-## The stall follows the menu
+`world.unlockedDay` is what carries it, and it used to do three jobs. It does
+two now: the launch share, and stopping a restored save from re-offering
+something. "This morning's offer is already spent" is `slot.taken`, like every
+other square in the delivery — one fewer special case for having made the card
+a good.
+
+## The delivery follows the menu
 
 The shop stocks for *this* restaurant, not for the library:
 
@@ -120,9 +218,8 @@ The shop stocks for *this* restaurant, not for the library:
 - an appliance kind no unlocked recipe can use has **no weight at all**. A fryer
   before fries exist is an expensive thing to buy in order to watch it do
   nothing;
-- the scarcity guarantee (one slot in three holds something the kitchen owns
-  fewer than two of) picks from the same filtered set, so it starts covering a
-  delivered kind the morning after a card arrives.
+- the scarcity guarantee picks from the same filtered set, so it starts covering
+  a delivered kind the morning after a card arrives.
 
 It is a filter at roll time, never a write to `STOCK_WEIGHT`: the weights are
 content, and a shop that edited them would be a shop whose tuning depended on
@@ -130,34 +227,43 @@ who had been playing.
 
 ## Saving
 
-Schema 5 carries `unlocked` and `unlockedDay`.
+`unlocked` and `unlockedDay` are the room's whole menu history, and they are
+saved.
 
 - **Reset keeps them.** Reset un-wrecks the layout; it does not delete history.
-  The days spent on those cards were really spent. What it does take back is the
+  The money spent on those cards was really spent. What it does take back is the
   equipment they delivered — exactly as it takes back everything else bought.
+- **Eviction does not**, because a new run inheriting the old menu would open on
+  day one with customers ordering pizza in a kitchen with no oven.
 - **Pre-card saves are backfilled** with salad, fries and pizza: those kitchens
-  were played against `unlockDay`, which handed out exactly those three by day
-  three, and their layouts still have the fryer and the oven standing in them. A
-  schema bump is not an excuse to take somebody's restaurant away. Same
-  philosophy as the essential-appliance top-up.
+  were played against `unlockDay`, and their layouts still have the fryer and
+  the oven standing in them. A schema bump is not an excuse to take somebody's
+  restaurant away.
 - A recipe id the content no longer knows is dropped on the way in. The menu is
   the order pool, and a customer asking for a dish that does not exist is one
   nobody can ever serve.
+- The bump that came with this change drops `armedBy` and `armTime` from every
+  appliance, and turns the two wall posters into nothing. No menu is lost.
 
 ## Deliberately not built
 
 - **A menu cap.** Nothing stops a room unlocking everything, and nothing should
   until the library is bigger than about five dishes and "which five" is a real
-  decision. There is no hook for it.
-- **Upgrade appliances and new stations** (a pot, a stove). The delivery rule
-  asks the appliance table for the cheapest thing offering a station, so both
-  arrive as data when they arrive — but nothing here anticipates them.
+  decision. Money is a soft cap and may turn out to be enough.
+- **Selling a recipe back.** The refund exists because you are still holding the
+  card; once it is down, the dish is knowledge and the kitchen has it. A menu
+  you can pawn is a menu that is inventory.
+- **A card that waits for you.** Today's offer leaves with the morning, because
+  a card that lingered would be state that cannot be recomputed from
+  `(seed, day)` — and the whole delivery is derived, not stored.
+- **Upgrade cards.** Upgrades are bought, never delivered, and that is the rule
+  keeping the free station honest.
 
 ---
 
 Next:
 
-- [the-shop.md](the-shop.md) — the other thing waiting outside, and the morning both stand in
+- [the-shop.md](the-shop.md) — the four squares a card stands in, and the morning they all arrive on
 - [content.md](content.md) — the recipes themselves, and what a dish is made of
 
 [Back to the README](../README.md).

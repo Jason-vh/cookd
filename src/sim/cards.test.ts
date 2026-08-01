@@ -126,7 +126,7 @@ describe("the stand", () => {
     const stands = cardStands(world);
     expect(stands).toHaveLength(CARD_SLOTS);
     for (const stand of stands) {
-      expect(canPlace(world, stand.tile.x, stand.tile.y)).toBe(false);
+      expect(canPlace(world, stand.tile.x, stand.tile.y, "counter")).toBe(false);
       expect(world.tiles[stand.tile.y * world.width + stand.tile.x]?.placeable).toBe(false);
     }
   });
@@ -452,10 +452,8 @@ describe("the stall stocks for this restaurant", () => {
     const world = morning();
     for (let day = 1; day <= 10; day++) {
       for (const slot of [...world.appliances.values()].filter((a) => a.kind === "stall")) {
-        if (slot.offer?.good === "appliance") {
-          expect(slot.offer.kind).not.toBe("fryer");
-          expect(slot.offer.kind).not.toBe("oven");
-        }
+        expect(slot.offer?.kind).not.toBe("fryer");
+        expect(slot.offer?.kind).not.toBe("oven");
       }
       beginDay(world);
       endDay(world);
@@ -466,7 +464,7 @@ describe("the stall stocks for this restaurant", () => {
     const salad = morning();
     for (let day = 1; day <= 10; day++) {
       for (const slot of [...salad.appliances.values()].filter((a) => a.kind === "stall")) {
-        if (slot.offer?.good === "appliance" && slot.offer.source) {
+        if (slot.offer?.source) {
           expect(["tomato", "lettuce"]).toContain(slot.offer.source.base);
         }
       }
@@ -490,9 +488,8 @@ describe("the stall stocks for this restaurant", () => {
       beginDay(world);
       endDay(world);
       for (const slot of [...world.appliances.values()].filter((a) => a.kind === "stall")) {
-        if (slot.offer?.good !== "appliance") continue;
-        if (slot.offer.kind === "fryer") sawFryer = true;
-        if (slot.offer.source?.base === "potato") sawPotato = true;
+        if (slot.offer?.kind === "fryer") sawFryer = true;
+        if (slot.offer?.source?.base === "potato") sawPotato = true;
       }
     }
     expect(sawFryer).toBe(true);

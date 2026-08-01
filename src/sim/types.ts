@@ -81,6 +81,20 @@ export type Appliance = {
   justFinished: boolean;
   /** The action currently being performed here, if a chef is working it. */
   motion: Motion | null;
+  /**
+   * The fitting set on this appliance's worktop, or null for a bare one.
+   *
+   * A **kind rather than an id**, because a fitted board is not a thing in its
+   * own right: it is a property of the counter it is on, the way a source is a
+   * property of a crate. It becomes an `Appliance` again only when somebody
+   * lifts it off, and it travels with its host — pick the counter up and the
+   * board goes with it, which is what the eye expects and what keeps the two
+   * from needing to be kept in step as separate entities.
+   *
+   * What it buys the host is `stations`, `speed` and `patience`: see
+   * `fittedDef`.
+   */
+  topper: ApplianceKind | null;
   /** For crates: the item this appliance dispenses. */
   source: ItemSpec | null;
   /**
@@ -352,15 +366,16 @@ export type Tile = {
 };
 
 /**
- * Something the stall will sell you.
+ * Something the stall will sell you: one appliance, and what is in it.
  *
- * A union rather than a kind plus a flag, because the two outcomes are
- * genuinely different: an appliance arrives as a held ghost to be placed, and a
- * plate arrives in your hands as an ordinary clean plate.
+ * This used to be a union, because a single plate arrived in your hands as an
+ * item rather than as a held ghost. It was the only offer that did, and it was
+ * the only one the morning could not actually put down — the build phase
+ * understands appliances, so the grab meant to set a plate on a counter lifted
+ * the counter instead. Plates are sold by the **stack** now, crockery included,
+ * and the shop has one shape again.
  */
-export type Offer =
-  | { good: "appliance"; kind: ApplianceKind; source: ItemSpec | null }
-  | { good: "plate" };
+export type Offer = { kind: ApplianceKind; source: ItemSpec | null };
 
 /**
  * One day's takings, kept apart from the lifetime totals beside them.
@@ -490,6 +505,21 @@ export type World = {
   door: Vec2;
 
   phase: Phase;
+  /**
+   * The chef whose pause menu is open, or null for a kitchen that is running.
+   *
+   * Pausing is a fact about the **room**, not about a screen. It used to be a
+   * screen: the menu blanked your own input and the day carried on without you,
+   * which is the only honest thing a client can do on its own — and it meant
+   * that reading the controls during a rush cost you the rush. So the kitchen
+   * holds it, `step` refuses to advance while it is set, and everybody else
+   * sees who did it.
+   *
+   * The **name** rides alongside the id because it is what the other screens
+   * show, and a seat can leave between pausing and being drawn.
+   */
+  pausedBy: number | null;
+  pausedName: string;
   day: number;
   /**
    * Seconds left in the service phase. Goes **negative** after closing time:

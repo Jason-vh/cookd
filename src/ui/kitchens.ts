@@ -257,9 +257,10 @@ const SVG = "http://www.w3.org/2000/svg";
  * the wash-up is from everything else.
  */
 function legend(): string {
+  // No board: it is a fitting set on a counter rather than a block of its own,
+  // so nothing on a plan is ever drawn as one.
   const shown = [
     "crate",
-    "board",
     "counter",
     "plates",
     "sink",

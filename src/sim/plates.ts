@@ -36,6 +36,16 @@ import type { Appliance, Item, World } from "./types";
 export const MAX_CARRIED_PLATES = 4;
 
 /**
+ * How many plates a stack bought at the stall arrives with.
+ *
+ * A plate stack is the **only** way a kitchen ever gets more crockery, and it
+ * comes stocked because an empty one is furniture rather than capacity. Four,
+ * so that buying one is the same step up a level ships with — one more sweep of
+ * the dining room between trips to the sink.
+ */
+export const STACK_PLATES = 4;
+
+/**
  * A brand new plate, and the only one the game will ever make.
  *
  * The stall sells them, and this is what it hands over. Everything else that

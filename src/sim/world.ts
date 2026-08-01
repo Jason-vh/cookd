@@ -1,4 +1,4 @@
-import { applianceDef } from "../data/appliances";
+import { applianceDef, type ApplianceDef } from "../data/appliances";
 import { runSeams, wallRuns, type LevelDef } from "../data/level";
 import { STARTING_RECIPES } from "../data/progression";
 import { plateCount, stockPlates } from "./plates";
@@ -93,6 +93,29 @@ export function mountedAt(world: World, x: number, y: number): Appliance | null 
 }
 
 /**
+ * How this appliance works, with whatever is fitted to it taken into account.
+ *
+ * A counter with a board on it prepares at the board's speed and offers the
+ * board's stations, so **every rule about work asks this rather than
+ * `applianceDef(kind)`** — the transform search, the burn time, the shop's idea
+ * of what a room can cook. Asking the kind directly is how a fitted board would
+ * silently stop doing anything.
+ *
+ * The fitting wins outright rather than being merged in. A fitting is a
+ * *worktop*, and a worktop that also inherited its host's stations would be a
+ * board that fries because somebody set it on a fryer — which nothing allows,
+ * but which the type would not have stopped.
+ */
+export function fittedDef(appliance: Appliance): ApplianceDef {
+  return applianceDef(appliance.topper ?? appliance.kind);
+}
+
+/** Is this a thing that is set on a worktop rather than stood on the floor? */
+export function isFitting(kind: ApplianceKind): boolean {
+  return applianceDef(kind).fitting;
+}
+
+/**
  * Record that the appliance layout changed.
  *
  * Called by everything that moves an appliance on or off the grid. The server
@@ -178,6 +201,8 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     door: { x: level.door.x, y: level.door.y },
     lane: level.lane ? { entry: { ...level.lane.entry }, exit: { ...level.lane.exit } } : null,
     phase: "build",
+    pausedBy: null,
+    pausedName: "",
     day: 1,
     dayTime: 0,
     dayLength: level.dayLength,
@@ -296,6 +321,7 @@ export function spawnAppliance(
     overcook: 0,
     justFinished: false,
     motion: null,
+    topper: null,
     source,
     offer: null,
     taken: null,
@@ -361,6 +387,29 @@ export function nearestFreeTile(world: World, from: Vec2): Vec2 | null {
  * interchangeable until someone in the middle disconnects — at which point
  * indexing silently returns the wrong chef, or nobody.
  */
+/**
+ * The nearest appliance a fitting could be set on, or null when every worktop
+ * in the kitchen is taken.
+ *
+ * `nearestFreeTile`'s twin, and used by the same callers for the same reason:
+ * something has to happen to a board whose owner disconnected, and dropping it
+ * on the floor is not one of the states a board has.
+ */
+export function nearestWorktop(world: World, from: Vec2): Appliance | null {
+  let best = Infinity;
+  let found: Appliance | null = null;
+  for (const appliance of world.appliances.values()) {
+    if (!applianceDef(appliance.kind).worktop) continue;
+    if (appliance.topper !== null || appliance.heldBy !== null) continue;
+    const distance = (appliance.tile.x - from.x) ** 2 + (appliance.tile.y - from.y) ** 2;
+    if (distance < best) {
+      best = distance;
+      found = appliance;
+    }
+  }
+  return found;
+}
+
 export function playerById(world: World, id: number): Player | undefined {
   return world.players.find((player) => player.id === id);
 }
@@ -419,17 +468,68 @@ export function removePlayer(world: World, id: number): void {
     if (appliance.heldBy === id) appliance.heldBy = null;
   }
   world.players.splice(index, 1);
+  // A room may not be left paused by somebody who is no longer in it. The menu
+  // that holds the pause is on their screen, and their screen has gone.
+  if (world.pausedBy === id) resume(world);
   if (player.name) log(world, `${player.name} left`);
 }
 
-/** Put a held appliance back on the grid, at home or as close as possible. */
+/**
+ * Put a held appliance back on the grid, at home or as close as possible.
+ *
+ * A **fitting** has no grid to go back to, so it goes back onto a worktop — the
+ * nearest bare one, which is the same "somewhere the game may put it without
+ * asking" rule the tile search is. A kitchen with every counter already fitted
+ * has nowhere to put it and it ceases to be, exactly as an appliance does in a
+ * kitchen with no free floor.
+ */
 function returnAppliance(world: World, appliance: Appliance): void {
+  if (applianceDef(appliance.kind).fitting) {
+    const host = nearestWorktop(world, appliance.tile);
+    world.appliances.delete(appliance.id);
+    if (!host) return;
+    host.topper = appliance.kind;
+    touchLayout(world);
+    return;
+  }
   const target = nearestFreeTile(world, appliance.tile);
   if (!target) return; // nowhere to put it; it simply ceases to be
   appliance.tile = { x: target.x, y: target.y };
   appliance.heldBy = null;
   world.applianceAt[tileIndex(world, target.x, target.y)] = appliance.id;
   touchLayout(world);
+}
+
+/**
+ * Hold the whole kitchen still while somebody has the menu open.
+ *
+ * Set here rather than in the shell because a pause is a fact about the room:
+ * `step` reads it, everybody's screen draws it, and online it has to survive
+ * the trip. See `World.pausedBy`.
+ */
+export function pause(world: World, id: number, name: string): void {
+  if (world.pausedBy !== null) return; // first one in holds it
+  world.pausedBy = id;
+  world.pausedName = name || "Chef";
+}
+
+/**
+ * Let the kitchen run again.
+ *
+ * Only whoever paused it may, or a second player opening and closing their own
+ * menu would start the room up underneath the person still reading theirs.
+ * `by` is omitted for a release the *game* is doing — somebody left, or their
+ * connection dropped — which is what keeps a pause from outliving its owner and
+ * stranding a room nobody can restart.
+ *
+ * A pause held by a seat that is no longer here is cleared by anybody, as a
+ * backstop: the only thing worse than the wrong player resuming is a kitchen
+ * that cannot be.
+ */
+export function resume(world: World, by?: number): void {
+  if (by !== undefined && world.pausedBy !== by && playerById(world, world.pausedBy ?? -1)) return;
+  world.pausedBy = null;
+  world.pausedName = "";
 }
 
 /**

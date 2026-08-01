@@ -79,18 +79,18 @@ describe("generated kitchens", () => {
  *
  * So the walks are measured, against the two hand-drawn kitchens as the
  * reference. These numbers found a real fault the validator could not: the
- * chopping board was rolled across the whole galley, which put it up to ten
+ * prep worktop was rolled across the whole galley, which put it up to ten
  * squares from the crates against a hand-made two — a twenty-step round trip
  * per tomato, on day one, before there is any money to fix it with.
  */
 describe("the walks a generated kitchen costs", () => {
-  /** Both hand-drawn kitchens put the board two squares from the crate run. */
+  /** Both hand-drawn kitchens put a worktop two squares from the crate run. */
   const HAND_MADE_GATHER = Math.max(
     kitchenWalks(PARK_KITCHEN).gather,
     kitchenWalks(BEACH_SHACK).gather,
   );
 
-  test("the board stays beside the crates", () => {
+  test("the worktop stays beside the crates", () => {
     // Chop-and-gather is the tightest loop in the game: it is walked for every
     // ingredient of every dish, so it is the one that must not be left to luck.
     const worst = Math.max(...SEEDS.map((seed) => kitchenWalks(generateLevel(seed)).gather));

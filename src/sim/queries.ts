@@ -17,7 +17,7 @@ import { customerSpeed, eatTime, LAST_ORDERS } from "./systems/customers";
 export { approachTile } from "./systems/customers";
 import type { Appliance, Customer, Item, Player, Station, Vec2, World } from "./types";
 import { canReach } from "./walls";
-import { applianceAtTile, inBounds, mountedAt, tileIndex } from "./world";
+import { applianceAtTile, fittedDef, inBounds, mountedAt, tileIndex } from "./world";
 
 /**
  * Read-only questions about the world.
@@ -91,12 +91,20 @@ export function targetAppliance(world: World, player: Player): Appliance | null 
  * `canPlace` growing a concept of "outside": the ring is walkable and it is not
  * placeable, and those are two independent facts about a tile. Outdoor seating,
  * if it ever happens, is some tiles changing their minds about the second one.
+ *
+ * It takes the **kind** because a fitting answers a different question
+ * entirely: a chopping board is not put on the floor, it is set on a worktop,
+ * so the square it wants is one with a bare counter on it rather than one with
+ * nothing. Two rules, one question, and the ghost under the player's feet reads
+ * the same answer the placement does.
  */
-export function canPlace(world: World, tx: number, ty: number): boolean {
+export function canPlace(world: World, tx: number, ty: number, kind: ApplianceKind): boolean {
   if (!inBounds(world, tx, ty)) return false;
-  const index = tileIndex(world, tx, ty);
-  if (!world.tiles[index]?.placeable) return false;
   const existing = applianceAtTile(world, tx, ty);
+  if (applianceDef(kind).fitting) {
+    return existing !== null && applianceDef(existing.kind).worktop;
+  }
+  if (!world.tiles[tileIndex(world, tx, ty)]?.placeable) return false;
   return !existing || applianceDef(existing.kind).movable;
 }
 
@@ -128,7 +136,7 @@ function makeableHere(world: World): Set<string> {
   const stations = new Set<Station>();
   const have = new Set<string>();
   for (const appliance of world.appliances.values()) {
-    for (const station of applianceDef(appliance.kind).stations) stations.add(station);
+    for (const station of fittedDef(appliance).stations) stations.add(station);
     if (appliance.source) have.add(specKey(appliance.source));
   }
 
@@ -161,11 +169,12 @@ function makeableHere(world: World): Set<string> {
   return have;
 }
 
-/** How many of a kind are standing in this kitchen, held ones included. */
+/** How many of a kind are standing in this kitchen, held and fitted ones included. */
 function countKind(world: World, kind: ApplianceKind): number {
   let count = 0;
   for (const appliance of world.appliances.values()) {
     if (appliance.kind === kind) count++;
+    if (appliance.topper === kind) count++;
   }
   return count;
 }
@@ -206,19 +215,17 @@ export function kitchenWarnings(world: World): string[] {
     }
   }
 
-  const stranded = unreachableAppliances(world);
-  if (stranded.length > 0) {
-    // Naming them turns a mystery into a shopping list, the same way the menu
-    // warnings do. Past a few names it stops being a list of mistakes and
-    // starts being one: a chef shut in a cupboard cannot reach their own
-    // kitchen, and the fault is the wall they are behind, not the sink.
-    const labels = [...new Set(stranded.map((appliance) => applianceDef(appliance.kind).label))];
-    warnings.push(
-      labels.length > 3
-        ? `${stranded.length} appliances can't be walked up to`
-        : `Can't be walked up to: ${labels.join(", ")}`,
-    );
-  }
+  // There used to be a second reachability warning here, about appliances the
+  // *chefs* could not walk up to. It was wrong, and it was wrong in a way that
+  // could not be tuned out: a chef reaches **diagonally** (`canReach` says so
+  // explicitly, and the corner rule is the whole reason it exists), while the
+  // warning was built on `seatsAround`, which is four-way because customers
+  // are. So an oven in a corner of a full kitchen was reported unreachable and
+  // ringed in red while somebody stood at the diagonal and cooked on it.
+  //
+  // Tables are a different question with the same shape and it survives: that
+  // one asks whether a *customer* can get to a chair, and customers really do
+  // walk four ways.
 
   const menu = unlockedRecipes(world);
   if (countKind(world, "plates") === 0) {
@@ -242,43 +249,6 @@ export function kitchenWarnings(world: World): string[] {
   }
 
   return warnings;
-}
-
-/**
- * Appliances no chef can walk up to. Used by the build phase to warn.
- *
- * The other half of the same question `unreachableTables` asks, from the other
- * side of the pass: that one starts at the door and looks for chairs, this one
- * starts at the chefs and looks for anything they have to face. A kitchen can
- * fail either way round, and a counter wall built across the room fails both.
- *
- * Origin is **where the chefs are standing**, not a spawn point: by the time
- * this is asked they have spent a morning walking around, and the spawn tile is
- * a fact about the level rather than about the room as it is now. With nobody
- * in it there is no answer to give, so an empty kitchen reports nothing.
- *
- * A held appliance is skipped — its tile is only where it would go home to.
- */
-export function unreachableAppliances(world: World): Appliance[] {
-  if (world.players.length === 0) return [];
-
-  const reachable = new Set<number>();
-  for (const player of world.players) {
-    const x = Math.floor(player.pos.x);
-    const y = Math.floor(player.pos.y);
-    if (reachable.has(tileIndex(world, x, y))) continue; // already covered
-    for (const index of reachableFrom(world, { x, y })) reachable.add(index);
-  }
-
-  const stranded: Appliance[] = [];
-  for (const appliance of world.appliances.values()) {
-    if (appliance.heldBy !== null) continue;
-    const sides = seatsAround(world, appliance.tile);
-    if (!sides.some((side) => reachable.has(tileIndex(world, side.x, side.y)))) {
-      stranded.push(appliance);
-    }
-  }
-  return stranded;
 }
 
 /** Tables a customer cannot actually reach. Used by the build phase to warn. */

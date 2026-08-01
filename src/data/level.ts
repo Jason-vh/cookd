@@ -199,9 +199,12 @@ export const PARK_KITCHEN: LevelDef = {
   // the pass, and the walk back from the tables — is the build phase's problem,
   // and the point of it.
   //
-  // One board and two tables is a **deliberately thin** kitchen: the delivery
-  // outside the door is where the second of each comes from, and a shop nobody
-  // needs to visit teaches nothing.
+  // **Three counters and two tables** is a deliberately thin kitchen: one
+  // worktop to prep on and the two that make the pass. The delivery outside the
+  // door is where every further surface comes from, and a shop nobody needs to
+  // visit teaches nothing. There is no chopping board either — a board is a
+  // fitting that goes on a counter, and buying the first one is the first thing
+  // a room does that makes it faster rather than bigger.
   //
   // **The level is a starting point, not an endpoint.** There is no fryer, no
   // oven, and no crate but tomato and lettuce, because a kitchen contains only
@@ -227,13 +230,9 @@ export const PARK_KITCHEN: LevelDef = {
     crate("lettuce", 10, 2),
     at("plates", 15, 2),
     at("sink", 16, 2),
-    ...run("counter", 17, 2, 2),
     at("bin", 19, 2),
-    // The island, and the worktop below it.
-    at("counter", 10, 4),
-    at("board", 11, 4),
-    at("counter", 12, 4),
-    ...run("counter", 10, 7, 3),
+    // The island: one worktop, two squares from the crates.
+    at("counter", 11, 4),
     // **The pass is a place, not an appliance**: two ordinary counters standing
     // against the dividing wall, which players can lift for a wide opening
     // between the rooms or fill in beside for a single narrow one.
@@ -281,12 +280,10 @@ export const BEACH_SHACK: LevelDef = {
     // The galley: crates and bin along the top, wash-up along the bottom.
     crate("tomato", 10, 1),
     crate("lettuce", 11, 1),
-    ...run("counter", 12, 1, 3),
     at("bin", 15, 1),
-    at("board", 12, 3),
+    at("counter", 12, 3),
     at("plates", 10, 8),
     at("sink", 11, 8),
-    ...run("counter", 12, 8, 3),
     // The pass, either side of the gap.
     at("counter", 9, 2),
     at("counter", 9, 6),
@@ -361,9 +358,6 @@ export const HIGHWAY_STOP: LevelDef = {
     crate("tomato", 3, 2),
     crate("lettuce", 4, 2),
     at("counter", 5, 2),
-    at("board", 6, 2),
-    ...run("counter", 7, 2, 2),
-    at("counter", 14, 2),
     at("plates", 15, 2),
     at("sink", 16, 2),
     at("bin", 17, 2),

@@ -57,7 +57,7 @@ export class LocalGame implements Game {
   }
 
   menu(action: MenuAction): void {
-    this.host.menu(action);
+    this.host.menu(action, this.localIds[0]);
   }
 
   reset(): void {

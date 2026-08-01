@@ -269,8 +269,9 @@ The same argument eventually deleted the shop. Three market booths lined up on
 the apron read as furniture that had been *spawned* there, and a caravan parked
 in the same spot read as a bigger one: neither could explain why it existed for
 one restaurant. The version that works has nothing to explain, because there is
-no shop — only the goods, standing outside on pallets, and a poster on the
-wall. See [the shop](the-shop.md#there-is-no-shop).
+no shop — only the goods, standing outside on pallets. The recipe posters were
+the last holdout and went the same way: a recipe is a card on a pallet now. See
+[the shop](the-shop.md#there-is-no-shop).
 
 ## Ingredient models
 
@@ -447,8 +448,8 @@ live in [lessons.md](lessons.md).
   wall that used to say "building"; what carries that now is the doorway frame,
   which stays full height because a door is the one part of a lipped wall that
   has to be findable from across the park. The other exception is a seam
-  something *hangs* on: a sign or a recipe poster on a lip would be floating, so
-  those pieces stand full height and read as the bit of wall the thing is on.
+  something *hangs* on: the sign by the door on a lip would be floating, so that
+  piece stands full height and reads as the bit of wall the sign is on.
 
 ## Feedback: showing what the sim knows
 

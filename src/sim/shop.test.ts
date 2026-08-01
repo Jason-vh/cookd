@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { APPLIANCE_KINDS, applianceDef } from "../data/appliances";
-import { PLATE_PRICE, SELLBACK, STALL_SLOTS } from "../data/economy";
+import { SELLBACK, STALL_SLOTS } from "../data/economy";
 import { CARD_SLOTS } from "../data/progression";
 import { LEVEL } from "../data/level";
 import { RECIPES } from "../data/recipes";
 import { Host } from "../game/host";
-import { platesInWorld } from "./plates";
+import { restore, snapshot } from "../save";
+import { plateCount, platesInWorld, STACK_PLATES } from "./plates";
 import { seatsAround } from "./pathing";
 import { outward } from "./walls";
 import { canPlace } from "./queries";
@@ -65,6 +66,12 @@ function faceGoods(world: World, tile: Vec2): void {
   player.facing = { x: tile.x - from.x, y: tile.y - from.y };
 }
 
+/** Put whatever is being carried down on `tile`, which must be free floor. */
+function place(world: World, tile: Vec2): void {
+  faceGoods(world, tile);
+  press(world, "grab");
+}
+
 /** Face slot `index` and press grab. */
 function useSlot(world: World, index: number): Appliance {
   const slot = stallSlots(world)[index]!;
@@ -76,7 +83,7 @@ function useSlot(world: World, index: number): Appliance {
 /** Force a slot to hold a particular thing, for tests about a specific price. */
 function stock(world: World, index: number, kind: ApplianceKind): Appliance {
   const slot = stallSlots(world)[index]!;
-  slot.offer = { good: "appliance", kind, source: null };
+  slot.offer = { kind, source: null };
   slot.taken = null;
   return slot;
 }
@@ -98,9 +105,7 @@ function shown(world: World): string {
     .map((slot) =>
       slot.offer === null
         ? "-"
-        : slot.offer.good === "plate"
-          ? "plate"
-          : `${slot.offer.kind}:${slot.offer.source?.base ?? ""}:${offerPrice(slot.offer)}`,
+        : `${slot.offer.kind}:${slot.offer.source?.base ?? ""}:${offerPrice(slot.offer)}`,
     )
     .join("|");
 }
@@ -132,7 +137,7 @@ describe("the stall", () => {
     for (const slot of slots) {
       // A square is not a placement target: the delivery stands on paving, and
       // paving is not anywhere a kitchen may put an oven.
-      expect(canPlace(world, slot.tile.x, slot.tile.y)).toBe(false);
+      expect(canPlace(world, slot.tile.x, slot.tile.y, "counter")).toBe(false);
       expect(world.tiles[slot.tile.y * world.width + slot.tile.x]?.placeable).toBe(false);
     }
   });
@@ -281,18 +286,18 @@ describe("the stall", () => {
     slot.offer = null;
     slot.taken = null;
 
-    // Lift the kitchen's own board and carry it out to the stall.
-    const board = [...world.appliances.values()].find((a) => a.kind === "board")!;
+    // Lift the kitchen's own bin and carry it out to the stall.
+    const bin = [...world.appliances.values()].find((a) => a.kind === "bin")!;
     const player = world.players[0]!;
-    player.pos = { x: board.tile.x + 0.5, y: board.tile.y + 1.5 };
+    player.pos = { x: bin.tile.x + 0.5, y: bin.tile.y + 1.5 };
     player.prevPos = { ...player.pos };
     player.facing = { x: 0, y: -1 };
     press(world, "grab");
-    expect(player.carriedAppliance).toBe(board.id);
+    expect(player.carriedAppliance).toBe(bin.id);
 
     useSlot(world, 0);
-    expect(world.money).toBe(Math.floor(applianceDef("board").price * SELLBACK));
-    expect(counts(world, "board")).toBe(0);
+    expect(world.money).toBe(Math.floor(applianceDef("bin").price * SELLBACK));
+    expect(counts(world, "bin")).toBe(0);
     expect(player.carriedAppliance).toBeNull();
   });
 
@@ -337,32 +342,53 @@ describe("the stall", () => {
 });
 
 describe("plates are the one thing the game will make", () => {
-  test("a bought plate is counted, and survives a whole day loop", () => {
+  test("a bought stack arrives stocked, and its plates survive a whole day loop", () => {
+    // Single plates used to be for sale, and they were the one purchase that
+    // put a loose *item* in a chef's hands during a phase that only understands
+    // appliances — so the grab meant to set the plate on a counter lifted the
+    // counter instead. A stack is a thing the morning already knows how to
+    // hold, and it comes with the crockery that makes it worth buying.
     const world = morning();
-    world.money = PLATE_PRICE;
-    const slot = stallSlots(world)[0]!;
-    slot.offer = { good: "plate" };
-    slot.taken = null;
+    world.money = applianceDef("plates").price;
+    stock(world, 0, "plates");
 
     expect(platesInWorld(world)).toBe(LEVEL.plates);
     useSlot(world, 0);
     expect(world.money).toBe(0);
-    expect(platesInWorld(world)).toBe(LEVEL.plates + 1);
-    // Into your hands, to be carried to the stack — and the slot is simply
-    // gone, because handing the money back would mean destroying a plate.
-    expect(world.players[0]!.carried?.base).toBe("plate");
-    expect(slot.offer).toBeNull();
+    expect(platesInWorld(world)).toBe(LEVEL.plates + STACK_PLATES);
+    // Held, like every other appliance bought at the stall, and ready to place.
+    const bought = world.appliances.get(world.players[0]!.carriedAppliance!)!;
+    expect(bought.kind).toBe("plates");
+    expect(plateCount(bought.item)).toBe(STACK_PLATES);
 
-    // Through service, closing time and into the next morning. Closing counts
-    // plates out and counts them back in, so a miscount shows up here.
+    // Put it down, then through service, closing time and into the next
+    // morning. Closing counts plates out and counts them back in, so a miscount
+    // shows up here.
+    place(world, { x: 15, y: 6 });
     beginDay(world);
     for (let i = 0; i < 120; i++) step(world, idle());
     endDay(world);
-    expect(platesInWorld(world)).toBe(LEVEL.plates + 1);
+    expect(platesInWorld(world)).toBe(LEVEL.plates + STACK_PLATES);
 
     beginDay(world);
     endDay(world);
-    expect(platesInWorld(world)).toBe(LEVEL.plates + 1);
+    expect(platesInWorld(world)).toBe(LEVEL.plates + STACK_PLATES);
+  });
+
+  test("putting the stack straight back is an undo, plates and all", () => {
+    const world = morning();
+    world.money = applianceDef("plates").price;
+    const slot = stock(world, 0, "plates");
+    useSlot(world, 0);
+    expect(platesInWorld(world)).toBe(LEVEL.plates + STACK_PLATES);
+
+    // Back on the slot it came from: full price, and the crockery it was
+    // carrying goes with it. Anything else would be a way to mint four plates
+    // for nothing.
+    faceGoods(world, slot.tile);
+    press(world, "grab");
+    expect(world.money).toBe(applianceDef("plates").price);
+    expect(platesInWorld(world)).toBe(LEVEL.plates);
   });
 });
 
@@ -419,7 +445,7 @@ describe("the stock is the same shop for everybody", () => {
     // owns one of almost everything, so the guarantee has plenty to choose from.
     const world = morning();
     const kinds = stallSlots(world)
-      .map((slot) => (slot.offer?.good === "appliance" ? slot.offer.kind : null))
+      .map((slot) => slot.offer?.kind ?? null)
       .filter((kind) => kind !== null);
     const scarce = kinds.some((kind) => counts(world, kind) < 2);
     expect(scarce || kinds.length < STALL_SLOTS).toBe(true);
@@ -453,8 +479,7 @@ describe("the stock is the same shop for everybody", () => {
       world.day = day;
       restockStall(world);
       const upgrades = stallSlots(world).filter(
-        (slot) =>
-          slot.offer?.good === "appliance" && applianceDef(slot.offer.kind).upgrades !== null,
+        (slot) => slot.offer !== null && applianceDef(slot.offer.kind).upgrades !== null,
       ).length;
       if (upgrades > 0) mornings++;
       else bare++;
@@ -558,5 +583,62 @@ describe("demand follows seats", () => {
     // Falling behind on bussing quietly slows the door down, which is the same
     // rule seating already applies — one question, one answer.
     expect(meanInterval(world)).toBeGreaterThan(clear);
+  });
+});
+
+/**
+ * A slot emptied yesterday is stocked again this morning.
+ *
+ * Obvious, and worth pinning down, because it is the failure a player actually
+ * reported: buy something on the morning of day one and the square was still
+ * bare on the morning of day two. Every path is covered rather than one — a
+ * purchase, an undo, and a sale — because the slot records those three
+ * differently, and the whole class of bug is one of them forgetting to be
+ * cleared. The save is in the loop for the same reason: what a room already
+ * bought is the one thing about the shop that is written down.
+ */
+/** Every slot holding something nobody has taken yet. */
+function stocked(world: World): void {
+  for (const slot of stallSlots(world)) {
+    expect(slot.offer).not.toBeNull();
+    expect(slot.taken).toBeNull();
+  }
+}
+
+describe("a morning always restocks", () => {
+  for (const kind of ["counter", "plates", "crate"] as const) {
+    test(`after buying a ${kind}, and through a save`, () => {
+      const world = morning();
+      world.money = 1000;
+      stock(world, 0, kind);
+      useSlot(world, 0);
+      place(world, { x: 15, y: 6 });
+      expect(stallSlots(world)[0]!.offer === null || stallSlots(world)[0]!.taken !== null).toBe(
+        true,
+      );
+
+      beginDay(world);
+      endDay(world);
+      stocked(world);
+
+      // ...and the same morning rebuilt from disk. The stock is rolled from the
+      // seed and the day rather than stored, so a save that got this wrong
+      // would hand a returning room an empty shop it could never refill.
+      const reloaded = createWorld(LEVEL, 1);
+      expect(restore(reloaded, snapshot(world, LEVEL), LEVEL).ok).toBe(true);
+      stocked(reloaded);
+    });
+  }
+
+  test("after putting a purchase straight back", () => {
+    const world = morning();
+    world.money = 1000;
+    const slot = stock(world, 0, "counter");
+    useSlot(world, 0);
+    faceGoods(world, slot.tile);
+    press(world, "grab");
+    beginDay(world);
+    endDay(world);
+    stocked(world);
   });
 });

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
 import { ingredient } from "../data/ingredients";
-import type { Appliance } from "../sim/types";
+import type { Appliance, ApplianceKind } from "../sim/types";
 import { buildIngredientSample, buildProduceHeap } from "./models";
 import { PALETTE, shade, type SurfaceName } from "./palette";
 import {
@@ -142,6 +142,14 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
     buildCrate(parts, h, nudge);
   } else if (appliance.kind === "table") {
     buildTable(root, h, nudge);
+  } else if (def.fitting) {
+    // No body, no worktop: a fitting is the thing you put *on* a worktop, and
+    // this is only ever the one in somebody's hands or the one on the pallet.
+    // Built at its own `height` so that the knife lands where `animateParts`
+    // expects to find it, exactly as it does on a counter.
+    const fitting = buildFitting(appliance.kind, appliance.id, h);
+    root.add(fitting.root);
+    parts.knife = fitting.knife;
   } else {
     // Standing on a recessed plinth rather than on its own bottom face. The
     // body loses exactly what the plinth gains, so `height` still means the
@@ -166,7 +174,7 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
       slab.rotation.y = nudge(1, 0.02);
       root.add(slab);
     }
-    addDetails(parts, appliance, h, nudge);
+    addDetails(parts, appliance, h);
   }
 
   if (appliance.source) {
@@ -203,6 +211,67 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   }
 
   return parts;
+}
+
+/**
+ * A chopping board: the block, and the knife lying on it.
+ *
+ * Its own builder because it is drawn on two different things. A **fitting**
+ * has no body of its own — what a board *is* is a block you put on a worktop —
+ * so this is the whole of it, and the only difference between one in a chef's
+ * hands and one on a counter is the height it is built at.
+ *
+ * `id` seeds the wobble, so a board keeps the angle it was put down at wherever
+ * it is drawn. Returns the knife too: it swings with the chop, and whoever owns
+ * the appliance's animation has to be able to reach it.
+ */
+export function buildFitting(
+  kind: ApplianceKind,
+  id: number,
+  height: number,
+): { root: THREE.Object3D; knife: THREE.Object3D } {
+  const nudge = jitter(id);
+  const group = new THREE.Group();
+
+  // Steel where the upgrade is steel: an upgrade changes material, never shape.
+  const steel = kind === "steel_board";
+  const block = mesh(
+    extruded(
+      "chopping-block",
+      (shape) => {
+        roundedRect(shape, 0.62, 0.46, 0.05);
+        const hole = new THREE.Path();
+        hole.absarc(0.23, 0, 0.032, 0, Math.PI * 2, true);
+        shape.holes.push(hole);
+      },
+      0.05,
+      0.012,
+    ),
+    steel ? PALETTE.steel : PALETTE.boardTop,
+    steel ? "metal" : "wood",
+  );
+  block.rotation.x = -Math.PI / 2;
+  block.position.set(nudge(2, 0.05), height + 0.03, nudge(3, 0.05));
+  // Put down at whatever angle the hand let go at.
+  block.rotation.z = nudge(4, 0.16);
+  group.add(block);
+
+  // A little knife resting on the board reads instantly as "chop here". It
+  // hangs off a pivot at the handle so it can be swung when chopping.
+  const knife = new THREE.Group();
+  knife.position.set(-0.24 + nudge(5, 0.04), height + 0.09, 0.22 + nudge(6, 0.04));
+  knife.rotation.y = 0.25 + nudge(7, 0.3);
+
+  const blade = mesh(roundedBox(0.34, 0.02, 0.09, 0.008), PALETTE.steel, "metal");
+  blade.position.set(0.3, 0, 0.06);
+  knife.add(blade);
+
+  const handle = mesh(roundedBox(0.14, 0.035, 0.05, 0.015), PALETTE.woodDark, "wood");
+  handle.position.set(0.05, 0, 0.02);
+  knife.add(handle);
+  group.add(knife);
+
+  return { root: group, knife };
 }
 
 /**
@@ -548,7 +617,7 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
 };
 
 /** Small silhouette details: this is what stops every appliance reading as a box. */
-function addDetails(parts: ApplianceParts, appliance: Appliance, h: number, nudge: Jitter): void {
+function addDetails(parts: ApplianceParts, appliance: Appliance, h: number): void {
   const group = parts.root;
   switch (appliance.kind) {
     case "bell_oven":
@@ -668,50 +737,10 @@ function addDetails(parts: ApplianceParts, appliance: Appliance, h: number, nudg
       break;
     }
     case "steel_board":
-    case "board": {
-      // The block itself, let into the worktop and standing a few millimetres
-      // proud of it, with a hand hole at one end. Steel where the upgrade is
-      // steel: an upgrade changes material, never shape.
-      const steel = appliance.kind === "steel_board";
-      const block = mesh(
-        extruded(
-          "chopping-block",
-          (shape) => {
-            roundedRect(shape, 0.62, 0.46, 0.05);
-            const hole = new THREE.Path();
-            hole.absarc(0.23, 0, 0.032, 0, Math.PI * 2, true);
-            shape.holes.push(hole);
-          },
-          0.05,
-          0.012,
-        ),
-        steel ? PALETTE.steel : PALETTE.boardTop,
-        steel ? "metal" : "wood",
-      );
-      block.rotation.x = -Math.PI / 2;
-      block.position.set(nudge(2, 0.05), h + 0.03, nudge(3, 0.05));
-      // Put down at whatever angle the hand let go at.
-      block.rotation.z = nudge(4, 0.16);
-      group.add(block);
-
-      // A little knife resting on the board reads instantly as "chop here".
-      // It hangs off a pivot at the handle so it can be swung when chopping.
-      const knife = new THREE.Group();
-      knife.position.set(-0.24 + nudge(5, 0.04), h + 0.09, 0.22 + nudge(6, 0.04));
-      knife.rotation.y = 0.25 + nudge(7, 0.3);
-
-      const blade = mesh(roundedBox(0.34, 0.02, 0.09, 0.008), PALETTE.steel, "metal");
-      blade.position.set(0.3, 0, 0.06);
-      knife.add(blade);
-
-      const handle = mesh(roundedBox(0.14, 0.035, 0.05, 0.015), PALETTE.woodDark, "wood");
-      handle.position.set(0.05, 0, 0.02);
-      knife.add(handle);
-
-      group.add(knife);
-      parts.knife = knife;
+    case "board":
+      // A board is drawn by `buildFitting`, because it is drawn in two places:
+      // in a chef's hands, and on top of whatever counter it has been set on.
       break;
-    }
     case "plates": {
       // A shallow lip, so plates put back on it look put *away* rather than
       // balanced on a box.
