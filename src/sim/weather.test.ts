@@ -83,6 +83,52 @@ describe("what sort of day it is", () => {
     }
   });
 
+  test("a wet day takes the contrast and leaves the colour", () => {
+    // The rule the sky shifts are tuned against, and it is here because it was
+    // got wrong first: rain drew the way a photograph of rain looks — drained,
+    // cold, dark and closed in — and the result was a morning to sit out rather
+    // than play. The mechanics already charge for a rainy day; the picture must
+    // not pile on. See the note on `SkyShift`.
+    for (const entry of WEATHERS) {
+      // Colour survives every kind of day. Below about this the food stops
+      // looking like food, which is most of what "depressing" actually is.
+      expect(entry.sky.saturation).toBeGreaterThan(0.85);
+      // Cooler than a fair day, never colder than neutral: the biomes run
+      // 0.3–0.6 warm, so this has to leave most of it standing.
+      expect(entry.sky.warmth).toBeGreaterThan(-0.3);
+      // Some sun always gets through, which is what keeps contact shadows
+      // under things. A scene with no directional light reads as broken long
+      // before it reads as weather.
+      expect(entry.sky.sun).toBeGreaterThan(0.25);
+      // What the sun loses, the flat light gains. A shift that dimmed both
+      // would simply be turning the lights off.
+      if (entry.sky.sun < 1) expect(entry.sky.ambient).toBeGreaterThan(1);
+    }
+  });
+
+  test("the kinds of day are ordered, so the sky is readable without the card", () => {
+    const [fair, overcast, rain] = WEATHERS;
+    // Greyer as it gets wetter, in every dial at once. Without this a tuning
+    // pass can leave rain looking brighter than overcast, and the sky stops
+    // being something a player can read the day off.
+    for (const dial of ["sun", "saturation"] as const) {
+      expect(fair!.sky[dial]).toBeGreaterThan(overcast!.sky[dial]);
+      expect(overcast!.sky[dial]).toBeGreaterThan(rain!.sky[dial]);
+    }
+    expect(fair!.sky.warmth).toBeGreaterThan(overcast!.sky.warmth);
+    expect(overcast!.sky.warmth).toBeGreaterThan(rain!.sky.warmth);
+  });
+
+  test("only the wet ones are wet, and only the wet ones shut the terrace", () => {
+    // The two halves of a weather have to agree: a day drawn with rain falling
+    // through it and the terrace still open would be the picture and the rule
+    // saying different things, which is the one thing the terrace exists to
+    // avoid.
+    for (const entry of WEATHERS) {
+      expect(entry.rain > 0).toBe(!entry.outdoor);
+    }
+  });
+
   test("a weather nobody has heard of is a fair day, not a broken kitchen", () => {
     // The wire tolerates unknown ids for the reason it tolerates an unknown
     // customer kind: a client on yesterday's deploy should get the wrong sky

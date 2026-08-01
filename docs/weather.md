@@ -153,8 +153,30 @@ to bed under would make restarting the server a way to reroll the weather.
 A biome keyframes its own day and `render/daylight.ts` samples that curve against
 the service clock. Weather is a **shift** applied to the sampled result: three
 moves over ten numbers — take the sun out, put the difference back into the flat
-light so the frame does not simply go dark, and pull every colour toward one
-grey.
+light so the frame does not simply go dark, and soften what is left.
+
+### Weather takes contrast, not colour
+
+The rule every number in the table is tuned against, and it was arrived at by
+getting it wrong first. The obvious way to draw a wet day is the way a photograph
+of one looks: desaturate hard, pull the warmth out, drop the sun, bring the fog
+in. Do all four and the result is *miserable* — and misery is the one thing this
+game must not say about a rainy morning, because **the mechanics are already
+charging for it**. The terrace shuts and the door slows down. That is the cost,
+and it is enough. A picture that piles on top turns a rainy day into something to
+sit out rather than something to play.
+
+So what a shift takes is **contrast**: the hard sun goes, the shadows fill in,
+the distance softens. What it keeps is **colour** — the grass stays green, the
+tomatoes stay red, and the kitchen stays warm against a wet world. A rainy day
+should read as cosy, not as bleak.
+
+For anybody turning these: `sun` down and `fill` and `ambient` up **in the same
+edit**, `saturation` barely moved, and `lift` raised so shadows stay soft rather
+than crushing — heavy shadow is most of what "depressing" actually is. If a change
+makes the frame greyer *and* darker, it has gone the wrong way. A test holds the
+floor: colour survives every kind of day, some sun always gets through, and what
+the sun loses the flat light gains.
 
 A shift rather than a second set of keyframes per biome per weather, which would
 be nine days to keep in step in order to say the same thing three times. What
@@ -190,9 +212,16 @@ Worth being precise about, because the roadmap listed rain beside steam and
 sizzle as though they were one job. They are not. A burst of steam is a few dozen
 particles with lives, spawned by something that *happened*, and it wants a pool
 and a CPU update loop — the shape [`render/popups.ts`](../src/render/popups.ts)
-already has. Rain is fifteen hundred drops that are always there. Running the
-second through the first would mean writing fifteen hundred matrices a frame to
+already has. Rain is a whole field of drops that are always there. Running the
+second through the first would mean writing a matrix per drop per frame to
 reproduce a `fract()`.
+
+How hard it comes down is three constants — how many drops, how visible, and how
+long the streaks are — and they are worth turning **together**. Rain is the one
+effect in this game that sits behind everything the player is trying to read, so
+the way it fails is not that it looks wrong but that the kitchen got harder to
+see. Dense short faint rain and sparse long bright rain are both weather; dense
+long bright rain is a curtain.
 
 Three details carry it:
 

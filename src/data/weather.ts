@@ -37,6 +37,27 @@
  *
  * Applied by `render/daylight.ts`; multipliers where the field is an intensity
  * and additions where it is already a small signed amount.
+ *
+ * ## Weather takes contrast, not colour
+ *
+ * The rule every number below is tuned against, and it was arrived at by
+ * getting it wrong first. The obvious way to draw a wet day is the way a
+ * photograph of one looks: desaturate hard, pull the warmth out, drop the sun,
+ * bring the fog in. Do all four and the result is *miserable* — and misery is
+ * the one thing this game must not say about a rainy morning, because the
+ * mechanics are already charging for it. The terrace shuts and the door slows
+ * down; that is the cost, and it is enough. A picture that piles on makes a
+ * rainy day something to sit out rather than something to play.
+ *
+ * So what a shift takes is **contrast**: the hard sun goes, the shadows fill
+ * in, the distance softens. What it keeps is **colour** — the grass stays
+ * green, the tomatoes stay red, and the kitchen stays warm against a wet world.
+ * A rainy day should read as cosy rather than as bleak.
+ *
+ * The practical version, for anybody turning these: `sun` down and `fill` and
+ * `ambient` up in the same edit, `saturation` barely moved, and `lift` raised
+ * so the shadows stay soft rather than crushing. If a change makes the frame
+ * greyer *and* darker, it has gone the wrong way.
  */
 export type SkyShift = {
   /** Multiplier on the sun's intensity. Cloud takes the hard light away. */
@@ -137,16 +158,19 @@ export const WEATHERS: Weather[] = [
     rain: 0,
     note: "Overcast \u2014 the terrace is still open",
     sky: {
-      sun: 0.42,
-      fill: 1.18,
-      ambient: 1.2,
-      fog: 0.78,
-      tint: 0xb9c2cc,
-      haze: 0.42,
-      saturation: 0.82,
-      warmth: -0.24,
-      lift: 0.01,
-      exposure: 1.02,
+      sun: 0.44,
+      fill: 1.24,
+      ambient: 1.26,
+      fog: 0.82,
+      tint: 0xc4cbd2,
+      haze: 0.38,
+      // Barely moved. Cloud flattens a scene; it does not drain it, and the
+      // day this said 0.82 the park read as a photograph somebody had left in
+      // a drawer.
+      saturation: 0.94,
+      warmth: -0.1,
+      lift: 0.016,
+      exposure: 1.04,
     },
   },
   {
@@ -158,16 +182,36 @@ export const WEATHERS: Weather[] = [
     rain: 1,
     note: "Rain \u2014 nobody is sitting outside today",
     sky: {
-      sun: 0.2,
-      fill: 1.22,
-      ambient: 1.24,
-      fog: 0.54,
-      tint: 0x8e99a6,
-      haze: 0.64,
-      saturation: 0.66,
-      warmth: -0.4,
-      lift: 0.022,
-      exposure: 1.05,
+      // Still some sun, and that is deliberate rather than a compromise: it is
+      // what keeps shadows under things. A scene with no directional light at
+      // all loses every contact shadow at once, and the kitchen stops looking
+      // like objects standing on a floor — which reads as *broken* long before
+      // it reads as weather.
+      sun: 0.36,
+      // Up as far as the sun comes down. The light that is lost from one
+      // direction arrives from everywhere instead, which is both what an
+      // overcast sky actually does and what stops a rainy kitchen going murky.
+      fill: 1.34,
+      ambient: 1.38,
+      // Softened, not closed in. At 0.54 the far side of the park vanished and
+      // the room felt small; weather should not crop the map.
+      fog: 0.74,
+      // A pale pearl rather than the cold steel this used to be. The old tint
+      // was doing half the desaturation on its own — everything it touched came
+      // out blue, including the food.
+      tint: 0xaeb6bc,
+      haze: 0.46,
+      // The whole of the difference. This was 0.66, which took a third of the
+      // colour out of a game whose subject is coloured food on white plates.
+      saturation: 0.88,
+      // Cooler, not cold. The biomes run 0.3–0.6 warm, so this leaves most of
+      // it: a wet afternoon is greyer than a dry one and it is not January.
+      warmth: -0.15,
+      // Raised further than anything else here. Lifting the blacks is what
+      // makes shadow soft instead of heavy, and heavy shadow is most of what
+      // "depressing" actually is.
+      lift: 0.034,
+      exposure: 1.1,
     },
   },
 ];

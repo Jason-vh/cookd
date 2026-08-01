@@ -16,9 +16,19 @@ import { PALETTE } from "./palette";
  * It is worth saying why, because the roadmap listed rain next to steam and
  * sizzle as though they were one job. They are not. A burst of steam is a few
  * dozen particles with lives, spawned by something that happened, and it wants
- * a pool and a CPU update loop. Rain is fifteen hundred drops that are always
- * there. Running the second through the first would mean writing fifteen
- * hundred matrices a frame to reproduce a `fract()`.
+ * a pool and a CPU update loop. Rain is a whole field of drops that are always
+ * there. Running the second through the first would mean writing a matrix per
+ * drop per frame to reproduce a `fract()`.
+ *
+ * ## Turning it up and down
+ *
+ * Three numbers, and they are `MAX_DROPS`, `ALPHA` and `LENGTH` — how many,
+ * how visible and how long the streaks are. They are worth naming together
+ * because rain is the one effect in the game that is *behind* everything the
+ * player is trying to read, so the failure is not "it looks wrong", it is "the
+ * kitchen got harder to see". Turn all three together: dense short faint rain
+ * and sparse long bright rain are both weather, and dense long bright rain is
+ * a curtain.
  *
  * ## It does not rain indoors
  *
@@ -39,7 +49,7 @@ import { PALETTE } from "./palette";
  */
 
 /** Drops in the field at full downpour. Density below that drops the count. */
-const MAX_DROPS = 1500;
+const MAX_DROPS = 850;
 
 /** How wide and deep the field is, in tiles. A little more than the camera shows. */
 const EXTENT = 26;
@@ -54,7 +64,7 @@ const SPEED = 14;
 const SLANT = 1.6;
 
 /** A streak, in tiles: how long it is and how thick. */
-const LENGTH = 0.42;
+const LENGTH = 0.34;
 const WIDTH = 0.015;
 
 /** The fraction of the fall spent breaking on the ground rather than falling. */
@@ -81,8 +91,8 @@ const VERTEX = /* glsl */ `
 
   void main() {
     // Every drop falls at its own rate, so the field does not pulse: the phase
-    // doubles as a per-drop speed, which is what stops fifteen hundred streaks
-    // reaching the ground on the same frame for ever.
+    // doubles as a per-drop speed, which is what stops every streak in the
+    // field reaching the ground on the same frame for ever.
     float speed = ${SPEED.toFixed(1)} * (0.8 + 0.4 * aDrop.z);
     float fall = 1.0 - fract(aDrop.z + uTime * speed / ${TOP.toFixed(1)});
 
@@ -228,7 +238,7 @@ export class Rain {
 }
 
 /** How opaque a streak is at full downpour. Rain is a suggestion, not a wall. */
-const ALPHA = 0.34;
+const ALPHA = 0.22;
 
 /**
  * The field: one quad, and a scattering of drops to stamp it at.
