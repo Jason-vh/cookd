@@ -284,17 +284,19 @@ saved.
   the wire: it is checked where it is *used*, so one unknown dish cannot make a
   whole layout unparseable.
 
-## The cookbook is in the pause menu
+## The cookbook is a page of the pause menu
 
-How a dish is *made* — `steps` in `data/recipes.ts` — is listed in the pause
-menu, for the dishes this kitchen has unlocked.
+How a dish is *made* — `steps` in `data/recipes.ts` — is listed under *Recipes*
+in the pause menu, for the dishes this kitchen has unlocked.
 
 It used to be printed on the card outside, which was the wrong place twice over.
 It answered "how is this made" about a dish nobody had bought yet, and it put a
 paragraph of instructions on an object whose whole job is to be a picture. A
 chef who wants the method is asking about **their own menu**, and the pause menu
 is already where the game's other "how does this work" surface lives — the
-controls table, directly below it.
+controls table, which is the page next to it. Both are pages rather than blocks
+stacked under the actions: together they made "Resume" something you had to
+scroll to find.
 
 Unlocked only, so the list grows as the room does. The whole library would be a
 spoiler and a shopping list for dishes the kitchen cannot cook.

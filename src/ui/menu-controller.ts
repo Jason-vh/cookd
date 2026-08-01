@@ -16,6 +16,8 @@ export type MenuView = {
   readonly isOpen: boolean;
   show(world: World): void;
   hide(): void;
+  /** Pop a sub-page. False when there was nowhere to go, so the menu closes. */
+  back(): boolean;
   move(delta: number): void;
   confirm(): MenuChoice | null;
   sync(world: World): void;
@@ -74,10 +76,16 @@ export class MenuController {
     if (!this.menu.isOpen) return;
     const nav = input.pollMenu();
 
-    // Close before navigate: `back` and `menu` both close, and a frame where
+    // Both, every frame: `||` would short-circuit past one of the latches and
+    // leave it believing a still-held button had been released.
+    const menuPressed = this.menuKey.pressed(nav.menu);
+    const backPressed = this.back.pressed(nav.back);
+
+    // Leave before navigate: `back` and `menu` both back out, and a frame where
     // one of them is down is not also a frame that should move the cursor.
-    if (this.menuKey.pressed(nav.menu) || this.back.pressed(nav.back)) {
-      this.close();
+    if (menuPressed || backPressed) {
+      // On the cookbook or the controls, out means back to the actions.
+      if (!this.menu.back()) this.close();
     } else if (this.up.pressed(nav.up)) {
       this.menu.move(-1);
     } else if (this.down.pressed(nav.down)) {
@@ -88,8 +96,6 @@ export class MenuController {
       // Not an else-if chain by accident: the latches above only advance for
       // the branch that was taken, so anything not tested this frame has to be
       // told the control is still down or it will fire late.
-      this.menuKey.pressed(nav.menu);
-      this.back.pressed(nav.back);
       this.up.pressed(nav.up);
       this.down.pressed(nav.down);
       this.confirm.pressed(nav.confirm);

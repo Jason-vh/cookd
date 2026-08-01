@@ -20,7 +20,7 @@ const NO_NAV: MenuNav = { up: false, down: false, confirm: false, menu: false, b
 
 /** Just enough `PauseMenu` to drive the controller. */
 function fakeMenu(chosen: MenuChoice | null = null) {
-  const state = { open: false, moved: 0, confirms: 0 };
+  const state = { open: false, moved: 0, confirms: 0, pages: 0 };
   const menu = {
     get isOpen() {
       return state.open;
@@ -30,6 +30,12 @@ function fakeMenu(chosen: MenuChoice | null = null) {
     },
     hide: () => {
       state.open = false;
+    },
+    // Standing in for a sub-page: `pages` deep, and backing out pops one.
+    back: () => {
+      if (state.pages === 0) return false;
+      state.pages--;
+      return true;
     },
     move: (delta: number) => {
       state.moved += delta;
@@ -190,6 +196,24 @@ describe("navigation", () => {
     nav(control, { confirm: true });
     expect(acted).toEqual(["pause", "resume"]);
     expect(resets()).toBe(1);
+  });
+
+  test("backing out of a sub-page does not close the menu", () => {
+    // Recipes and controls are pages of their own. `Esc` on one of them means
+    // "back to the actions": closing the menu outright would drop you into the
+    // rush you stepped out of to read them.
+    const { control, state } = controller();
+    play(control, { menu: true });
+    state.pages = 1;
+
+    nav(control, {});
+    nav(control, { back: true });
+    expect(state.open).toBe(true);
+    expect(state.pages).toBe(0);
+
+    nav(control, {});
+    nav(control, { back: true });
+    expect(state.open).toBe(false);
   });
 
   test("nothing happens while the menu is closed", () => {

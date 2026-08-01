@@ -641,12 +641,16 @@ body {
   line-height: 1.5;
 }
 
-/* --- the cookbook, shown only inside the pause menu ------------------------ */
+/* --- the cookbook, a page of the pause menu -------------------------------- */
 
-/* Sits between the actions and the controls table, and is separated from both
-   the same way they are separated from each other: one hairline, no box. */
+/* Sits under "Back", separated from it by one hairline and no box. Only one
+   page is ever up, so `hidden` has to beat the `display` these both set. */
+.recipes[hidden],
+.controls[hidden] {
+  display: none;
+}
+
 .recipes {
-  margin-top: 18px;
   padding-top: 16px;
   border-top: 1px solid #2f323d;
   display: flex;
@@ -683,10 +687,9 @@ body {
   line-height: 1.45;
 }
 
-/* --- controls, shown only inside the pause menu ---------------------------- */
+/* --- controls, a page of the pause menu ------------------------------------ */
 
 .controls {
-  margin-top: 18px;
   padding-top: 16px;
   border-top: 1px solid #2f323d;
   display: flex;

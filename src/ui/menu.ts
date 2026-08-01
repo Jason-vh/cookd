@@ -22,24 +22,32 @@ import type { World } from "../sim/types";
  */
 export type MenuAction = "resume" | "restartDay" | "resetKitchen";
 
-type MenuItem = { action: MenuAction; label: string; hint?: string };
+/** Actions the menu answers itself, because all they do is change the page. */
+type PageAction = "recipes" | "controls" | "back";
+
+type Page = "root" | "recipes" | "controls";
+
+type MenuItem = { action: MenuAction | PageAction; label: string; hint?: string };
 
 /**
- * The controls live here and nowhere else.
+ * The reference material lives here and nowhere else — a page each.
  *
- * They used to sit permanently on the playfield, which is clutter for the
- * ninety-nine percent of the time you already know them. The menu is where you
- * go when you *don't* know something, so that is where they live — and now that
- * they can be changed, where you go to change them. The table itself is
- * `ControlsPanel`, mounted into this element: it is generated from the
- * bindings, which is the only way it can be trusted to be true.
+ * The controls used to sit permanently on the playfield and the recipe steps on
+ * the card outside, which is clutter for the ninety-nine percent of the time
+ * you already know them. The menu is where you go when you *don't* know
+ * something, so that is where they live.
+ *
+ * They are pages rather than blocks stacked under the actions because that is
+ * what they became: a controls table wide enough to edit and a cookbook that
+ * grows with the room made the pause menu a screenful you had to scroll to find
+ * "Resume" in. One thing at a time, and `Esc` goes back rather than out.
  */
 
 export class PauseMenu {
   /** Where the controls table is mounted. See `ui/controls.ts`. */
   readonly controlsRoot: HTMLElement;
-  /** Run when the menu closes, so the controls table can drop a half-made rebind. */
-  onHide: (() => void) | null = null;
+  /** Run when the controls page is left, so it can drop a half-made rebind. */
+  onControlsClosed: (() => void) | null = null;
   private root: HTMLElement;
   private list: HTMLElement;
   private title: HTMLElement;
@@ -47,6 +55,9 @@ export class PauseMenu {
   /** The menu the recipe list was last built for. */
   private menuSignature = "";
   private items: MenuItem[] = [];
+  private page: Page = "root";
+  /** Where the cursor was on the root page, so coming back lands on the way in. */
+  private rootIndex = 0;
   /** A destructive action waiting for a second press. */
   private armed: MenuAction | null = null;
   private armedAt = 0;
@@ -60,8 +71,8 @@ export class PauseMenu {
       <div class="card">
         <h1 data-title>Paused</h1>
         <ul data-list></ul>
-        <div class="recipes" data-recipes></div>
-        <div class="controls" data-controls></div>
+        <div class="recipes" data-recipes hidden></div>
+        <div class="controls" data-controls hidden></div>
       </div>
     `;
     this.controlsRoot = root.querySelector("[data-controls]")!;
@@ -77,15 +88,43 @@ export class PauseMenu {
   show(world: World): void {
     this.open = true;
     this.index = 0;
+    this.rootIndex = 0;
+    this.page = "root";
     this.root.classList.add("show");
     this.sync(world);
   }
 
   hide(): void {
-    this.onHide?.();
+    this.goto("root");
     this.open = false;
     this.armed = null;
     this.root.classList.remove("show");
+  }
+
+  /**
+   * Back out one step. False means there was nowhere left to go.
+   *
+   * `Esc` and the pad's `B` mean "out of here", and on a sub-page here is the
+   * page, not the game — closing the menu from the cookbook would drop you back
+   * into a rush you had stepped out of to read.
+   */
+  back(): boolean {
+    if (this.page === "root") return false;
+    this.goto("root");
+    return true;
+  }
+
+  private goto(page: Page): void {
+    if (page === this.page) return;
+    // A rebind waiting for a key is only meaningful on the page showing it.
+    if (this.page === "controls") this.onControlsClosed?.();
+    if (page === "root") this.index = this.rootIndex;
+    else {
+      this.rootIndex = this.index;
+      this.index = 0;
+    }
+    this.page = page;
+    this.disarm();
   }
 
   move(delta: number): void {
@@ -105,6 +144,14 @@ export class PauseMenu {
    */
   confirm(): MenuAction | null {
     const action = this.items[this.index]?.action ?? null;
+    if (action === "recipes" || action === "controls") {
+      this.goto(action);
+      return null;
+    }
+    if (action === "back") {
+      this.goto("root");
+      return null;
+    }
     if (action !== "resetKitchen") {
       this.armed = null;
       return action;
@@ -131,39 +178,11 @@ export class PauseMenu {
     // Arming times out: a menu left open on "are you sure?" should not still be
     // one press from wiping the kitchen when someone comes back to it.
     if (this.armed && Date.now() - this.armedAt > 4000) this.disarm();
-    const items: MenuItem[] =
-      world.phase === "build"
-        ? [
-            {
-              action: "resume",
-              label: world.evicted ? "Look around" : "Keep building",
-              hint: world.evicted ? "The kitchen is closed" : "Open up at the sign by the door",
-            },
-            // The same action either way. An evicted room has exactly one way
-            // forward and this is it, so it is named for what it now does
-            // rather than for the layout it happens to restore.
-            this.armed === "resetKitchen"
-              ? {
-                  action: "resetKitchen" as const,
-                  label: world.evicted
-                    ? "Start again — are you sure?"
-                    : "Reset kitchen — are you sure?",
-                  hint: "Confirm again · wipes it for everyone",
-                }
-              : {
-                  action: "resetKitchen" as const,
-                  label: world.evicted ? "Start again" : "Reset kitchen",
-                  hint: world.evicted
-                    ? "A new kitchen, from day one"
-                    : "Back to the original layout",
-                },
-          ]
-        : [
-            { action: "resume", label: "Resume", hint: `Day ${world.day} in progress` },
-            { action: "restartDay", label: "Restart day", hint: "Empty the room and start over" },
-          ];
+    const items = this.itemsFor(world);
 
-    const signature = items.map((item) => item.label).join("|");
+    // The page is part of the signature: the same labels on a different page
+    // are a different list.
+    const signature = [this.page, ...items.map((item) => item.label)].join("|");
     if (signature !== this.signature) {
       this.signature = signature;
       this.items = items;
@@ -185,13 +204,61 @@ export class PauseMenu {
       );
     }
 
-    this.title.textContent = world.evicted
+    this.title.textContent = this.titleFor(world);
+    this.recipes.hidden = this.page !== "recipes";
+    this.controlsRoot.hidden = this.page !== "controls";
+    this.syncRecipes(world);
+    this.paint();
+  }
+
+  private titleFor(world: World): string {
+    if (this.page === "recipes") return "Recipes";
+    if (this.page === "controls") return "Controls";
+    return world.evicted
       ? "Closed down"
       : world.phase === "build"
         ? `Day ${world.day} closed`
         : "Paused";
-    this.syncRecipes(world);
-    this.paint();
+  }
+
+  private itemsFor(world: World): MenuItem[] {
+    if (this.page !== "root") return [{ action: "back", label: "Back", hint: "Esc" }];
+
+    const reference: MenuItem[] = [
+      { action: "recipes", label: "Recipes", hint: "How every dish on your menu is made" },
+      { action: "controls", label: "Controls", hint: "The keys, and where to change them" },
+    ];
+
+    return world.phase === "build"
+      ? [
+          {
+            action: "resume",
+            label: world.evicted ? "Look around" : "Keep building",
+            hint: world.evicted ? "The kitchen is closed" : "Open up at the sign by the door",
+          },
+          ...reference,
+          // The same action either way. An evicted room has exactly one way
+          // forward and this is it, so it is named for what it now does
+          // rather than for the layout it happens to restore.
+          this.armed === "resetKitchen"
+            ? {
+                action: "resetKitchen" as const,
+                label: world.evicted
+                  ? "Start again — are you sure?"
+                  : "Reset kitchen — are you sure?",
+                hint: "Confirm again · wipes it for everyone",
+              }
+            : {
+                action: "resetKitchen" as const,
+                label: world.evicted ? "Start again" : "Reset kitchen",
+                hint: world.evicted ? "A new kitchen, from day one" : "Back to the original layout",
+              },
+        ]
+      : [
+          { action: "resume", label: "Resume", hint: `Day ${world.day} in progress` },
+          ...reference,
+          { action: "restartDay", label: "Restart day", hint: "Empty the room and start over" },
+        ];
   }
 
   /**
@@ -201,8 +268,8 @@ export class PauseMenu {
    * the wrong place twice over. It answered "how is this made" about a dish
    * nobody had bought yet, and it put a paragraph of instructions on an object
    * whose whole job is to be a picture. A chef wanting the method is asking
-   * about **their own menu**, and the pause menu is already where the other
-   * "how does this work" surface lives — the controls table, directly below.
+   * about **their own menu**, and the pause menu is already where the game's
+   * other "how does this work" page lives — the controls table.
    *
    * Unlocked only, so it grows as the room does: a list that showed the whole
    * library would be a spoiler and a shopping list for dishes the kitchen

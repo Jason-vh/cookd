@@ -82,8 +82,8 @@ installs the hooks.
 | Remove a local player | — | `Shift`+`P` | — |
 | Sound on / off | — | `M` | — |
 
-**Every one of those keys can be changed.** The controls table in the pause menu
-is the game's own binding list rather than a copy of it: click a key, press the
+**Every one of those keys can be changed.** The pause menu's *Controls* page is
+the game's own binding list rather than a copy of it: click a key, press the
 one you want, and it is yours (`Esc` cancels, `Backspace` clears, and holding
 `Shift` binds the pair — which is where `Shift`+`P` comes from). Bindings live
 in this browser next to your name, so they are yours rather than the room's, and

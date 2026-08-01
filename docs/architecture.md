@@ -116,7 +116,7 @@ src/
     gallery.ts            dev-only `?gallery`: every model on a turntable, under the game's light
   ui/
     hud.ts                DOM HUD (stats, event log, build banner — no order list)
-    menu.ts               the pause menu
+    menu.ts               the pause menu: actions, and a page each for recipes and controls
     menu-controller.ts    the menu's dealings with the controls, and the latches
     controls.ts           the controls table, generated from the bindings and editable
     join.ts               the join screen: start a kitchen, or join one by code

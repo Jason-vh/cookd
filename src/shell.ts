@@ -48,9 +48,9 @@ const controls = new ControlsPanel(menu.controlsRoot, {
     saveIdentity(identity);
   },
 });
-// A rebind left half-finished when the menu closed would otherwise eat the
-// next key pressed in the kitchen.
-menu.onHide = () => controls.stopCapturing();
+// A rebind left half-finished when the controls page was left would otherwise
+// eat the next key pressed in the kitchen.
+menu.onControlsClosed = () => controls.stopCapturing();
 const params = new URLSearchParams(location.search);
 /** `cookd.example/#KITCHEN` — a shareable link *is* the room. */
 const roomFromUrl = location.hash
