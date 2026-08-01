@@ -2,10 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { generateLevel } from "./generate";
 import { levelProblems } from "./validate";
 import { BIOMES } from "./biomes";
-import { BEACH_SHACK, PARK_KITCHEN, type LevelDef } from "./level";
-import { pathTo, seatsAround } from "../sim/pathing";
-import { createWorld } from "../sim/world";
-import type { Appliance, World } from "../sim/types";
+import { BEACH_SHACK, PARK_KITCHEN } from "./level";
+import { kitchenWalks } from "./walks";
 
 /** Enough seeds that a constraint holding "usually" shows up as a failure. */
 const SEEDS = Array.from({ length: 500 }, (_, i) => i + 1);
@@ -70,38 +68,6 @@ describe("generated kitchens", () => {
   });
 });
 
-/** Seat to seat, the way a chef actually goes. */
-function walk(world: World, from: Appliance, to: Appliance): number {
-  let best = Infinity;
-  for (const here of seatsAround(world, from.tile)) {
-    for (const there of seatsAround(world, to.tile)) {
-      const path = pathTo(world, here, there);
-      if (path) best = Math.min(best, path.length);
-    }
-  }
-  return best;
-}
-
-function applianceOf(world: World, kind: string): Appliance[] {
-  return [...world.appliances.values()].filter((appliance) => appliance.kind === kind);
-}
-
-/** Crate to board to plate stack to the far table to the sink and back. */
-function loopOf(level: LevelDef): { gather: number; total: number } {
-  const world = createWorld(level, 0);
-  const board = applianceOf(world, "board")[0]!;
-  const plates = applianceOf(world, "plates")[0]!;
-  const sink = applianceOf(world, "sink")[0]!;
-  const tables = applianceOf(world, "table");
-  const gather = Math.max(...applianceOf(world, "crate").map((c) => walk(world, c, board)));
-  const serve = Math.max(...tables.map((t) => walk(world, plates, t)));
-  const bus = Math.max(...tables.map((t) => walk(world, t, sink)));
-  return {
-    gather,
-    total: gather + walk(world, board, plates) + serve + bus + walk(world, sink, plates),
-  };
-}
-
 /**
  * Is it a kitchen worth cooking in?
  *
@@ -119,12 +85,15 @@ function loopOf(level: LevelDef): { gather: number; total: number } {
  */
 describe("the walks a generated kitchen costs", () => {
   /** Both hand-drawn kitchens put the board two squares from the crate run. */
-  const HAND_MADE_GATHER = Math.max(loopOf(PARK_KITCHEN).gather, loopOf(BEACH_SHACK).gather);
+  const HAND_MADE_GATHER = Math.max(
+    kitchenWalks(PARK_KITCHEN).gather,
+    kitchenWalks(BEACH_SHACK).gather,
+  );
 
   test("the board stays beside the crates", () => {
     // Chop-and-gather is the tightest loop in the game: it is walked for every
     // ingredient of every dish, so it is the one that must not be left to luck.
-    const worst = Math.max(...SEEDS.map((seed) => loopOf(generateLevel(seed)).gather));
+    const worst = Math.max(...SEEDS.map((seed) => kitchenWalks(generateLevel(seed)).gather));
     expect(HAND_MADE_GATHER).toBe(2);
     expect(worst).toBeLessThanOrEqual(HAND_MADE_GATHER * 3);
   });
@@ -135,9 +104,30 @@ describe("the walks a generated kitchen costs", () => {
     // in the morning. But the middle of the distribution has to land where the
     // hand-drawn kitchens already are, or the generator is quietly playing a
     // different game.
-    const totals = SEEDS.map((seed) => loopOf(generateLevel(seed)).total).sort((a, b) => a - b);
+    const totals = SEEDS.map((seed) => kitchenWalks(generateLevel(seed)).total).sort(
+      (a, b) => a - b,
+    );
     const median = totals[Math.floor(totals.length / 2)]!;
-    expect(median).toBeGreaterThanOrEqual(loopOf(BEACH_SHACK).total);
-    expect(median).toBeLessThanOrEqual(loopOf(PARK_KITCHEN).total);
+    expect(median).toBeGreaterThanOrEqual(kitchenWalks(BEACH_SHACK).total);
+    expect(median).toBeLessThanOrEqual(kitchenWalks(PARK_KITCHEN).total);
   });
+});
+
+/**
+ * The way in stays clear.
+ *
+ * `landDelivery` in `sim/shop.ts` already keeps the door's own line free of the
+ * morning's crates, on the grounds that it is the one place something standing
+ * down can shut a restaurant. A table is a bigger thing to leave in a doorway
+ * than a crate, and it stands there every day rather than until somebody buys
+ * it — so the generator keeps the same line for the same reason.
+ */
+test("nothing is stood in the doorway", () => {
+  for (const seed of SEEDS) {
+    const level = generateLevel(seed);
+    const inTheWay = level.appliances.filter(
+      (placement) => placement.at.y === level.door.y && placement.kind === "table",
+    );
+    expect({ seed, inTheWay }).toEqual({ seed, inTheWay: [] });
+  }
 });

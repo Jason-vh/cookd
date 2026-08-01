@@ -51,6 +51,15 @@ kitchen: every appliance, ingredient, dish and rig the game can draw, on
 turntables over a one-tile grid, lit and graded exactly as the game lights them.
 Drag to pan, scroll to zoom, `r` to stop the spin. Dev builds only.
 
+`http://localhost:5273/?kitchens` opens the **kitchen sheet**: fifty generated
+floor plans at once, with the park and the beach drawn first in the same ink,
+because "is this any good" is only a question against them. Under each plan is
+what a cover costs to walk — and each plan is a room code, so clicking one goes
+and cooks in it. `?kitchens=200` for more. Dev builds only.
+
+The gallery answers *what does a fryer look like*. The sheet answers *is that a
+restaurant or a shape*, which is a question no single kitchen can be asked.
+
 `bun run check` runs the typechecker, the linter, the formatter and the tests.
 It also runs on its own: [lefthook](lefthook.yml) gates commits on the fast
 three and pushes on all four, and CI runs the same command again. `bun install`

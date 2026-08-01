@@ -136,13 +136,20 @@ export function generateLevel(seed: number): LevelDef {
     ...run("counter", worktopX, south, 3),
     // The pass: ordinary counters, standing in two of the divider's holes.
     ...passes.map((y) => at("counter", split, y)),
-    // The dining side of the divider's three holes stays clear: a table in the
-    // walk-through seals the kitchen off, and one in front of a pass counter
-    // is a pass nobody can collect from.
-    ...tables(roll, { x: MARGIN + 1, y: north + 1 }, { x: split - 1, y: south - 1 }, [
-      gap,
-      ...passes,
-    ]),
+    // Two rows stay clear, for reasons the rest of the game already states.
+    // The dining side of the divider's three holes: a table in the walk-through
+    // seals the kitchen off, and one in front of a pass counter is a pass
+    // nobody can collect from. And **the door's own line** — which is the rule
+    // `landDelivery` in `sim/shop.ts` keeps for the morning's crates, on the
+    // grounds that it is the one place something standing down can shut a
+    // restaurant. A table is a bigger thing to leave in a doorway than a crate.
+    ...tables(
+      roll,
+      { x: MARGIN + 1, y: north + 1 },
+      { x: split - 1, y: south - 1 },
+      [gap, ...passes],
+      door.y,
+    ),
   ];
 
   const level: Omit<LevelDef, "id"> = {
@@ -188,9 +195,10 @@ function divider(x: number, north: number, south: number, open: Set<number>): Wa
  * is the dining room's capacity — see `docs/dining-room.md`. Kept off the shell
  * rows and out of the door's column for the same reason.
  */
-function tables(roll: Roll, from: Vec2, to: Vec2, openings: number[]): Placement[] {
+function tables(roll: Roll, from: Vec2, to: Vec2, openings: number[], walkIn: number): Placement[] {
   const free: Vec2[] = [];
   for (let y = from.y; y <= to.y; y++) {
+    if (y === walkIn) continue;
     for (let x = from.x; x <= to.x; x++) {
       if (x === to.x && openings.includes(y)) continue;
       free.push({ x, y });

@@ -50,6 +50,7 @@ src/
     recipes.ts            transforms, combines, recipes + derived lookup maps
     level.ts              kitchen layouts, the geometry helpers, the registry, and the parser
     generate.ts           kitchens nobody drew: one template, and a seed to move it about
+    walks.ts              what a cover costs to walk, for judging one against another
     biomes.ts             locations: sky, sunlight, ground and scenery recipes
     validate.ts           is the content coherent? checked at startup in dev
   game/                   who is running the game, and where
@@ -117,8 +118,9 @@ src/
     menu-controller.ts    the menu's dealings with the controls, and the latches
     controls.ts           the controls table, generated from the bindings and editable
     join.ts               the join screen: start a kitchen, or join one by code
+    kitchens.ts           dev: fifty generated floor plans on one sheet, to compare
     style.css
-  main.ts                 the entry point: the game, or the model gallery
+  main.ts                 the entry point: the game, the gallery, or the sheet
   shell.ts                the shell: input in, pixels out; owns no rules
 server/
   index.ts                Bun.serve: static files + game socket, rooms
