@@ -173,15 +173,66 @@ of on their usual bucketed clock — neither is keyed on anything the weather
 moves, so without it the sky behind the kitchen would hold yesterday's colour
 until the hour happened to tick over.
 
+## It actually rains
+
+And it rains **outside the walls only**, which is the whole reason it is worth
+drawing. You can watch the terrace get wet while the kitchen stays dry, so the
+rule the weather is playing by is a thing you can see rather than a sentence on
+a card. A picture that teaches the mechanic beats one that decorates it.
+
+[`render/rain.ts`](../src/render/rain.ts) is one instanced mesh and two uniforms
+a frame, because **rain is not a particle system**. Nothing is born and nothing
+dies: a drop's height is `fract(seed + time × speed)`, its ground position is
+fixed, and when it reaches the floor it is the same drop starting again at the
+top. That is arithmetic, and arithmetic belongs in a vertex shader.
+
+Worth being precise about, because the roadmap listed rain beside steam and
+sizzle as though they were one job. They are not. A burst of steam is a few dozen
+particles with lives, spawned by something that *happened*, and it wants a pool
+and a CPU update loop — the shape [`render/popups.ts`](../src/render/popups.ts)
+already has. Rain is fifteen hundred drops that are always there. Running the
+second through the first would mean writing fifteen hundred matrices a frame to
+reproduce a `fract()`.
+
+Three details carry it:
+
+- **The box follows the camera; the drops do not.** Enough rain to fill a
+  22-tile park is mostly rain nobody is looking at, so the field is a box around
+  the ground in shot — the same corners the shadow map is aimed with. The drops
+  inside it are wrapped into world space with a `mod` rather than carried along,
+  because a drop that moved when the camera did would read as a windscreen.
+- **A drop breaks when it lands.** Over the last few percent of its fall the
+  streak flattens into a tick and fades. It costs one `mix`, and it is the
+  difference between rain that hits the ground and rain that passes through it.
+- **Density and opacity together.** The count says how hard it is raining and
+  the alpha carries the crossfade between two days. Fading alone leaves a full
+  downpour of ghosts on a drizzle; thinning alone makes the last few drops pop
+  out one at a time.
+
+How much water falls is `Weather.rain`, which sits beside `sky` rather than
+inside it: a `SkyShift` is what the weather does to a biome's *lamps*, and this
+is water. Keeping them apart is also what leaves room for a drizzle — fully
+overcast and barely wet is two numbers, not a fourth row. The simulation never
+reads it: whether the terrace is open is `outdoor`, and a rule that depended on
+how many drops the renderer happened to be drawing is a rule the server could
+not answer.
+
+`?weather=rain` in development holds the sky at one kind of day, because the
+alternative is playing until it rains. It writes the world's own field rather
+than overriding the *drawing*, so the terrace shuts when the picture says it has
+— a debug flag that let the sky and the rules disagree would be worse than none,
+given that what the rain is for is showing where the rule falls.
+
 ## Deliberately not built
 
-- **Rain.** As in: falling water. It wants a particle system, which the renderer
-  does not have — the same thing standing between the game and steam over a
-  fryer, and a bigger commitment than either effect is worth on its own. Today a
-  rainy day is a grey one, and the morning card is what names it.
 - **Wet ground.** A darker, shinier floor under rain is one material property and
-  would be lovely. It is also the sort of thing that wants the rain above it to
-  exist first.
+  would be lovely. What stops it is that "the ground" is grass, sand, tarmac and
+  paving depending on where you are standing, and only some of those shine.
+- **Puddles and ripples.** The same problem one step further on: a ripple is a
+  ring on a flat wet surface, and the park is mostly lawn.
+- **Rain on the customers.** Umbrellas coming up the path would be lovely, and
+  they are a wardrobe change rather than a weather one — see `data/chefs.ts` for
+  the shape that would take.
 - **Weather during a day.** It is rolled per day and holds for the whole of it,
   because a terrace that shut at three o'clock would evict people from tables
   they were already eating at — and the alternative, grandfathering the ones

@@ -23,6 +23,7 @@ import { buildDoorway, buildServingHatch, buildWall, floorTexture } from "./shel
 import { PALETTE } from "./palette";
 import { PeopleViews } from "./people-views";
 import { Popups } from "./popups";
+import { Rain } from "./rain";
 import { OrderViews } from "./order-views";
 import { timed } from "./profile";
 import { TableViews } from "./table-views";
@@ -53,6 +54,14 @@ export class View {
   private readonly renderer: THREE.WebGLRenderer;
   private post: Post | null = null;
   private readonly daylight: Daylight;
+  /**
+   * The weather, falling.
+   *
+   * The renderer's rather than the kitchen's, like the daylight: a box of
+   * drops is the same box over any floor plan, and only *which building stays
+   * dry* changes with the level.
+   */
+  private readonly rain: Rain;
 
   private entities: Entities;
 
@@ -88,6 +97,7 @@ export class View {
     // which is about half the kitchen. The rig rewrites those corners in place.
     // Kept by reference, so it survives every kitchen this renderer draws.
     this.daylight.follow(this.rig.footprint);
+    this.rain = new Rain(this.scene);
 
     this.entities = new Entities(this.scene, this.camera);
     this.build(world, biome);
@@ -123,6 +133,7 @@ export class View {
 
       this.rig.setBounds(cameraBounds(world));
       this.daylight.setBiome(biome, daylightBounds(world));
+      this.rain.setRoom(world.room);
       this.entities = new Entities(this.scene, this.camera);
       this.build(world, biome);
     });
@@ -145,6 +156,7 @@ export class View {
     this.baked.push(...scenery);
     this.scene.add(...scenery);
     timed("shell", () => this.buildKitchenShell(world));
+    this.rain.setRoom(world.room);
 
     // Ahead of the frame that would otherwise pay for it. Linking is what costs
     // — the driver does it off-thread where it can — and on a kitchen swap this
@@ -295,6 +307,9 @@ export class View {
     this.daylight.setWeather(weatherOf(world).sky);
     this.daylight.update(dayProgress(world), dt);
     this.post?.setGrade(this.daylight.state.grade);
+    // After the camera, because the field is wrapped around the ground in shot
+    // — the same corners the shadow box is aimed with.
+    this.rain.update(this.rig.footprint, weatherOf(world).rain, dt, time);
 
     if (this.post) this.post.render();
     else this.renderer.render(this.scene, this.camera);
@@ -442,6 +457,7 @@ export class View {
     for (const part of this.baked) disposeSubtree(part);
     this.baked.length = 0;
     this.daylight.dispose();
+    this.rain.dispose();
     this.post?.dispose();
     this.renderer.dispose();
   }

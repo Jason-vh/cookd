@@ -201,6 +201,17 @@ export const PALETTE = {
   lossWalkout: 0xe08a6f,
   /** Money going out: a purchase. */
   spend: 0xe0b8a0,
+
+  // --- weather ---
+  /**
+   * A raindrop, which is nearly white and never quite.
+   *
+   * Rain has no colour of its own — it is whatever it is falling through — so
+   * pure white would be the one thing on screen the grade cannot touch, and a
+   * downpour would look the same at noon as it does at dusk. This is a cool
+   * off-white the amber end of the day still gets a say in.
+   */
+  rain: 0xd8e2ea,
 } as const;
 
 /**

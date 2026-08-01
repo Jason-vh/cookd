@@ -47,9 +47,13 @@ Near term:
   were already carrying `walkable` and `placeable` as separate facts, and
   outdoor seating turned out to be exactly what the note on `placeable`
   predicted it would be: some of them changing their mind about the second one.
-  What is left is the *visual* half, and it is the same missing piece as the
-  burn effects — **rain** wants a particle system, so today a rainy day is a
-  grey one and the morning card is what names it.
+  **And it rains**, outside the walls only, so the rule is a thing you can see
+  rather than a sentence on a card. That turned out *not* to need the particle
+  system it was filed under: a drop has no state anybody asks about, so the
+  whole field is one instanced mesh and a `fract()` in a vertex shader. What is
+  left is the ground — wet paving, puddles, a ripple where a drop lands — and it
+  is held up by the fact that "the ground" here is grass, sand, tarmac and
+  paving, and only some of those shine.
 - **Verify the gamepad mapping** on real hardware, add per-player join/leave UI
   and rumble on burn/serve.
 - **Multiplayer polish:** there is still no spectator mode and no proper
@@ -90,8 +94,11 @@ Near term:
 - **Juice.** The [sounds are in](sound.md) — pickup, serve, tip, burn, door
   chime, the day opening and closing, synthesised rather than sampled. What is
   left is the *visual* half: steam and sizzle particles, and screen shake on a
-  burn. Both want a particle system, which the renderer does not have and which
-  is a bigger commitment than the shake is worth on its own.
+  burn. The particle system is still the missing piece, and
+  [rain](weather.md) did not turn out to be it — a downpour is a `fract()` with
+  no lifetimes in it, and steam is a pool of things that are born, rise and go.
+  The shape to copy is `render/popups.ts`, which is already a pool of billboards
+  with lives; what it lacks is instancing and any notion of a burst.
 - **Chef–customer soft collision** — a gentle "excuse me" nudge, if the dining
   room ever feels too empty with everyone walking through each other.
 - **Rendered icons** — render each ingredient once to a texture with an

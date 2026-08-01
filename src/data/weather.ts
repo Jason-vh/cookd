@@ -81,6 +81,19 @@ export type Weather = {
   /** Multiplier on the gap between arrivals. Above 1 is a quiet day. */
   trade: number;
   /**
+   * How hard it is actually raining, 0..1.
+   *
+   * Beside `sky` rather than inside it, because it is not a property of the
+   * light: `SkyShift` is what the weather does to a biome's *lamps*, and this
+   * is water. Keeping them apart is also what leaves room for a drizzle — a day
+   * that is barely wet and fully overcast is two numbers, not a fourth row.
+   *
+   * The simulation never reads it. Whether the terrace is open is `outdoor`,
+   * and a rule that depended on how many drops the renderer happened to be
+   * drawing would be a rule the sim could not answer on the server.
+   */
+  rain: number;
+  /**
    * What the morning card says about it.
    *
    * Here rather than in the HUD because it is the only place the terrace is
@@ -107,6 +120,7 @@ export const WEATHERS: Weather[] = [
     weight: 5,
     outdoor: true,
     trade: 1,
+    rain: 0,
     note: "Fair \u2014 a good day to be sitting outside",
     sky: UNCHANGED,
   },
@@ -116,6 +130,11 @@ export const WEATHERS: Weather[] = [
     weight: 3,
     outdoor: true,
     trade: 1.08,
+    // Grey, and dry. The middle row is the one that has to *look* different
+    // from rain at a glance, because it is the one that leaves the terrace
+    // open: a player reading the sky rather than the card should never mistake
+    // the two.
+    rain: 0,
     note: "Overcast \u2014 the terrace is still open",
     sky: {
       sun: 0.42,
@@ -136,6 +155,7 @@ export const WEATHERS: Weather[] = [
     weight: 2,
     outdoor: false,
     trade: 1.15,
+    rain: 1,
     note: "Rain \u2014 nobody is sitting outside today",
     sky: {
       sun: 0.2,

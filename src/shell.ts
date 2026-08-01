@@ -303,6 +303,20 @@ function shouldRender(now: number): boolean {
 
 let last = performance.now();
 
+/**
+ * `?weather=rain` — hold the sky at one kind of day, for looking at it.
+ *
+ * A development tool, and it exists because the alternative is playing until it
+ * rains. It writes the world's own field rather than overriding the *drawing*,
+ * so the terrace shuts when the picture says it has: a debug flag that made the
+ * sky and the rules disagree would be worse than none, since the whole point of
+ * rain falling outside the walls is that it shows what the rule is.
+ *
+ * Offline only, and unenforceable anyway online — the server rolls the weather
+ * and sends it in the layout, which would overwrite this on the next message.
+ */
+const forcedWeather = import.meta.env.DEV ? params.get("weather") : null;
+
 function frame(now: number): void {
   requestAnimationFrame(frame);
   const since = now - last;
@@ -310,6 +324,7 @@ function frame(now: number): void {
   const elapsed = Math.min(0.25, since / 1000);
   last = now;
 
+  if (forcedWeather) game.world.weather = forcedWeather;
   fallbackIfUnreachable(now);
 
   // Before the join screen's early return: the kitchen is drawn behind it, and
