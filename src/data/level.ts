@@ -216,10 +216,13 @@ export const PARK_KITCHEN: LevelDef = {
     // clear of the row customers walk in along — see the note on `stall` in
     // `data/appliances.ts`. Only ever true of one morning: the squares are
     // re-rolled each day, and the first day has no delivery at all.
-    at("stall", 1, 3),
-    at("stall", 0, 4),
-    at("stall", 0, 6),
+    at("stall", 1, 4),
     at("stall", 1, 6),
+    at("stall", 2, 1),
+    at("stall", 1, 8),
+    at("stall", 0, 2),
+    at("stall", 3, 9),
+    at("stall", 4, 1),
     // The sign hangs on the wall beside the door, on the first tile inside it,
     // so opening the day is somebody walking to the door. It has to be against
     // the shell and not in a corner — that is the wall it is screwed to, and
@@ -271,10 +274,13 @@ export const BEACH_SHACK: LevelDef = {
   walls: [wall(9, 1, 9, 2), wall(9, 3, 9, 4), wall(9, 5, 9, 6), wall(9, 7, 9, 9)],
   appliances: [
     // The delivery, on the paving outside the door.
-    at("stall", 1, 3),
-    at("stall", 0, 4),
-    at("stall", 0, 6),
+    at("stall", 1, 4),
     at("stall", 1, 6),
+    at("stall", 1, 2),
+    at("stall", 1, 8),
+    at("stall", 2, 0),
+    at("stall", 3, 9),
+    at("stall", 0, 0),
     at("sign", 2, 4),
     // The galley: crates and bin along the top, wash-up along the bottom.
     crate("tomato", 10, 1),
@@ -347,10 +353,13 @@ export const HIGHWAY_STOP: LevelDef = {
   appliances: [
     // The delivery, as every kitchen has it, and the sign on the wall inside
     // the door.
-    at("stall", 1, 2),
-    at("stall", 0, 3),
-    at("stall", 0, 5),
+    at("stall", 1, 3),
     at("stall", 1, 5),
+    at("stall", 2, 1),
+    at("stall", 1, 7),
+    at("stall", 0, 1),
+    at("stall", 4, 1),
+    at("stall", 3, 8),
     at("sign", 2, 5),
     // The back run: crates and prep at the west end, wash-up at the east.
     crate("tomato", 3, 2),

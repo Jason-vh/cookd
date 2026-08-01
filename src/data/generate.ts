@@ -1,5 +1,6 @@
 import { mulberry32 } from "../sim/random";
 import type { Vec2 } from "../sim/types";
+import { STALL_SLOTS } from "./economy";
 import { at, crate, rect, wall, type LevelDef, type Placement, type WallRun } from "./level";
 
 /**
@@ -44,6 +45,46 @@ export function seedFromCode(code: string): number {
 
 /** The building always sits this far in from the edge of the grid. */
 const MARGIN = 2;
+
+/**
+ * Where a generated kitchen declares its delivery squares.
+ *
+ * They are walked round the ring rather than stacked beside the door, and the
+ * reason is arithmetic: the west face is only as tall as the building, so a
+ * column of seven spaced squares runs off the end of a small kitchen. The ring
+ * always has room because it is the whole perimeter.
+ *
+ * **Spaced three apart along the loop**, which keeps any two at least a king's
+ * move apart even around a corner — a diagonal pair seals a two-deep ring, and
+ * what is behind them is then unreachable. `landDelivery` applies the same rule
+ * when it re-rolls these every morning, so this only has to be true of a level
+ * nobody has opened yet.
+ *
+ * Only the *first morning* would ever show them, and there is no delivery on the
+ * first morning, so these positions are never seen in play. They exist because
+ * a level says what a kitchen has.
+ */
+function deliverySquares(width: number, height: number, door: Vec2): Vec2[] {
+  // The loop of paving immediately outside the shell, clockwise from a corner.
+  const left = MARGIN - 1;
+  const right = MARGIN + width;
+  const top = MARGIN - 1;
+  const bottom = MARGIN + height;
+  const loop: Vec2[] = [];
+  for (let x = left; x <= right; x++) loop.push({ x, y: top });
+  for (let y = top + 1; y <= bottom; y++) loop.push({ x: right, y });
+  for (let x = right - 1; x >= left; x--) loop.push({ x, y: bottom });
+  for (let y = bottom - 1; y > top; y--) loop.push({ x: left, y });
+
+  const spots: Vec2[] = [];
+  for (let i = 0; i < loop.length && spots.length < STALL_SLOTS; i += 3) {
+    const spot = loop[i]!;
+    // The row customers walk in along stays clear, here as in the daily roll.
+    if (spot.y === door.y) continue;
+    spots.push(spot);
+  }
+  return spots;
+}
 
 /** Frozen, and the note above says why. */
 const TABLES = 2;
@@ -113,12 +154,8 @@ export function generateLevel(seed: number): LevelDef {
     : roll.int(first, Math.min(last, first + 3));
 
   const appliances: Placement[] = [
-    // The morning's delivery, grouped around the door rather than lined up
-    // along it — see the note on `stall` in `data/appliances.ts`.
-    at("stall", MARGIN - 1, door.y - 2),
-    at("stall", MARGIN - 2, door.y - 1),
-    at("stall", MARGIN - 2, door.y + 1),
-    at("stall", MARGIN - 1, door.y + 1),
+    // The morning's delivery — see the note on `stall` in `data/appliances.ts`.
+    ...deliverySquares(width, height, door).map((spot) => at("stall", spot.x, spot.y)),
     at("sign", sign.x, sign.y),
     // The back run.
     crate("tomato", prep, north),

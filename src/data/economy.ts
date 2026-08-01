@@ -15,12 +15,23 @@ import type { ApplianceKind } from "./appliances";
 /**
  * Squares in the delivery. Matches the number of `$` tiles the level puts down.
  *
- * Four, and two of them are spoken for: one is promised to something the
- * kitchen is short of, and one holds a [recipe card](../../docs/the-menu.md).
- * That leaves two wildcards, which is what stops a morning with two guarantees
- * in it from being a morning with no surprise in it.
+ * **Seven: six goods, and a [recipe card](../../docs/the-menu.md).** Two are
+ * spoken for — the card, and one promised to something the kitchen is short of
+ * — which leaves five rolled freely.
+ *
+ * The number is safe to turn. Every square is an obstacle on the paving
+ * customers walk in across, so the thing to watch when raising it is whether a
+ * morning can wall the door off; the "never on the way in" filter in
+ * `landDelivery` holds that at zero across every level and generated kitchen
+ * out to eight squares, and the tightest level still has twenty-one candidate
+ * squares to land on.
+ *
+ * What it *does* change is what a morning is. At three the delivery was a
+ * choice; at seven it is a market, and a lean room will be able to afford one
+ * or two things on it. The scarcity guarantee is still a single square, so it
+ * is proportionally a weaker promise than it was — see `SCARCE_BELOW`.
  */
-export const STALL_SLOTS = 4;
+export const STALL_SLOTS = 7;
 
 /**
  * The first morning anything is delivered at all.

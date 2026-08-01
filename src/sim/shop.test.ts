@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { APPLIANCE_KINDS, applianceDef } from "../data/appliances";
 import { FIRST_DELIVERY_DAY, SELLBACK, STALL_SLOTS } from "../data/economy";
-import { LEVEL } from "../data/level";
+import { LEVEL, LEVELS } from "../data/level";
 import { RECIPES } from "../data/recipes";
 import { Host } from "../game/host";
 import { restore, snapshot } from "../save";
 import { plateCount, platesInWorld, STACK_PLATES } from "./plates";
-import { seatsAround } from "./pathing";
+import { reachableFrom, seatsAround } from "./pathing";
 import { canPlace } from "./queries";
 import { offerPrice, restockStall, stallSlots } from "./shop";
 import { beginDay, endDay } from "./day";
@@ -16,6 +16,7 @@ import {
   applianceAtTile,
   createWorld,
   emptyInput,
+  tileIndex,
   nearestFreeTile,
   removePlayer,
   spawnAppliance,
@@ -432,10 +433,45 @@ describe("the stock is the same shop for everybody", () => {
     }
   });
 
+  test("nothing for sale ever lands where nobody can walk up to it", () => {
+    // The rule the whole arrangement rests on: goods nobody can reach are money
+    // nobody can spend, in silence. It is not hypothetical — the delivery is
+    // solid, so every square is an obstacle on the paving everybody walks, and
+    // at seven squares a naive roll stranded something on 6% of mornings.
+    //
+    // It took three goes, and the first two were rules about *distance*: no two
+    // squares orthogonally adjacent, then none touching even at the corners, on
+    // the reasoning that the ring is two tiles deep and a diagonal pair seals
+    // it. Both true, neither sufficient — where a building runs within a tile of
+    // the grid's edge the band beside it is one deep and a dead end, and there
+    // two squares strand what is between them at any spacing at all. So the
+    // question is asked as reachability, which is the thing actually wanted.
+    //
+    // Across every level, because the shapes that break it are level shapes:
+    // the beach shack's south band is the one that found this.
+    for (const level of Object.values(LEVELS)) {
+      for (let seed = 1; seed <= 12; seed++) {
+        const world = createWorld(level, 0, seed);
+        for (let day = 2; day <= 12; day++) {
+          world.day = day;
+          restockStall(world);
+          const reachable = reachableFrom(world, world.door);
+          for (const slot of stallSlots(world)) {
+            if (!slot.offer) continue; // a bare square strands nothing
+            const canBeReached = seatsAround(world, slot.tile).some((tile) =>
+              reachable.has(tileIndex(world, tile.x, tile.y)),
+            );
+            expect(canBeReached).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
   test("a new morning lands the delivery somewhere else, and never on the way in", () => {
-    // A delivery that appeared on the same three squares every day would be
-    // three squares the game had reserved, which is the shop-as-furniture
-    // problem coming back in through the floor.
+    // A delivery that appeared on the same squares every day would be squares
+    // the game had reserved, which is the shop-as-furniture problem coming back
+    // in through the floor.
     const world = morning();
     const seen = new Set<string>();
     for (let day = 1; day <= 6; day++) {

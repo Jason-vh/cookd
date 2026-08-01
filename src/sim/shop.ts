@@ -6,6 +6,7 @@ import { RECIPE_BY_ID } from "../data/recipes";
 import { ingredient } from "../data/ingredients";
 import { mulberry32 } from "./random";
 import type { Appliance, Offer, Vec2, World } from "./types";
+import { reachableFrom, seatsAround } from "./pathing";
 import { inward } from "./walls";
 import { applianceAtTile, inBounds, tileIndex, touchLayout } from "./world";
 
@@ -164,7 +165,9 @@ export function restockStall(world: World): void {
   // A stream of its own, from two numbers that cannot drift. `| 0` keeps the
   // seed in the same 32-bit shape `mulberry32` is written for.
   const random = mulberry32((world.seed * 0x9e37 + world.day * 0x85eb) | 0);
-  landDelivery(world, slots, random);
+  // A square with nowhere safe to stand comes back in this set, and is left
+  // bare below: see `landDelivery`.
+  const stranded = landDelivery(world, slots, random);
 
   // Two of the four squares are spoken for: one holds a recipe, and one is
   // promised to something the kitchen is short of, so a morning is never four
@@ -190,6 +193,10 @@ export function restockStall(world: World): void {
       const guaranteed = index === promised && scarce.length > 0;
       slot.offer = rollFrom(guaranteed ? scarce : sold, random, sources);
     }
+    // Rolled first and discarded second, so a square nobody can walk up to
+    // costs the morning its goods rather than shifting every other square's
+    // roll along by one. What two clients agree about is the stream.
+    if (stranded.has(slot.id)) slot.offer = null;
     slot.taken = null;
   }
 
@@ -215,7 +222,7 @@ const DELIVERY_REACH = 4;
  * Candidates are gathered in grid order so that the same seed picks the same
  * squares on every client, in a room nobody has sent them.
  */
-function landDelivery(world: World, slots: Appliance[], random: () => number): void {
+function landDelivery(world: World, slots: Appliance[], random: () => number): Set<number> {
   const walkIn = inward(world.room, world.door);
   const moving = new Set(slots.map((slot) => slot.id));
   const spots: Vec2[] = [];
@@ -237,22 +244,105 @@ function landDelivery(world: World, slots: Appliance[], random: () => number): v
       spots.push({ x, y });
     }
   }
-  if (spots.length < slots.length) return; // nowhere to put it: leave it be
+  if (spots.length < slots.length) return new Set(); // nowhere to put it: leave it be
+
+  // Lifted off the grid before anything lands, so a square is never blocked by
+  // where it used to be and the reachability check below sees only what this
+  // morning has actually placed.
+  for (const slot of slots) {
+    world.applianceAt[tileIndex(world, slot.tile.x, slot.tile.y)] = 0;
+  }
 
   // Partial Fisher-Yates: one draw per square, and the draws happen whether or
   // not they are used, so the stream advances by the same amount every morning.
+  //
+  // **A square may not be placed where it would strand one.** The delivery is
+  // solid, so every square added is an obstacle on the paving everybody walks;
+  // enough of them and a pocket of it is walled off, with goods standing in it
+  // that nobody can reach — money nobody can spend, in silence, which is the one
+  // way this arrangement fails.
+  //
+  // Asked as *reachability* rather than as spacing, and that is the whole
+  // lesson. Spacing was the first two attempts: no two squares orthogonally
+  // adjacent, then none touching even at the corners, on the reasoning that the
+  // paving is a ring two tiles deep and a diagonal pair seals it. Both are true
+  // and neither is enough, because the premise is wrong — where a building
+  // reaches within one tile of the grid's edge the band beside it is *one* deep
+  // and a dead end, and there two squares strand whatever is between them at any
+  // spacing at all. A rule about distances cannot see that; a flood fill can.
+  //
+  // Enforced by *scanning* rather than by drawing again: the draw happens once
+  // per square exactly as before, and what follows it is a deterministic walk
+  // forward to the first spot that leaves everything reachable. A rule that
+  // cannot pick a bad spot beats a rule that notices and re-rolls — the same
+  // reasoning as "never on the way in" above — and it keeps the stream advancing
+  // by one per square, which is what two clients agreeing depends on.
+  const stranded = new Set<number>();
   for (const [index, slot] of slots.entries()) {
-    const pick = index + Math.floor(random() * (spots.length - index));
+    const range = spots.length - index;
+    const drawn = index + Math.floor(random() * range);
+    let pick = drawn;
+    let safe = false;
+    for (let step = 0; step < range; step++) {
+      const candidate = index + ((drawn - index + step) % range);
+      if (keepsReachable(world, slots, index, spots[candidate]!)) {
+        pick = candidate;
+        safe = true;
+        break;
+      }
+    }
+    // Nowhere left that keeps everything walkable-up-to. It still lands, so the
+    // grid and the level agree about how many squares there are — but it lands
+    // **empty**, and an empty square in a pocket nobody can reach costs nobody
+    // anything. About one morning in a hundred and fifty, on the tightest
+    // kitchens, and the alternative is stranding goods somebody paid for.
+    if (!safe) stranded.add(slot.id);
+    // A whole swap, not half of one. The original only wrote the hole, which
+    // was harmless while nothing read the prefix back.
     const spot = spots[pick]!;
     spots[pick] = spots[index]!;
-    world.applianceAt[tileIndex(world, slot.tile.x, slot.tile.y)] = 0;
+    spots[index] = spot;
     slot.tile = { x: spot.x, y: spot.y };
+    world.applianceAt[tileIndex(world, spot.x, spot.y)] = slot.id;
   }
-  // Written after every square has moved, or one landing where another has not
-  // left yet would overwrite it and take the second off the grid.
+
+  // One last look at the finished arrangement, because a square that had to
+  // fall back can wall in one that was checked and cleared before it existed.
+  // Every guarantee above is about a layout half-built; this is the only place
+  // that sees the morning as the players will.
+  const reachable = reachableFrom(world, world.door);
   for (const slot of slots) {
-    world.applianceAt[tileIndex(world, slot.tile.x, slot.tile.y)] = slot.id;
+    const reached = seatsAround(world, slot.tile).some((tile) =>
+      reachable.has(tileIndex(world, tile.x, tile.y)),
+    );
+    if (!reached) stranded.add(slot.id);
   }
+  return stranded;
+}
+
+/**
+ * Would putting a square here leave every square placed so far walkable-up-to?
+ *
+ * Writes the candidate onto the grid, asks, and takes it back off — the
+ * cheapest way to ask a question about a layout that does not exist yet, and
+ * the only state it touches is the one cell it restores.
+ *
+ * Measured from the **door**, because that is where everybody comes from and it
+ * is the same question `data/validate.ts` asks of a level that has not been
+ * opened yet. One fill per candidate tried, a handful of candidates per square,
+ * once a morning.
+ */
+function keepsReachable(world: World, slots: Appliance[], placed: number, spot: Vec2): boolean {
+  const index = tileIndex(world, spot.x, spot.y);
+  world.applianceAt[index] = slots[placed]!.id;
+  const reachable = reachableFrom(world, world.door);
+  let ok = seatsAround(world, spot).some((tile) => reachable.has(tileIndex(world, tile.x, tile.y)));
+  for (let i = 0; ok && i < placed; i++) {
+    const other = slots[i]!.tile;
+    ok = seatsAround(world, other).some((tile) => reachable.has(tileIndex(world, tile.x, tile.y)));
+  }
+  world.applianceAt[index] = 0;
+  return ok;
 }
 
 /**

@@ -149,8 +149,8 @@ This is the division, and it is the point of the fee being flat:
 
 ## Every morning, and why that is not the calendar again
 
-One of the four delivery squares holds a card whenever there is anything left to
-offer. Not day 2 and every third — **every morning there is a delivery at all**,
+One of the seven delivery squares holds a card whenever there is anything left
+to offer. Not day 2 and every third — **every morning there is a delivery at all**,
 which is every morning [but the first](the-shop.md#the-first-morning-is-empty).
 
 The cadence moved from the calendar to the till, which is where the
@@ -175,19 +175,23 @@ anything is delivered at all, and the first morning there is money to spend on
 it. That is exactly where `FIRST_CARD_DAY` used to put it — the same morning,
 arrived at by having earned a day's takings rather than by reading a calendar.
 
-### One slot in four
+### One square in seven
 
-The delivery is four squares now, and two of them are spoken for: the card, and
-the [scarcity guarantee](the-shop.md#stock). They are never the same square, so
-a morning reads as
+The delivery is seven squares — six goods and a card — and two of them are spoken
+for: the card, and the [scarcity guarantee](the-shop.md#stock). They are never
+the same square, so a morning reads as
 
-> a dish, a thing you are short of, and two wildcards
+> a dish, a thing you are short of, and five wildcards
 
-which is a more legible delivery than four rolls, and still has room to
-surprise. The card square is rolled like the promised one, so neither is ever
-sitting in the same place twice.
+The card square is rolled like the promised one, so neither is ever sitting in
+the same place twice.
 
-When the library runs out there is no card, and the morning is four goods. That
+At seven the delivery is a **market** rather than a choice, and that is the
+honest description of what changed: a lean room can afford one or two things on
+it, so most of a morning is deciding what *not* to buy. The scarcity guarantee
+is still a single square, so it is proportionally a weaker promise than it was.
+
+When the library runs out there is no card, and the morning is seven goods. That
 needed no special case — it is the sentence the stands already said when there
 was nothing to choose.
 
@@ -313,7 +317,7 @@ spoiler and a shopping list for dishes the kitchen cannot cook.
 
 Next:
 
-- [the-shop.md](the-shop.md) — the four squares a card stands in, and the morning they all arrive on
+- [the-shop.md](the-shop.md) — the seven squares a card stands in, and the morning they all arrive on
 - [content.md](content.md) — the recipes themselves, and what a dish is made of
 
 [Back to the README](../README.md).

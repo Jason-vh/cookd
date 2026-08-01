@@ -172,7 +172,7 @@ The white square in front of your chef is what you'll interact with.
    and no menu item for it. Turning it back over mid-service is **last orders**:
    nobody new comes in, and the day ends once the room has emptied, so closing
    early never takes a plate off somebody's table.
-10. **Go shopping.** Out of the door, four pallets of a delivery are dropped
+10. **Go shopping.** Out of the door, seven pallets of a delivery are dropped
     fresh every morning but the first — day one has an empty patio and a till
     with nothing in it. Face one and `Grab`: the price comes
     out of the till and the thing appears as a ghost in your hands, ready to
@@ -196,7 +196,7 @@ The white square in front of your chef is what you'll interact with.
     [upgrades](docs/the-shop.md#upgrades).
 
 11. **Choose what you cook.** You start with one dish — a garden salad — and
-    that is the whole menu. From day two, one of the four pallets holds a
+    that is the whole menu. From day two, one of the seven pallets holds a
     **recipe card** with a price on it. Buy it like anything else, carry it
     inside and put it down: the dish joins the menu.
 

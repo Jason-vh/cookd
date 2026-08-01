@@ -115,7 +115,7 @@ describe("a level that does not work is caught before it ships", () => {
     expect(broken({ appliances: [at("table", 4, 4)] })).toEqual([
       `level "park-kitchen-3": no plate stack, so no plates`,
       `level "park-kitchen-3": no sink, so a dirty plate can never be used again`,
-      `level "park-kitchen-3": 0 stall slots, expected 4`,
+      `level "park-kitchen-3": 0 stall slots, expected 7`,
       `level "park-kitchen-3": 0 signs, expected exactly 1 — no way to open the day`,
     ]);
   });

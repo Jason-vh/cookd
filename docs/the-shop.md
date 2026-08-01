@@ -3,7 +3,7 @@
 # The shop
 
 A day begins in the **build phase**, and standing on the paving outside there is
-a **delivery**: four things on pallets, for sale, drawn as themselves — appliances,
+a **delivery**: seven things on pallets, for sale, drawn as themselves — appliances,
 plates, and the [recipe cards](the-menu.md) that used to have a wall of their
 own. The two are one feature:
 money had nowhere to go, so it meant nothing, and a build phase that arrived as
@@ -217,14 +217,49 @@ any hand-kept copy of it goes stale the day somebody adds a dish.
 One fault, one sentence: a kitchen that can cook *nothing* says so once rather
 than listing every dish as a separate symptom.
 
+### A square nobody can reach is left bare
+
+The delivery is **solid**: every square is an obstacle on the same paving
+customers and chefs walk across. One or two of those is nothing; seven of them,
+landing somewhere new every morning, can wall off a pocket of the ring — and
+goods standing in a pocket nobody can reach are money nobody can spend, in
+silence. It is the only way this arrangement fails, and it is invisible when it
+does.
+
+So a square is placed only where it leaves **everything** still walkable-up-to,
+asked as a flood fill from the door — the same question `data/validate.ts` asks
+of a level nobody has opened. A rule that cannot choose a bad square beats one
+that notices afterwards, which is the same reasoning as *never on the way in*.
+
+It took three attempts and the first two are worth writing down, because both
+were rules about **distance** and both were wrong in the same way:
+
+1. *No two squares orthogonally adjacent.* Not enough — it is the **diagonal**
+   pair that closes a two-tile corridor, because nothing in this game moves
+   diagonally through a gap.
+2. *No two squares touching at all, corners included.* Still not enough, and the
+   premise was the problem: the paving is **not** always two deep. Where a
+   building runs within a tile of the grid's edge, the band beside it is one
+   deep and a dead end — the beach shack's south side — and there two squares
+   strand whatever is between them at any spacing whatsoever.
+
+A rule about distances cannot see the shape of the room. A flood fill can, and
+it is the thing actually wanted rather than a proxy for it.
+
+Where the paving genuinely cannot take another square, the square still lands
+— so the grid and the level agree about how many there are — but it lands
+**bare**. An empty square in a pocket costs nobody anything. Measured over
+fourteen thousand mornings across every level and twenty-five generated
+kitchens: **zero** goods stranded, and 0.16% of squares arriving empty.
+
 ### The first morning is empty
 
 Nothing is delivered on day one. No goods, no card, and **no pallets** — the
 paving outside is bare paving, exactly as it is during service.
 
-A kitchen opens with $0, so a day-one delivery is four things a room cannot buy,
+A kitchen opens with $0, so a day-one delivery is seven things a room cannot buy,
 and the first thing it would ever learn about the shop is a refusal. Worse, it
-is four things to walk out and look at on the one morning when everything worth
+is seven things to walk out and look at on the one morning when everything worth
 knowing is inside the walls: one dish, one room, and a sign by the door. Day one
 is the thinnest the game will ever be, and that has to include the half of it
 that is outside.
@@ -273,12 +308,12 @@ one place the shop is trying to teach you what the kitchen is missing. It is a
 content, identical in every room, and a shop that edited them would be a shop
 whose tuning depended on who had been playing.
 
-Two of the four squares are spoken for. One is promised to a kind the kitchen
+Two of the seven squares are spoken for. One is promised to a kind the kitchen
 owns fewer than two of *and has a use for*, and which is **not an upgrade** —
 see below. The other holds a [recipe card](the-menu.md), whenever the library
-has anything left to offer. Four duds is a shop players stop walking to, and a
+has anything left to offer. A morning of duds is a shop players stop walking to, and a
 shop nobody walks to is a feature that has quietly stopped existing; the two
-promises leave two wildcards, so a morning is legible without being fixed.
+promises leave five wildcards, so a morning is legible without being fixed.
 
 They are never the same square, and neither square is fixed: both are rolled,
 or a guarantee would always be sitting in the same place and stop reading as
@@ -290,7 +325,7 @@ keeping. On a lean kitchen the shortlist is most of the catalogue, so the early
 shop offers roughly evenly — it shows you what you are missing. As the kitchen
 fills up the shortlist empties and the tiers come through as written. Measured
 over four hundred mornings, on the three-square delivery — **due a re-measure**
-now that there are four squares and one of them holds a card:
+now that there are seven squares and one of them holds a card:
 
 | | day one | settled |
 | --- | --- | --- |
@@ -593,7 +628,7 @@ Four things make that work, and not one of them is an object:
   independent objects can go wherever a delivery lands, so they are **rolled
   each morning**: paving within a few squares of the door, never the row people
   walk in along, each turned by its own `jitter` like everything else in the
-  game. The level still lists four squares, because a level says what a kitchen
+  game. The level still lists seven squares, because a level says what a kitchen
   has; where they stand is only true of the first morning.
 - **A recipe had nowhere better to be.** The posters were the last thing outside
   that existed because the game needed somewhere to put an offer, and the
