@@ -94,8 +94,23 @@ export function generateLevel(seed: number): LevelDef {
 
   // Free-standing, and clear of both side walls, so it can never seal a corner
   // of the galley off from the rest of it.
-  const islandRow = roll.int(north + 2, south - 2);
-  const islandX = roll.int(split + 2, east - 3);
+  //
+  // Kept **at the prep end**, which is a measured rule rather than a taste:
+  // gather-and-chop is the tightest loop in the game and it is walked for every
+  // dish, and both hand-made kitchens sit their board two squares from the
+  // crate run. Rolling its column across the whole galley instead put the worst
+  // seeds ten squares away — a twenty-step round trip per tomato, on day one,
+  // before a player has any money to fix it with.
+  // Two or three rows under the back run, never adrift in the middle of the
+  // floor. The row costs as much as the column does — a board rolled across the
+  // galley's whole height is five rows from the crates in a tall kitchen — and
+  // it leaves the middle of the galley as what it should be: the corridor.
+  const islandRow = roll.int(north + 2, Math.min(south - 2, north + 3));
+  const first = split + 2;
+  const last = east - 3;
+  const islandX = washWest
+    ? roll.int(Math.max(first, last - 3), last)
+    : roll.int(first, Math.min(last, first + 3));
   const worktopX = roll.int(split + 1, east - 3);
 
   const appliances: Placement[] = [

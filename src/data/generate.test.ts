@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { generateLevel } from "./generate";
 import { levelProblems } from "./validate";
 import { BIOMES } from "./biomes";
+import { BEACH_SHACK, PARK_KITCHEN, type LevelDef } from "./level";
+import { pathTo, seatsAround } from "../sim/pathing";
+import { createWorld } from "../sim/world";
+import type { Appliance, World } from "../sim/types";
 
 /** Enough seeds that a constraint holding "usually" shows up as a failure. */
 const SEEDS = Array.from({ length: 500 }, (_, i) => i + 1);
@@ -63,5 +67,77 @@ describe("generated kitchens", () => {
   test("the seeds actually differ", () => {
     const ids = new Set(SEEDS.map((seed) => generateLevel(seed).id));
     expect(ids.size).toBeGreaterThan(SEEDS.length / 2);
+  });
+});
+
+/** Seat to seat, the way a chef actually goes. */
+function walk(world: World, from: Appliance, to: Appliance): number {
+  let best = Infinity;
+  for (const here of seatsAround(world, from.tile)) {
+    for (const there of seatsAround(world, to.tile)) {
+      const path = pathTo(world, here, there);
+      if (path) best = Math.min(best, path.length);
+    }
+  }
+  return best;
+}
+
+function applianceOf(world: World, kind: string): Appliance[] {
+  return [...world.appliances.values()].filter((appliance) => appliance.kind === kind);
+}
+
+/** Crate to board to plate stack to the far table to the sink and back. */
+function loopOf(level: LevelDef): { gather: number; total: number } {
+  const world = createWorld(level, 0);
+  const board = applianceOf(world, "board")[0]!;
+  const plates = applianceOf(world, "plates")[0]!;
+  const sink = applianceOf(world, "sink")[0]!;
+  const tables = applianceOf(world, "table");
+  const gather = Math.max(...applianceOf(world, "crate").map((c) => walk(world, c, board)));
+  const serve = Math.max(...tables.map((t) => walk(world, plates, t)));
+  const bus = Math.max(...tables.map((t) => walk(world, t, sink)));
+  return {
+    gather,
+    total: gather + walk(world, board, plates) + serve + bus + walk(world, sink, plates),
+  };
+}
+
+/**
+ * Is it a kitchen worth cooking in?
+ *
+ * `levelProblems` says a kitchen is *legal* — you can reach everything and the
+ * day can open. It deliberately says nothing about whether the room is any
+ * good, because "badly laid out" is a thing a player is allowed to do to their
+ * own restaurant. That tolerance does not extend to a generator: nobody chose
+ * this layout, and nobody can be blamed for it.
+ *
+ * So the walks are measured, against the two hand-drawn kitchens as the
+ * reference. These numbers found a real fault the validator could not: the
+ * chopping board was rolled across the whole galley, which put it up to ten
+ * squares from the crates against a hand-made two — a twenty-step round trip
+ * per tomato, on day one, before there is any money to fix it with.
+ */
+describe("the walks a generated kitchen costs", () => {
+  /** Both hand-drawn kitchens put the board two squares from the crate run. */
+  const HAND_MADE_GATHER = Math.max(loopOf(PARK_KITCHEN).gather, loopOf(BEACH_SHACK).gather);
+
+  test("the board stays beside the crates", () => {
+    // Chop-and-gather is the tightest loop in the game: it is walked for every
+    // ingredient of every dish, so it is the one that must not be left to luck.
+    const worst = Math.max(...SEEDS.map((seed) => loopOf(generateLevel(seed)).gather));
+    expect(HAND_MADE_GATHER).toBe(2);
+    expect(worst).toBeLessThanOrEqual(HAND_MADE_GATHER * 3);
+  });
+
+  test("a typical kitchen is as much walking as a drawn one", () => {
+    // Not every kitchen — the point of a seed is that some rooms are harder
+    // than others, and every appliance in this loop can be picked up and moved
+    // in the morning. But the middle of the distribution has to land where the
+    // hand-drawn kitchens already are, or the generator is quietly playing a
+    // different game.
+    const totals = SEEDS.map((seed) => loopOf(generateLevel(seed)).total).sort((a, b) => a - b);
+    const median = totals[Math.floor(totals.length / 2)]!;
+    expect(median).toBeGreaterThanOrEqual(loopOf(BEACH_SHACK).total);
+    expect(median).toBeLessThanOrEqual(loopOf(PARK_KITCHEN).total);
   });
 });

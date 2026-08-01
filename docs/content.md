@@ -431,6 +431,38 @@ walk-through on one seed in ten, sealing the galley off from the dining room.
 There is deliberately **no retry-on-a-bad-roll loop**: a constraint that only
 holds most of the time is a bug, and a retry is how you never find out.
 
+### Legal is not the same as good
+
+`levelProblems` says a kitchen *works*. It says nothing about whether it is
+worth cooking in, and it should not — "badly laid out" is a thing a player is
+allowed to do to their own restaurant, and the build phase is where they undo
+it. But that tolerance does not survive the room being generated: nobody chose
+this layout, so nobody can be blamed for it.
+
+So the walks are measured instead, in `generate.test.ts`, against the two
+hand-drawn kitchens as the reference: crate to board, board to plate stack,
+plate stack to the far table, table to sink, sink back to the stack. That found
+a fault no validator could. The chopping board was rolled across the whole
+galley, in both axes, which put it up to **ten** squares from the crate run
+against a hand-made **two** — a twenty-step round trip per tomato, on day one,
+before there is any money to fix it with. Both hand-made kitchens sit their
+board two squares from the crates, and once the generator did too the worst seed
+came back to six.
+
+Two numbers are pinned, and only two:
+
+- **crate to board**, for every seed, because chop-and-gather is walked for
+  every ingredient of every dish and is the one loop that must not be left to
+  luck;
+- **the median full loop**, which has to land between the beach shack's and the
+  park kitchen's. The *median*, not every seed: some rooms being harder than
+  others is the point of a seed, and every appliance in that loop can be picked
+  up and moved in the morning.
+
+The rest of the spread is left alone on purpose. A kitchen whose sink is a long
+way from the dining room is a harder kitchen, not a broken one, and the sink is
+movable.
+
 ### A generated kitchen is a fact, not a function
 
 The id of a generated level is a **hash of the built room** (`gen-b104fdc2`),
