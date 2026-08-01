@@ -11,11 +11,10 @@ The one-sentence version: **zero new verbs, and zero new objects.** `Grab` does
 everything, the goods are the entire interface, and demand following seats makes
 every purchase a piece of self-chosen escalation.
 
-**Nothing is ever deducted.** There was a nightly rent here once, and it was
-removed: a number that arrives while nobody is looking is a worse teacher than
-a price tag, and every day it took ended in the same place the takings did. The
-only way money leaves a kitchen is somebody carrying something away from a
-slot.
+Money leaves a kitchen two ways: somebody carries something away from a slot,
+and the **rent** at closing time. The rent is the newer of the two and the one
+with a history — see [the rent](#the-rent) for what was wrong with the first
+version and what is different about this one.
 
 ---
 
@@ -75,11 +74,17 @@ use. Without it a client would call last orders on every replayed tick, twenty
 times a second, on a kitchen the server still has open.
 
 The banner carries the only tutorial the game has: **"Turn the sign by the door
-to open"**, with the player's own grab key underneath it. A solo player on day
-one is standing in a kitchen that will not start until they do something, and
-that is the single most important sentence in the product. It now names a place
-in the room rather than a button, which is the point of the sign existing. It is
-spent on prominence, not on a new screen.
+to open"**. A solo player on day one is standing in a kitchen that will not start
+until they do something, and that is the single most important sentence in the
+product. It names a place in the room rather than a button, which is the point of
+the sign existing. It is spent on prominence, not on a new screen.
+
+The player's own grab key used to be spelled out underneath it — `Space facing
+it, or A on a pad` — and it is gone. It was a keybinding printed over the game
+for the life of the run, teaching the one verb the player necessarily used to
+walk up to the sign in the first place, and it undercut the sentence above it by
+answering a question that sentence had deliberately declined to ask. Keys are
+read in the pause menu's controls table, which is also where they are changed.
 
 Prominence is not the same as permanence, though, and the banner used to be both:
 a full card sitting over the room for the whole morning, which is the half of the
@@ -87,8 +92,8 @@ game that is *about* looking at the room. So it has two forms. It arrives as the
 card — report, day, instruction — and shrinks to a pill at the top edge once the
 player has answered it, by confirming or simply by walking off. The instruction
 never actually leaves, because the day still cannot start without it; it stops
-being the biggest thing on screen, and drops the day and the pad hint, both of
-which the stats panel is already saying.
+being the biggest thing on screen, and drops the day, which the stats panel is
+already saying.
 
 Movement only settles the banner when there is no report left on it: a report is
 something to read, and reading it is not a reason to lose it.
@@ -333,17 +338,97 @@ Prices are the `price` column in `data/appliances.ts`, in four tiers:
 | Throughput | fryer $120, oven $160 | 2–3 days of *profit* — a saving goal |
 | Upgrades | steel board $110, bell oven $320 | a week of them — a plan |
 
-There is deliberately **no fail state** and no standing cost. The pressure is
-meant to be "we can't afford the oven", not "we lost", and the till only ever
-goes up on its own.
+The **end-of-day card** is a receipt, and it is laid out like one: what the day
+did (served, and orders lost *by recipe*), then the money in and out (earned,
+tips, rent), then a ruled-off total — `In the till`. Amounts are a right-aligned
+column in tabular figures, signed, green in and red out.
 
-The **end-of-day card** shows earnings, tips, balance, dishes served and
-orders lost *by recipe*. The last of those is the one that earns its place: "four
-walked out" is a number, "four pizzas walked out" is a diagnosis, and the
-difference between them is whether the morning knows what to buy. None of it is
-recoverable from `money`/`served`/`lost`, which are cumulative, so the day counts
-itself as it goes (`world.today`). Dismissing the card is *shell* state — one
-player folding it away must not fold it away on everybody else's screen.
+It used to be two sentences of dot-separated terms, and the difference is not
+decoration: `Earned $40 · Tips $12 · Rent −$20 · Balance $92` makes the reader do
+the arithmetic *and* work out which way each number points. A morning is spent
+deciding what to buy, and "where did yesterday go" should be answerable by
+looking down one column.
+
+Walkouts by recipe are the line that earns its place twice over: "four walked
+out" is a number, "four pizzas walked out" is a diagnosis, and the difference is
+whether the morning knows what to buy. A row with nothing to say — no walkouts,
+no rent yet — is **removed** rather than shown as a zero, because the two cards
+that happen on are a clean day and the first days of a run, which are exactly the
+cards that want reading quickly.
+
+None of it is recoverable from `money`/`served`/`lost`, which are cumulative, so
+the day counts itself as it goes (`world.today`). Dismissing the card is *shell*
+state — one player folding it away must not fold it away on everybody else's
+screen.
+
+## The rent
+
+The shop used to be a decision with no downside. Money only ever went up, so
+buying nothing was always safe, saving was free, and "we can't afford the oven"
+was a sentence about patience rather than about risk. The rent is what makes a
+morning's spending a **bet** — and it is what turns selling something back at
+half price into a move rather than an undo button.
+
+It is charged in `endDay`, before the day number rolls over, so it lands on the
+ledger of the day that paid it and the morning opens on a balance that is
+already true.
+
+| | |
+| --- | --- |
+| Days 1–2 | free |
+| From day 3 | `$20`, plus `$5` for each day after it |
+
+The two free mornings are the two a room has no say in: day one is one dish and
+whatever the level handed you, day two is the first recipe card. Charging before
+a kitchen has made a single decision is charging it for the tutorial.
+
+The step is deliberately **shallower than the takings curve**. Parties, shorter
+arrival gaps and dearer dishes all arrive on their own, so rent is a floor under
+the economy rather than a race with it.
+
+### The debt is the whole design
+
+A shortfall is not a refused transaction. The till simply goes **negative**, the
+log says so, and the room has until the next closing time to get back to zero.
+Only failing *that* ends the run.
+
+So losing takes two closings and a warning in between, and the day in the middle
+is a real one: serve well, or walk out to the stall and sell the oven you cannot
+afford to keep. Nobody is ever evicted by surprise — the morning card says what
+tonight costs before the sign is turned, and a debt is on the card, in the log,
+and in the corner of the screen in red.
+
+A kitchen that recovers and then goes under again the following week is a
+kitchen living hand to mouth, which is a thing this game should be able to be.
+Only two closings in the red *running* is a loss.
+
+### What was wrong with the first rent, and what is different
+
+There was a nightly rent here once and it was removed, for a reason that still
+holds: **a number that arrives while nobody is looking is a worse teacher than a
+price tag.** That version charged from day one, refused nothing, explained
+nothing, and the day it took your last $30 you found out by looking at the till
+the next morning.
+
+What is different is not the charge, it is everything around it: it starts after
+the kitchen is yours, it is announced on the morning card *before* the day it is
+due, a shortfall is survivable, and the failure it eventually causes is named on
+screen rather than inferred from an empty balance.
+
+### Eviction
+
+`world.evicted` is the only end state the game has, and it is deliberately
+**inert**. Nothing is destroyed, the kitchen stands exactly where it was left,
+and the sign simply will not open another day. What ends a run is a rule; what
+starts the next one is a player choosing to, from the pause menu — which is the
+existing reset, relabelled *Start again*.
+
+That reset is the one place the "a reset keeps the menu" rule is suspended. A
+new run inheriting the old menu would open on day one with customers ordering
+pizza in a kitchen with no oven and no takings to buy one with.
+
+It is **saved** (schema 6). A repossessed kitchen that comes back from disk able
+to open again is not a lose condition, it is a loading screen.
 
 ## Demand follows seats
 

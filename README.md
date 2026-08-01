@@ -137,13 +137,19 @@ The white square in front of your chef is what you'll interact with.
 
    Ruined a dish? The **bin scrapes it** — the food goes and you keep the plate,
    dirty. There is no way to throw a plate away, and no way to get another one.
-9. When the day timer hits zero — or somebody turns the sign to **Closed** — you
-   wake into the next day's **morning**, with the day's takings
-   still in the till. Face any appliance and `Grab` to pick it up. A **ghost** of it
+9. When the day timer hits zero — or somebody turns the sign to **Closed** — the
+   **rent** comes out of the till and you wake into the next day's **morning**
+   with what is left. Face any appliance and `Grab` to pick it up. A **ghost** of it
    appears on the tile you're facing, showing exactly where it will land;
    `Grab` again to put it there. Drop it onto another appliance and the two
    **swap**. Tables are appliances too, so where the dining room goes is your
    decision.
+
+   **Rent starts on day 3** at $20 and rises by $5 a day, and the morning card
+   says what tonight will cost before you open. You are allowed to come up
+   short — the till goes into the red and you have until the *next* closing time
+   to clear it. Fail that and the kitchen is repossessed, which is the only way
+   to lose. See [the rent](docs/the-shop.md#the-rent).
 
    **The sign stands against the wall beside the door**, and it is how a day begins
    and ends. Face it, `Grab`, and the restaurant is open — there is no button

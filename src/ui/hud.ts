@@ -1,3 +1,4 @@
+import { rentFor } from "../data/economy";
 import { RECIPE_BY_ID } from "../data/recipes";
 import { isLastOrders } from "../sim/queries";
 import type { Ledger, World } from "../sim/types";
@@ -59,8 +60,6 @@ export class Hud {
    * the next morning's card comes back on its own.
    */
   private settled = 0;
-  /** What to call the key that works the sign — the player may have moved it. */
-  private grabKey = "Space";
 
   constructor(root: HTMLElement) {
     root.innerHTML = `
@@ -110,7 +109,10 @@ export class Hud {
     // whose value changes width makes the whole panel jump.
     this.set("time", formatTime(Math.max(0, world.dayTime)));
     this.set("timelabel", dayPhase(world));
-    this.set("money", `$${world.money}`);
+    // `-$15` rather than `$-15`: a debt is a minus in front of an amount, and
+    // the till can be in one now. See `chargeRent`.
+    this.set("money", money(world.money));
+    this.stats.get("money")?.classList.toggle("owed", world.money < 0);
     this.set("served", String(world.served));
     this.set("lost", String(world.lost));
 
@@ -122,12 +124,6 @@ export class Hud {
    * Who you're playing with, and how far away they are. Shown only online —
    * offline there is nothing to say and a permanent "local" badge is noise.
    */
-  /** The keys changed: say the new one rather than the one this was written with. */
-  setGrabKey(label: string): void {
-    this.grabKey = label;
-    this.setBanner("keys", `${label} facing it, or A on a pad`);
-  }
-
   private syncConnection(connection?: Connection): void {
     if (!this.connectionNode) return;
     if (!connection || connection.status === "local") {
@@ -241,43 +237,97 @@ export class Hud {
     this.bannerCard.classList.toggle("with-report", hasReport);
     // A report is the one thing worth a whole card. Everything else the morning
     // has to say fits on one line.
-    this.banner.classList.toggle("slim", !hasReport && this.settled === world.day);
+    // A repossessed kitchen never shrinks to a strip: the card is the only
+    // thing on screen that says the run has ended.
+    this.banner.classList.toggle(
+      "slim",
+      !hasReport && this.settled === world.day && !world.evicted,
+    );
+
+    if (world.evicted) {
+      // The run is over, and the card is the only thing that says so. It keeps
+      // yesterday's report above it: the last day's numbers are the epitaph.
+      this.setBanner("title", `Day ${closed.day} \u2014 closed down`);
+      this.setBanner("open", "The rent went unpaid twice, and the kitchen is repossessed");
+      this.setBanner("note", "Start again from the pause menu");
+      this.bannerCard.querySelector('[data-banner="note"]')?.classList.remove("urgent");
+      if (hasReport) this.setReport(closed, world.money);
+      return;
+    }
 
     this.setBanner("title", `Day ${world.day} \u2014 morning`);
     // Where, not which button. The day is opened by turning the sign in the
     // doorway, so the instruction names a *place in the room* — which is the
     // whole reason the sign exists. See `sim/systems/sign.ts`.
     this.setBanner("open", "Turn the sign by the door to open");
-    this.setBanner("keys", `${this.grabKey} facing it, or A on a pad`);
+    // Rent is the one cost nobody presses a button for, so the morning it is
+    // due says so before the day opens rather than after it has been taken.
+    // A debt is the same line doing a different job: it is the last warning
+    // before the run ends, so it stops being a footnote and turns red.
+    this.setBanner("note", rentNotice(world));
+    this.bannerCard
+      .querySelector('[data-banner="note"]')
+      ?.classList.toggle("urgent", world.money < 0);
     if (hasReport) this.setReport(closed, world.money);
   }
 
-  /** Yesterday, in one card: what came in, what went out, and what was missed. */
+  /**
+   * Yesterday, as a receipt: what happened, what came in, what went out.
+   *
+   * It used to be two sentences of dot-separated terms, which read as a list of
+   * facts rather than as an account — `Earned $40 · Tips $12 · Rent −$20` makes
+   * the reader do the arithmetic *and* work out which way each number points.
+   * Now the amounts are a right-aligned column in tabular figures, signed, and
+   * ruled off above the total, so "where did the day go" is answered by looking
+   * down one column.
+   *
+   * A row with nothing to say is removed rather than shown as a zero. "Walked
+   * out: none" and "Rent −0" are noise on the two cards — a clean day, and the
+   * first days of a run — that most want to be read quickly.
+   */
   private setReport(closed: Ledger, balance: number): void {
     this.setBanner("report-title", `Day ${closed.day}`);
-    this.setBanner(
-      "report",
-      [`Earned $${closed.earned}`, `Tips $${closed.tips}`, `Balance $${balance}`].join(" \u00b7 "),
-    );
+    // Shown even at zero: a day that fed nobody is a day the card has to be
+    // willing to say fed nobody.
+    this.setRow("served", `${closed.served}`, true);
+
     const lost = Object.entries(closed.lost)
       .map(([id, count]) => `${count} \u00d7 ${RECIPE_BY_ID.get(id)?.name ?? id}`)
       .join(", ");
-    this.setBanner(
-      "report-service",
-      `${closed.served} served` + (lost ? ` \u00b7 walked out: ${lost}` : ""),
-    );
+    this.setRow("lost", lost, lost !== "");
+
+    // Earned and tips are always shown, zero included: a day that took nothing
+    // is the day the card most needs to say so out loud.
+    this.setRow("earned", signed(closed.earned), true);
+    this.setRow("tips", signed(closed.tips), true);
+    this.setRow("rent", signed(-closed.rent), closed.rent > 0);
+    this.setRow("balance", money(balance), true);
+    this.bannerCard.querySelector('[data-row="balance"]')?.classList.toggle("owed", balance < 0);
+  }
+
+  /** One line of the receipt, or none: an empty row is removed, not blanked. */
+  private setRow(key: string, value: string, show: boolean): void {
+    const line = this.bannerCard.querySelector(`[data-row="${key}"]`);
+    line?.classList.toggle("empty", !show);
+    if (show) this.setBanner(key, value);
   }
 
   private buildBannerCard(): void {
     const reportTitle = document.createElement("h2");
     reportTitle.dataset.banner = "report-title";
-    reportTitle.className = "report-line";
-    const report = document.createElement("p");
-    report.dataset.banner = "report";
-    report.className = "report-line";
-    const service = document.createElement("p");
-    service.dataset.banner = "report-service";
-    service.className = "report-line";
+    const ledger = document.createElement("dl");
+    ledger.className = "ledger";
+    ledger.append(
+      row("served", "Served"),
+      row("lost", "Walked out", "out"),
+      row("earned", "Earned", "in"),
+      row("tips", "Tips", "in"),
+      row("rent", "Rent", "out"),
+      row("balance", "In the till", "total"),
+    );
+    const report = document.createElement("div");
+    report.className = "report";
+    report.append(reportTitle, ledger);
 
     const title = document.createElement("h1");
     title.dataset.banner = "title";
@@ -285,12 +335,20 @@ export class Hud {
     open.dataset.banner = "open";
     open.className = "banner-open";
 
-    // How to work it, under where to find it. Only on the card: by the time the
-    // banner is a strip the player has already used a grab to get there.
-    const keys = document.createElement("p");
-    keys.className = "banner-keys";
-    keys.dataset.banner = "keys";
-    this.bannerCard.replaceChildren(reportTitle, report, service, title, open, keys);
+    // The card's footer, and the only thing under the instruction: what tonight
+    // will cost, what is still owed, or how to start a new run. Empty when
+    // there is none of that to say, and hidden by `:empty` rather than by a
+    // class.
+    //
+    // It used to be the grab key spelled out — `Space facing it, or A on a pad`
+    // — which was a keybinding printed over the game for the life of the run to
+    // teach a verb the player has already used to get to the sign. The
+    // instruction above it names a *place*, which is the whole reason the sign
+    // exists, and the pause menu's controls table is where keys are read.
+    const note = document.createElement("p");
+    note.className = "banner-note";
+    note.dataset.banner = "note";
+    this.bannerCard.replaceChildren(report, title, open, note);
   }
 
   private setBanner(key: string, value: string): void {
@@ -311,6 +369,48 @@ function dayPhase(world: World): string {
   if (world.dayTime <= 0) return "Closing";
   if (isLastOrders(world)) return "Last orders";
   return "Time";
+}
+
+/** A signed amount: `−$15` rather than `$-15`. */
+function money(amount: number): string {
+  return amount < 0 ? `\u2212$${-amount}` : `$${amount}`;
+}
+
+/**
+ * The same, with the plus written out.
+ *
+ * Only on the receipt's movement rows, never on the till: `+$96` and `−$20` are
+ * a direction each, and a balance has none — it is where the day landed.
+ */
+function signed(amount: number): string {
+  return amount > 0 ? `+$${amount}` : money(amount);
+}
+
+/** One label/amount pair of the receipt, built once and filled by `setRow`. */
+function row(key: string, label: string, tone?: "in" | "out" | "total"): HTMLElement {
+  const line = document.createElement("div");
+  line.className = tone ? `row ${tone}` : "row";
+  line.dataset.row = key;
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const value = document.createElement("dd");
+  value.dataset.banner = key;
+  line.append(term, value);
+  return line;
+}
+
+/**
+ * What the landlord wants tonight, or what he is still owed.
+ *
+ * The debt is the louder of the two on purpose: an unpaid rent is one closing
+ * time away from ending the run, and the morning is when it can still be fixed
+ * — by serving well, or by selling something back to the stall.
+ */
+function rentNotice(world: World): string {
+  if (world.money < 0)
+    return `${money(world.money)} owed \u2014 clear it today or lose the kitchen`;
+  const rent = rentFor(world.day);
+  return rent > 0 ? `Rent $${rent} due at closing` : "";
 }
 
 function formatTime(seconds: number): string {

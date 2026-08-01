@@ -113,3 +113,34 @@ export const PLATE_WEIGHT = 5;
  * six. The guarantee is about relevance, and has no business overriding rarity.
  */
 export const SCARCE_BELOW = 2;
+
+// --- the rent ------------------------------------------------------------------
+
+/**
+ * The first day the landlord wants paying.
+ *
+ * Two mornings free, and they are the two a kitchen has no say in: day one is
+ * one dish and whatever the level handed you, and day two is the first recipe
+ * card. Charging before a room has made a single decision would be charging it
+ * for the tutorial.
+ */
+export const RENT_FROM_DAY = 3;
+
+/**
+ * What the first rent day costs, and what each day after it adds.
+ *
+ * Half a table to begin with, against a day that comfortably takes two or three
+ * of them. The step is deliberately shallower than the takings curve — parties,
+ * shorter arrival gaps and dearer dishes all arrive on their own — so rent is a
+ * floor under the economy rather than a race with it. It is meant to be the
+ * reason a kitchen cannot afford the oven *yet*, and only a lose condition for
+ * a room that has stopped serving anybody.
+ */
+export const RENT_BASE = 20;
+export const RENT_STEP = 5;
+
+/** What closing day `day` costs. Zero before the landlord starts asking. */
+export function rentFor(day: number): number {
+  if (day < RENT_FROM_DAY) return 0;
+  return RENT_BASE + RENT_STEP * (day - RENT_FROM_DAY);
+}

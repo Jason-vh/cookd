@@ -57,6 +57,17 @@ Near term:
   therefore an appliance holding two items. Everything in the game assumes
   `appliance.item` is one thing or nothing, and that assumption is worth more
   than the dish.
+- **The rent is in**, and with it the game's only lose condition: a standing
+  cost at closing time, a debt you may carry for exactly one day, and eviction
+  if you cannot clear it. See [the rent](the-shop.md#the-rent). It cost a curve,
+  twenty lines in `endDay`, a flag on the world and a schema bump — because the
+  hard part was never the rule, it was deciding what losing is allowed to *do*
+  to a kitchen somebody built. It does nothing: the room stands, and reset is
+  the only way out, taken on purpose. What is left of the idea is the half a
+  run-based game would want next — a **score to beat** on the closed-down card,
+  and somewhere to keep it. Right now a lost run leaves nothing behind but a
+  fresh kitchen.
+
 - **A menu cap** — [recipe cards](the-menu.md) ship without one: nothing stops a
   room unlocking the whole library. Deferred on purpose until the library is
   bigger than about five dishes, because "which five do we keep" is only a

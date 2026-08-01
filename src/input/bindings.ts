@@ -369,21 +369,6 @@ function codeLabel(code: string): string {
   return code;
 }
 
-/**
- * The key to *tell people about* for an action: the first one anybody has.
- *
- * On-screen prompts name one key, not a list, and now that the list can change
- * they cannot name it from memory — a banner that says `Enter` at somebody who
- * has rebound it is worse than no banner.
- */
-export function promptKey(bindings: KeyBindings, action: PlayerAction): string {
-  for (const scheme of bindings.players) {
-    const key = scheme[action][0];
-    if (key !== undefined) return keyLabel(key);
-  }
-  return "\u2014";
-}
-
 /** All the keys for one action, as one label: `Space / E`. */
 export function keysLabel(keys: readonly string[]): string {
   return keys.length === 0 ? "\u2014" : keys.map(keyLabel).join(" / ");

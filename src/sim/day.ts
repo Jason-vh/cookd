@@ -1,3 +1,4 @@
+import { rentFor } from "../data/economy";
 import { clearCards, restockCards } from "./cards";
 import { platesInWorld, stockPlates } from "./plates";
 import { kitchenWarnings } from "./queries";
@@ -40,6 +41,10 @@ export function someoneIsHolding(world: World): boolean {
  * about a day that already has a number.
  */
 export function beginDay(world: World, by = ""): void {
+  if (world.evicted) {
+    log(world, "The kitchen has been repossessed — start again from the pause menu");
+    return;
+  }
   if (someoneIsHolding(world)) {
     log(world, "Put down what you're holding first");
     return;
@@ -91,21 +96,65 @@ export function callLastOrders(world: World, by = ""): void {
  * HUD says "Day 4" throughout, first preparing and then serving, which is how
  * days work.
  *
- * Nothing is taken at close. A day's takings are the day's takings, and what
- * the room does with them is the morning's business — the pressure is meant to
- * be "we cannot afford the oven", and there is no fail state here on purpose.
+ * The **rent** is taken here, before the day rolls over, so it lands on the
+ * ledger of the day that paid it and the morning opens on a balance that is
+ * already true. It is the one thing that takes money out of a room without a
+ * player pressing anything, which is why it is charged where the day is named
+ * rather than anywhere quieter.
  */
 export function endDay(world: World): void {
   world.phase = "build";
   world.dayTime = 0;
   clearService(world);
   log(world, `Day ${world.day} closed`);
+  chargeRent(world);
 
   world.day++;
   restockStall(world);
   // The morning's cards, rolled from the seed and the day it now is. Most
   // mornings that is nothing at all — see `isCardMorning`.
   restockCards(world);
+}
+
+/**
+ * The landlord, and the only end this game has.
+ *
+ * The shop used to be a decision with no downside: money went up on its own, so
+ * buying nothing was always safe and "we cannot afford the oven" was a sentence
+ * about patience rather than about risk. A standing cost is what makes a
+ * morning's spending a bet — and what makes selling an appliance back at half
+ * price a *move* rather than an undo button.
+ *
+ * The debt is the whole design. A shortfall is not a refused transaction: the
+ * till simply goes negative, the log says so, and the room has until the next
+ * closing time to get back to zero. Only failing *that* ends the run, so a
+ * disastrous day costs a day of recovery, and losing takes two closings and a
+ * warning in between. There is no way to be evicted by surprise.
+ *
+ * Charged before `world.day++`, so `rentFor` is asked about the day that has
+ * just been played and the ledger the report card reads is the one it lands on.
+ */
+function chargeRent(world: World): void {
+  const rent = rentFor(world.day);
+  if (rent === 0) return;
+
+  // A negative balance here is yesterday's shortfall, still unpaid after a
+  // whole day of service. Nothing further is charged: the run is over, and
+  // adding rent to a debt nobody will ever settle would only make the final
+  // card lie about how far behind the room actually got.
+  if (world.money < 0) {
+    world.evicted = true;
+    log(world, `Rent unpaid twice — the kitchen is repossessed`);
+    return;
+  }
+
+  world.money -= rent;
+  world.today.rent = rent;
+  if (world.money < 0) {
+    log(world, `Rent $${rent} — $${-world.money} short, and due by tomorrow`);
+    return;
+  }
+  log(world, `Rent paid: $${rent}`);
 }
 
 /**

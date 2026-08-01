@@ -213,6 +213,8 @@ export type Frame = {
   money: number;
   served: number;
   lost: number;
+  /** The run is over: the rent went unpaid twice. See `chargeRent`. */
+  evicted: boolean;
   /** The day's own takings, for the end-of-day card. */
   today: Ledger;
   customers: FrameCustomer[];
@@ -340,6 +342,7 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
     money: world.money,
     served: world.served,
     lost: world.lost,
+    evicted: world.evicted,
     today: world.today,
     customers: world.customers.map((customer) => ({
       id: customer.id,
@@ -483,6 +486,7 @@ export function applyFrame(world: World, frame: Frame): void {
   world.money = frame.money;
   world.served = frame.served;
   world.lost = frame.lost;
+  world.evicted = frame.evicted;
   // Copied like the arrays below, and for the same reason: a frame is kept
   // after it is applied, and the world it was applied to is replayed over.
   world.today = { ...frame.today, lost: { ...frame.today.lost } };

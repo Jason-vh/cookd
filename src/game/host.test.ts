@@ -377,6 +377,25 @@ describe("reset", () => {
     // effect after a reset would be silently swallowed.
     expect(host.world.nextId).toBeLessThan(highWater + 1);
   });
+
+  test("restarting after an eviction is a new run, menu and all", () => {
+    // Reset normally keeps the recipes: days were spent on them. A repossessed
+    // kitchen has reset as its only way forward, so it is where a *new run*
+    // begins — and one that inherited the old menu would open on day one with
+    // customers ordering pizza in a kitchen with no oven and no money for one.
+    const host = new Host();
+    host.join("Ann");
+    host.world.unlocked = ["salad", "fries", "pizza"];
+    host.world.evicted = true;
+    host.world.money = -40;
+
+    host.reset("Ann");
+
+    expect(host.world.evicted).toBe(false);
+    expect(host.world.unlocked).toEqual(["salad"]);
+    expect(host.world.money).toBe(0);
+    expect(host.world.day).toBe(1);
+  });
 });
 
 describe("holding a seat", () => {

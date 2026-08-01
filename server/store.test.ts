@@ -36,6 +36,7 @@ function save(day: number): Save {
     stall: [],
     unlocked: ["salad"],
     unlockedDay: 0,
+    evicted: false,
   };
 }
 

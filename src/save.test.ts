@@ -96,6 +96,7 @@ describe("a file we cannot trust", () => {
     stall: [],
     unlocked: ["salad"],
     unlockedDay: 0,
+    evicted: false,
   };
 
   test("an unknown appliance kind is rejected at the door", () => {
@@ -192,6 +193,7 @@ describe("migration", () => {
       stall: [],
       unlocked: [],
       unlockedDay: 0,
+      evicted: false,
     };
     const migrated = migrate(v1);
     expect(migrated?.schema).toBe(SCHEMA);
@@ -218,6 +220,7 @@ describe("migration", () => {
       stall: [],
       unlocked: [],
       unlockedDay: 0,
+      evicted: false,
     };
     expect(migrate(future)).toBeNull();
     expect(restore(world(), future)).toEqual({ ok: false, reason: "schema" });
@@ -234,6 +237,7 @@ describe("migration", () => {
       stall: [],
       unlocked: [],
       unlockedDay: 0,
+      evicted: false,
     };
     expect(migrate(orphan)).toBeNull();
   });
@@ -256,6 +260,7 @@ describe("migration", () => {
       stall: [],
       unlocked: [],
       unlockedDay: 0,
+      evicted: false,
     };
     expect(migrate(v2)?.plates).toBe(4);
   });
@@ -271,6 +276,7 @@ describe("migration", () => {
       stall: [],
       unlocked: [],
       unlockedDay: 0,
+      evicted: false,
     };
     expect(migrate(v3)?.stall).toEqual([]);
   });
@@ -293,6 +299,7 @@ describe("migration", () => {
       stall: [],
       unlocked: [],
       unlockedDay: 0,
+      evicted: false,
     };
     const migrated = migrate(v4);
     expect(migrated?.unlocked).toEqual(BACKFILL_RECIPES);
@@ -306,6 +313,50 @@ describe("migration", () => {
     // ...and it keeps the kit it was built with, which the level no longer has.
     expect(kinds(target, "oven")).toBe(1);
     expect(kinds(target, "fryer")).toBe(1);
+  });
+
+  test("a v5 save cannot have failed to pay a rent that did not exist", () => {
+    // Read the way a real one arrives: off disk, with no `evicted` key at all.
+    const onDisk = {
+      schema: 5,
+      level: LEVEL.id,
+      appliances: [{ kind: "oven", x: 5, y: 5 }],
+      money: 40,
+      day: 7,
+      plates: 4,
+      stall: [],
+      unlocked: ["salad"],
+      unlockedDay: 0,
+    };
+    const parsed = parseSave(onDisk);
+    expect(parsed?.evicted).toBe(false);
+    expect(parsed && migrate(parsed)?.evicted).toBe(false);
+  });
+});
+
+describe("a run that ended", () => {
+  test("stays ended across a save and a reload", () => {
+    // A repossessed kitchen that comes back from disk able to open again is not
+    // a lose condition, it is a loading screen.
+    const before = world();
+    before.evicted = true;
+    before.money = -20;
+
+    const after = world();
+    expect(restore(after, snapshot(before))).toEqual({ ok: true });
+    expect(after.evicted).toBe(true);
+    // The debt comes back with it. Money is signed now.
+    expect(after.money).toBe(-20);
+  });
+
+  test("is worth writing down on its own", () => {
+    // Eviction changes nothing else a save records — no appliance moves, the
+    // money is whatever it already was — so without this the last thing that
+    // ever happens to a room is the one thing never written.
+    const first = world();
+    const before = saveSignature(first);
+    first.evicted = true;
+    expect(saveSignature(first)).not.toBe(before);
   });
 });
 

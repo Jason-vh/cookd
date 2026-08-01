@@ -4,6 +4,7 @@ import { CUSTOMER_KINDS, customerKind } from "../data/customers";
 import { HIGHWAY_STOP, LEVEL } from "../data/level";
 import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
 import { endDay, restartDay } from "./day";
+import { RENT_BASE, RENT_FROM_DAY, rentFor } from "../data/economy";
 import { DT, step } from "./step";
 import {
   canPlace,
@@ -35,6 +36,7 @@ import {
   applianceAtTile,
   createWorld,
   emptyInput,
+  emptyLedger,
   isSolid,
   PLAYER_RADIUS,
   removePlayer,
@@ -954,10 +956,9 @@ describe("day loop", () => {
     expect(world.day).toBe(2); // ...closing does
   });
 
-  test("closing takes nothing out of the till", () => {
-    // A day's takings are the day's takings. There is no rent and no standing
-    // cost of any kind: the pressure is what a kitchen cannot afford to buy,
-    // never a number that arrives while nobody is looking.
+  test("closing takes nothing out of the till on the days before the rent starts", () => {
+    // Two free mornings, and they are the two a room has no say in: one dish,
+    // and whatever the level handed it. See `RENT_FROM_DAY`.
     const world = makeWorld();
     world.money = 10;
     world.dayTime = 0.05;
@@ -965,6 +966,85 @@ describe("day loop", () => {
 
     expect(world.money).toBe(10);
     expect(world.phase).toBe("build");
+  });
+});
+
+describe("the rent", () => {
+  test("is free until the kitchen has made a decision, and rises after that", () => {
+    expect(rentFor(1)).toBe(0);
+    expect(rentFor(RENT_FROM_DAY - 1)).toBe(0);
+    expect(rentFor(RENT_FROM_DAY)).toBe(RENT_BASE);
+    expect(rentFor(RENT_FROM_DAY + 1)).toBeGreaterThan(RENT_BASE);
+  });
+
+  test("is taken at closing time, and lands on the day that paid it", () => {
+    const world = makeWorld();
+    world.day = RENT_FROM_DAY;
+    world.today = emptyLedger(RENT_FROM_DAY);
+    world.money = 100;
+    endDay(world);
+
+    expect(world.money).toBe(100 - RENT_BASE);
+    // On the closed day's ledger, not the morning's: the report card is about
+    // yesterday, and yesterday is what was charged.
+    expect(world.today.day).toBe(RENT_FROM_DAY);
+    expect(world.today.rent).toBe(RENT_BASE);
+    expect(world.day).toBe(RENT_FROM_DAY + 1);
+  });
+
+  test("a shortfall is a debt rather than a refusal", () => {
+    // The till goes negative and the day still ends. Refusing the charge would
+    // make a broke kitchen the safest kitchen there is.
+    const world = makeWorld();
+    world.day = RENT_FROM_DAY;
+    world.money = 5;
+    endDay(world);
+
+    expect(world.money).toBe(5 - RENT_BASE);
+    expect(world.evicted).toBe(false);
+    expect(world.events.some((e) => e.text.includes("short"))).toBe(true);
+  });
+
+  test("clearing the debt by the next closing time keeps the kitchen", () => {
+    const world = makeWorld();
+    world.day = RENT_FROM_DAY;
+    world.money = 0;
+    endDay(world);
+    expect(world.money).toBeLessThan(0);
+
+    // A day's takings, and the debt is settled. What happens next is an
+    // ordinary rent day, which may well put the room back in the red — that is
+    // a kitchen living hand to mouth, not a kitchen that has lost.
+    world.money = 200;
+    endDay(world);
+
+    expect(world.evicted).toBe(false);
+    expect(world.money).toBeGreaterThan(0);
+  });
+
+  test("a second closing still in the red ends the run", () => {
+    const world = makeWorld();
+    world.day = RENT_FROM_DAY;
+    world.money = 0;
+    endDay(world);
+    const owed = world.money;
+    expect(owed).toBeLessThan(0);
+
+    endDay(world);
+    expect(world.evicted).toBe(true);
+    // Nothing further is charged: the final card must say how far behind the
+    // room actually got, not how far behind a landlord kept billing it.
+    expect(world.money).toBe(owed);
+  });
+
+  test("an evicted kitchen will not open another day", () => {
+    const world = makeWorld();
+    world.evicted = true;
+    world.phase = "build";
+
+    flipSign(world);
+    expect(world.phase).toBe("build");
+    expect(world.events.some((e) => e.text.includes("repossessed"))).toBe(true);
   });
 });
 

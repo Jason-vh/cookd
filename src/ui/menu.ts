@@ -130,19 +130,26 @@ export class PauseMenu {
         ? [
             {
               action: "resume",
-              label: "Keep building",
-              hint: "Open up at the sign by the door",
+              label: world.evicted ? "Look around" : "Keep building",
+              hint: world.evicted ? "The kitchen is closed" : "Open up at the sign by the door",
             },
+            // The same action either way. An evicted room has exactly one way
+            // forward and this is it, so it is named for what it now does
+            // rather than for the layout it happens to restore.
             this.armed === "resetKitchen"
               ? {
                   action: "resetKitchen" as const,
-                  label: "Reset kitchen — are you sure?",
+                  label: world.evicted
+                    ? "Start again — are you sure?"
+                    : "Reset kitchen — are you sure?",
                   hint: "Confirm again · wipes it for everyone",
                 }
               : {
                   action: "resetKitchen" as const,
-                  label: "Reset kitchen",
-                  hint: "Back to the original layout",
+                  label: world.evicted ? "Start again" : "Reset kitchen",
+                  hint: world.evicted
+                    ? "A new kitchen, from day one"
+                    : "Back to the original layout",
                 },
           ]
         : [
@@ -172,7 +179,11 @@ export class PauseMenu {
       );
     }
 
-    this.title.textContent = world.phase === "build" ? `Day ${world.day} closed` : "Paused";
+    this.title.textContent = world.evicted
+      ? "Closed down"
+      : world.phase === "build"
+        ? `Day ${world.day} closed`
+        : "Paused";
     this.paint();
   }
 

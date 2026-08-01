@@ -86,6 +86,12 @@ body {
   color: var(--money);
 }
 
+/* The till can be in the red now, and red is the only readout of it during
+   service — the rest of the rent is words on the morning card. */
+#stats [data-money].owed {
+  color: var(--bad);
+}
+
 #stats [data-lost] {
   color: var(--bad);
 }
@@ -208,7 +214,7 @@ body {
  * saying it a third time.
  */
 #banner.slim h1,
-#banner.slim .banner-keys {
+#banner.slim .banner-note {
   display: none;
 }
 
@@ -224,16 +230,18 @@ body {
  * Hidden rather than removed: it appears and disappears every day, and a card
  * that changes height by rebuilding its children makes the whole banner jump.
  */
-#banner .card:not(.with-report) .report-line {
+#banner .card:not(.with-report) .report {
   display: none;
 }
 
-#banner .report-line {
-  margin: 3px 0;
+#banner .report {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
 }
 
-#banner h2.report-line {
-  margin: 0 0 6px;
+#banner .report h2 {
+  margin: 0 0 10px;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -241,10 +249,103 @@ body {
   color: var(--dim);
 }
 
-#banner .card.with-report .report-line:last-of-type {
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
+/*
+ * The receipt: what the day did, in a column you can read downwards.
+ *
+ * Left-aligned inside a centred card on purpose. The card is centred because
+ * the *morning* is an announcement; the ledger under it is an account, and an
+ * account with a ragged amount column is one the reader has to add up by eye.
+ */
+#banner .ledger {
+  /* Fixed, so a card is the same width on a quiet day and a ruinous one. A
+     long walkout list wraps instead of stretching the whole morning. */
+  width: 300px;
+  margin: 0 auto;
+  text-align: left;
+  font-size: 14px;
+}
+
+#banner .ledger .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 24px;
+  padding: 2px 0;
+}
+
+/* Nothing to say, so it is not a line. See `setRow`. */
+#banner .ledger .row.empty {
+  display: none;
+}
+
+#banner .ledger dt {
+  color: var(--dim);
+}
+
+#banner .ledger dd {
+  margin: 0;
+  /* So a walkout list several dishes long wraps under its label instead of
+     widening the card. Amounts never come close. */
+  min-width: 0;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The money starts here, under what the day actually did. */
+#banner .ledger [data-row="earned"] {
+  margin-top: 10px;
+}
+
+/* Which way the money went, in the one place the answer is worth a colour. */
+#banner .ledger .in dd {
+  color: var(--good);
+}
+
+#banner .ledger .out dd {
+  color: var(--bad);
+}
+
+/* The till, ruled off from the movements above it like any other total. */
+#banner .ledger .total {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+#banner .ledger .total dt {
+  color: var(--text);
+}
+
+#banner .ledger .total dd {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--money);
+}
+
+#banner .ledger .total.owed dd {
+  color: var(--bad);
+}
+
+/* The footer. Empty on a morning with nothing left to say, and an empty
+   paragraph still takes its margins, so it is removed rather than blanked. */
+#banner p.banner-note:empty {
+  display: none;
+}
+
+#banner p.banner-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+/* A debt is one closing time from ending the run, so it is not a footnote. */
+#banner p.banner-note.urgent {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--bad);
 }
 
 /*
@@ -625,15 +726,6 @@ body {
 .controls-reset:hover {
   color: #e8e6e1;
   filter: brightness(1.12);
-}
-
-/* The quiet line under the day-closed card: present if you need it, easy to
-   ignore if you don't. Deliberately not the same weight as the menu's key
-   chips — this sits on top of the game, not in a dialog you opened. */
-.banner-keys {
-  margin: 12px 0 0 !important;
-  font-size: 12px;
-  color: #7e808b;
 }
 
 /* One key chip, wherever a key has to be named. */

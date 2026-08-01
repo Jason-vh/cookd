@@ -328,10 +328,18 @@ export class Host {
     // history, and days were spent on them. What a reset does take away is the
     // equipment those cards delivered, which is exactly what it takes away from
     // everything else somebody bought, and the same shop is standing outside.
+    //
+    // **Unless the run is over.** A repossessed kitchen has reset as its only
+    // way forward, so this is where a new run begins, and a new run that
+    // inherited the old menu would open on day one with customers ordering
+    // pizza in a kitchen that has no oven and no takings to buy one with.
+    const evicted = this.world.evicted;
     const unlocked = this.world.unlocked;
     const unlockedDay = this.world.unlockedDay;
     this.world = createWorld(this.level, 0);
-    setUnlocked(this.world, unlocked, unlockedDay);
+    // A fresh world already starts on the salad, which is where a new run
+    // belongs.
+    if (!evicted) setUnlocked(this.world, unlocked, unlockedDay);
     restockStall(this.world);
     restockCards(this.world);
     this.accumulator = 0;

@@ -7,7 +7,6 @@ import { Hud } from "./ui/hud";
 import { PauseMenu } from "./ui/menu";
 import { MenuController } from "./ui/menu-controller";
 import { ControlsPanel } from "./ui/controls";
-import { promptKey } from "./input/bindings";
 import { JoinScreen } from "./ui/join";
 import { loadIdentity, saveIdentity } from "./identity";
 import { rotateCamera } from "./orientation";
@@ -44,11 +43,9 @@ const controls = new ControlsPanel(menu.controlsRoot, {
   onChange: (keys) => {
     identity.keys = keys;
     input.setBindings(keys);
-    hud.setGrabKey(promptKey(keys, "grab"));
     saveIdentity(identity);
   },
 });
-hud.setGrabKey(promptKey(identity.keys, "grab"));
 // A rebind left half-finished when the menu closed would otherwise eat the
 // next key pressed in the kitchen.
 menu.onHide = () => controls.stopCapturing();

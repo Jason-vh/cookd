@@ -383,6 +383,8 @@ export type Ledger = {
   served: number;
   /** Walkouts by recipe id — what the kitchen kept failing to make. */
   lost: Record<string, number>;
+  /** What the landlord took at closing time. Zero on a day nobody was charged. */
+  rent: number;
 };
 
 export type Phase = "service" | "build";
@@ -500,11 +502,25 @@ export type World = {
   /** Seconds until the next customer walks up the path. */
   nextArrivalIn: number;
 
+  /**
+   * The till, which can go **negative**: an unpaid rent is a debt rather than a
+   * refused transaction. See `chargeRent`.
+   */
   money: number;
   served: number;
   lost: number;
   /** The day in progress, or the one that just closed while it is the morning. */
   today: Ledger;
+
+  /**
+   * The run is over: the rent went unpaid two closings running.
+   *
+   * The only end state the game has, and it is deliberately inert — nothing is
+   * destroyed, the kitchen stands exactly as it was, and the sign simply will
+   * not open another day. Resetting is what starts a new run, which is a thing
+   * a player does on purpose rather than something a rule does to them.
+   */
+  evicted: boolean;
 
   /**
    * The recipes this room has bought, oldest first.

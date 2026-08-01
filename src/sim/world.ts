@@ -134,7 +134,7 @@ function makePlayer(id: number, name: string, spawn: Vec2): Player {
 
 /** A day's takings, before any of it has happened. */
 export function emptyLedger(day: number): Ledger {
-  return { day, earned: 0, tips: 0, served: 0, lost: {} };
+  return { day, earned: 0, tips: 0, served: 0, lost: {}, rent: 0 };
 }
 
 /**
@@ -186,6 +186,7 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     served: 0,
     lost: 0,
     today: emptyLedger(1),
+    evicted: false,
     // One dish, and it is the salad: every core verb, no burn risk, and a day
     // one that paces itself. Everything else is chosen from a card.
     unlocked: [...STARTING_RECIPES],

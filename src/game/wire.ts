@@ -409,9 +409,10 @@ function parseFrame(value: unknown): Frame | null {
   const money = num(value.money);
   const served = int(value.served);
   const lost = int(value.lost);
+  const evicted = bool(value.evicted);
   if (tick === null || nextId === null || day === null || dayTime === null) return null;
   if (dayLength === null) return null;
-  if (money === null || served === null || lost === null) return null;
+  if (money === null || served === null || lost === null || evicted === null) return null;
   if (value.phase !== "service" && value.phase !== "build") return null;
 
   const today = parseLedger(value.today);
@@ -450,6 +451,7 @@ function parseFrame(value: unknown): Frame | null {
     money,
     served,
     lost,
+    evicted,
     today,
     customers,
     events,
@@ -467,7 +469,9 @@ function parseLedger(value: unknown): Ledger | null {
   const earned = num(value.earned);
   const tips = num(value.tips);
   const served = int(value.served);
+  const rent = num(value.rent);
   if (day === null || earned === null || tips === null || served === null) return null;
+  if (rent === null) return null;
   if (!isRecord(value.lost)) return null;
 
   const entries = Object.entries(value.lost);
@@ -478,7 +482,7 @@ function parseLedger(value: unknown): Ledger | null {
     if (key.length > MAX_NAME || count === null) return null;
     lost[key] = count;
   }
-  return { day, earned, tips, served, lost };
+  return { day, earned, tips, served, lost, rent };
 }
 
 function parseFrameCustomer(value: unknown): Frame["customers"][number] | null {

@@ -103,6 +103,16 @@ export type Save = {
    */
   unlocked: string[];
   unlockedDay: number;
+  /**
+   * The run ended: the rent went unpaid twice.
+   *
+   * Saved because it is the one piece of run state a refresh could otherwise
+   * *undo* — a repossessed kitchen that comes back from disk able to open again
+   * is not a lose condition, it is a loading screen. The layout is kept exactly
+   * as it was: an evicted room is still somebody's restaurant to look at, and
+   * resetting is a decision they make rather than one made for them.
+   */
+  evicted: boolean;
 };
 
 /**
@@ -120,7 +130,7 @@ export function saveSignature(world: World): string {
   }
   const stall = takenSlots(world).join(",");
   const menu = world.unlocked.join(",");
-  return `${layout}|${world.money}|${world.day}|${platesInWorld(world)}|${stall}|${menu}|${world.unlockedDay}`;
+  return `${layout}|${world.money}|${world.day}|${platesInWorld(world)}|${stall}|${menu}|${world.unlockedDay}|${world.evicted}`;
 }
 
 /**
@@ -173,6 +183,7 @@ export function snapshot(world: World, level: LevelDef = LEVEL): Save {
     stall: takenSlots(world),
     unlocked: [...world.unlocked],
     unlockedDay: world.unlockedDay,
+    evicted: world.evicted,
   };
 }
 
@@ -243,6 +254,10 @@ export function parseSave(value: unknown): Save | null {
   const def = value.def === undefined ? null : parseLevelDef(value.def);
   if (value.def !== undefined && (!def || def.id !== level)) return null;
 
+  // Absent before schema 6, when nothing could end a run.
+  if (value.evicted !== undefined && typeof value.evicted !== "boolean") return null;
+  const evicted = value.evicted === true;
+
   const appliances: SavedAppliance[] = [];
   for (const entry of value.appliances) {
     if (!isRecord(entry)) return null;
@@ -267,6 +282,7 @@ export function parseSave(value: unknown): Save | null {
     stall,
     unlocked,
     unlockedDay: Math.floor(unlockedDay),
+    evicted,
   };
 }
 
@@ -335,11 +351,14 @@ const MIGRATIONS: Record<number, (save: Save) => Save | null> = {
   // `unlockedDay: 0` says "nothing was unlocked recently", so no launch-day
   // weighting and no morning that thinks it has already spent its cards.
   4: (save) => ({ ...save, schema: 5, unlocked: [...BACKFILL_RECIPES], unlockedDay: 0 }),
-  // v5 predates generated kitchens, so every v5 save is a registry level and
-  // has nothing to carry. Nothing to do, which is the honest migration: the
-  // bump exists so that a *future* reader knows a save without a `def` was
-  // written when that meant "look it up" rather than "the file is incomplete".
-  5: (save) => ({ ...save, schema: 6 }),
+  // v5 predates two things. Generated kitchens: every v5 save is a registry
+  // level, so a missing `def` means "look it up" rather than "the file is
+  // incomplete", and there is nothing to backfill. And the rent: no v5 kitchen
+  // can have failed to pay it, and they banked their takings under a promise
+  // that nothing would ever take money out of the till, so they arrive in the
+  // new economy with whatever that promise left them — the kindest possible
+  // starting position, and the reason this needs no more than a flag.
+  5: (save) => ({ ...save, schema: 6, evicted: false }),
 };
 
 export function migrate(save: Save): Save | null {
@@ -419,6 +438,7 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
 
   world.money = migrated.money;
   world.day = migrated.day;
+  world.evicted = migrated.evicted;
   world.today = emptyLedger(migrated.day);
   // Before either restock: the stall stocks for the menu and the stand rolls
   // against it, so a world holding the wrong one would roll the wrong shop.
