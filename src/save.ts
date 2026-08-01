@@ -1,5 +1,5 @@
 import { APPLIANCES, ESSENTIAL, applianceDef } from "./data/appliances";
-import { LEVEL, type LevelDef } from "./data/level";
+import { LEVEL, type LevelDef, levelById, parseLevelDef } from "./data/level";
 import { BACKFILL_RECIPES } from "./data/progression";
 import { restockCards, setUnlocked } from "./sim/cards";
 import { MAX_PLATES, platesInWorld, stockPlates } from "./sim/plates";
@@ -30,7 +30,7 @@ import { emptyLedger, nearestFreeTile, spawnAppliance, touchLayout } from "./sim
  * schema bump was therefore indistinguishable from "everyone loses their
  * build", and nothing said so.
  */
-export const SCHEMA = 5;
+export const SCHEMA = 6;
 
 export type SavedAppliance = {
   kind: ApplianceKind;
@@ -50,6 +50,25 @@ export type Save = {
    * rather than a side effect of touching the file.
    */
   level: string;
+  /**
+   * The kitchen itself, for a room whose level is not in the registry.
+   *
+   * Absent for the hand-made levels, where the id is a pointer into a table
+   * both ends compile and storing the geometry would be storing something we
+   * can always look up. Present for a [generated](./data/generate.ts) one,
+   * where there is nothing to look up: the id names a building that only ever
+   * existed as the output of a function, and a function is free to change.
+   *
+   * This is what makes the generator safe to retune. Without it, tomorrow's
+   * version of `generateLevel` would silently move the walls of every room
+   * already playing — and their saved appliance coordinates with them.
+   *
+   * It also makes `snapshot`'s rule about immovable furniture true again. That
+   * furniture is deliberately not saved because it is rebuilt "from the level
+   * itself, the only place that can still be right after the level changes";
+   * for a generated kitchen this *is* the level itself.
+   */
+  def?: LevelDef;
   appliances: SavedAppliance[];
   money: number;
   day: number;
@@ -129,7 +148,7 @@ function takenSlots(world: World): number[] {
  * them from the level itself instead, which is where they came from and the
  * only place that can still be right after the level changes.
  */
-export function snapshot(world: World, levelId: string = LEVEL.id): Save {
+export function snapshot(world: World, level: LevelDef = LEVEL): Save {
   const appliances: SavedAppliance[] = [];
   for (const appliance of world.appliances.values()) {
     if (!applianceDef(appliance.kind).movable) continue;
@@ -142,7 +161,11 @@ export function snapshot(world: World, levelId: string = LEVEL.id): Save {
   }
   return {
     schema: SCHEMA,
-    level: levelId,
+    level: level.id,
+    // Only when there is nowhere else to get it from. A save that carried a
+    // copy of the park would be a save that disagrees with the park the day
+    // somebody moves one of its walls.
+    ...(levelById(level.id) ? {} : { def: level }),
     appliances,
     money: world.money,
     day: world.day,
@@ -214,6 +237,12 @@ export function parseSave(value: unknown): Save | null {
   const unlockedDay = value.unlockedDay === undefined ? 0 : finite(value.unlockedDay);
   if (unlockedDay === null || unlockedDay < 0) return null;
 
+  // Absent before schema 6, and absent for every registry level for ever.
+  // Present but malformed is a file we do not understand — and this one is
+  // load-bearing, because it is the building the coordinates below are in.
+  const def = value.def === undefined ? null : parseLevelDef(value.def);
+  if (value.def !== undefined && (!def || def.id !== level)) return null;
+
   const appliances: SavedAppliance[] = [];
   for (const entry of value.appliances) {
     if (!isRecord(entry)) return null;
@@ -230,6 +259,7 @@ export function parseSave(value: unknown): Save | null {
   return {
     schema,
     level,
+    ...(def ? { def } : {}),
     appliances,
     money,
     day: Math.max(1, Math.floor(day)),
@@ -305,6 +335,11 @@ const MIGRATIONS: Record<number, (save: Save) => Save | null> = {
   // `unlockedDay: 0` says "nothing was unlocked recently", so no launch-day
   // weighting and no morning that thinks it has already spent its cards.
   4: (save) => ({ ...save, schema: 5, unlocked: [...BACKFILL_RECIPES], unlockedDay: 0 }),
+  // v5 predates generated kitchens, so every v5 save is a registry level and
+  // has nothing to carry. Nothing to do, which is the honest migration: the
+  // bump exists so that a *future* reader knows a save without a `def` was
+  // written when that meant "look it up" rather than "the file is incomplete".
+  5: (save) => ({ ...save, schema: 6 }),
 };
 
 export function migrate(save: Save): Save | null {

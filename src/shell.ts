@@ -1,4 +1,5 @@
-import { LEVEL, levelById } from "./data/level";
+import { LEVEL, RANDOM_LEVEL_ID, levelById, type LevelDef } from "./data/level";
+import { generateLevel, seedFromCode } from "./data/generate";
 import { InputManager } from "./input";
 import { KitchenAudio } from "./audio";
 import { View } from "./render/view";
@@ -62,7 +63,27 @@ const forceLocal = params.has("local");
 let game: Game = new LocalGame(null, 1);
 let view = new View(canvas, game.world, LEVEL.biome);
 /** Where a *new* kitchen would be built. An existing room keeps its own. */
-let wantedLevel = levelById(identity.level) ?? LEVEL;
+/**
+ * What the picker last said, which is not the same as which kitchen that is.
+ *
+ * "Surprise me" is a standing instruction rather than a place, so the choice
+ * and the building it produced are two facts and this is the first of them.
+ */
+let wantedChoice = identity.level;
+let wantedLevel = chosenLevel(identity.level, roomFromUrl);
+
+/**
+ * The kitchen behind a choice from the join screen.
+ *
+ * `RANDOM_LEVEL_ID` is a *request*, not a level: it is built here, from the
+ * room code, so that offline play and a room this tab is about to create both
+ * get the same building the server would have made — and so that the link
+ * somebody shares is the restaurant they were looking at.
+ */
+function chosenLevel(id: string, room: string): LevelDef {
+  if (id === RANDOM_LEVEL_ID) return generateLevel(seedFromCode(room || "MAIN"));
+  return levelById(id) ?? LEVEL;
+}
 const audio = new KitchenAudio(identity.muted);
 
 function socketUrl(): string {
@@ -113,7 +134,10 @@ function goOnline(room: string, name: string, level = wantedLevel, creating = fa
   wantedLevel = level;
   identity.name = name;
   identity.room = room;
-  if (creating) identity.level = level.id;
+  // The *choice* is remembered, not the kitchen it produced: "surprise me"
+  // should still surprise in the next room, and a generated id names a
+  // building no picker can offer.
+  if (creating) identity.level = wantedChoice;
   // Written back into `identity` rather than saved past it: the mute toggle
   // also saves, and building its payload from a stale object used to undo the
   // room you had just joined.
@@ -150,12 +174,9 @@ function goOnline(room: string, name: string, level = wantedLevel, creating = fa
         // invitation to *their* restaurant, so we load theirs rather than
         // telling the guest they picked the wrong place — which means a whole
         // new game and a new view, because the walls are baked at construction.
-        onLevel: (id) => {
-          const theirs = levelById(id);
-          if (theirs) {
-            hud.notify(`This kitchen is in the ${theirs.name.toLowerCase()}`);
-            goOnline(room, name, theirs);
-          }
+        onLevel: (theirs) => {
+          hud.notify(`This kitchen is the ${theirs.name.toLowerCase()}`);
+          goOnline(room, name, theirs);
         },
       },
     ),
@@ -192,8 +213,9 @@ const join = new JoinScreen(document.querySelector<HTMLElement>("#join")!, {
     // The click that starts the game is the gesture the audio hardware needs;
     // there is no earlier one, and without it the first sound is swallowed.
     audio.unlock();
-    wantedLevel = levelById(id) ?? LEVEL;
-    identity.level = wantedLevel.id;
+    wantedChoice = id;
+    wantedLevel = chosenLevel(id, roomFromUrl);
+    identity.level = id;
     saveIdentity(identity);
     useGame(new LocalGame(null, 1, wantedLevel));
   },
@@ -202,7 +224,10 @@ const join = new JoinScreen(document.querySelector<HTMLElement>("#join")!, {
   // turns out to stand somewhere else.
   onPlayOnline: (room, name, id) => {
     audio.unlock();
-    goOnline(room, name, levelById(id) ?? wantedLevel, id !== "");
+    // An empty id means "joining": no opinion to send, so we keep our best
+    // guess to predict against until the server names the room's own kitchen.
+    if (id !== "") wantedChoice = id;
+    goOnline(room, name, id === "" ? wantedLevel : chosenLevel(id, room), id !== "");
   },
 });
 

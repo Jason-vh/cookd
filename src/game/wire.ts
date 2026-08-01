@@ -1,4 +1,6 @@
 import type { ClientMessage, Frame, Layout, ServerMessage } from "./protocol";
+import { parseLevelDef } from "../data/level";
+import { levelProblems } from "../data/validate";
 import { MAX_PLATES } from "../sim/plates";
 import type {
   ApplianceKind,
@@ -626,9 +628,14 @@ export function parseServerMessage(value: unknown): ServerMessage | null {
   switch (value.t) {
     case "welcome": {
       const room = str(value.room, MAX_ROOM);
-      const level = str(value.level, MAX_NAME * 4);
+      // Structure first, then whether it is a kitchen anybody could cook in.
+      // A server sending a building with no door is a server we cannot play
+      // against, and finding that out here beats finding it out as a customer
+      // who can never arrive.
+      const level = parseLevelDef(value.level);
       const rawYou = arr(value.you, MAX_SEATS);
       if (room === null || level === null || !rawYou) return null;
+      if (levelProblems(level).length > 0) return null;
       const you = all(rawYou, int);
       const layout = parseLayout(value.layout);
       const frame = parseFrame(value.frame);

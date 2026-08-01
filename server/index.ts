@@ -1,7 +1,8 @@
 import type { ServerWebSocket } from "bun";
 import { DT } from "../src/sim/step";
 import { Host } from "../src/game/host";
-import { DEFAULT_LEVEL_ID, levelById } from "../src/data/level";
+import { DEFAULT_LEVEL_ID, RANDOM_LEVEL_ID, levelById, type LevelDef } from "../src/data/level";
+import { generateLevel, seedFromCode } from "../src/data/generate";
 import {
   PROTOCOL_VERSION,
   SEND_EVERY,
@@ -11,7 +12,7 @@ import {
   type ServerMessage,
 } from "../src/game/protocol";
 import { decode, parseClientMessage } from "../src/game/wire";
-import { saveSignature, snapshot } from "../src/save";
+import { saveSignature, snapshot, type Save } from "../src/save";
 import type { World } from "../src/sim/types";
 import { loadSave, saveKitchen } from "./store";
 
@@ -159,14 +160,7 @@ function roomFor(
   if (existing) return existing;
   if (rooms.size >= MAX_ROOMS && !evictColdestRoom()) return null;
 
-  // A room that has been played already **is** a kitchen, and its save says
-  // which one. Only a room being made for the first time can honour what the
-  // person at the door asked for — otherwise joining a friend with the wrong
-  // thing selected would rebuild their restaurant as a different level, which
-  // `restore` would then refuse as stale and quietly reset.
-  const id = loaded.save?.level || wanted;
-  const level = (id ? levelById(id) : null) ?? levelById(DEFAULT_LEVEL_ID);
-  if (!level) throw new Error(`missing default level ${DEFAULT_LEVEL_ID}`);
+  const level = levelFor(code, loaded.save, wanted);
   const host = new Host(loaded.save, level);
 
   // A save we could not *understand* is not a save we may overwrite. `loadSave`
@@ -247,7 +241,7 @@ function persisted(room: Room): Promise<void> {
  * notices a change tries again.
  */
 async function writeThrough(room: Room, signature: string): Promise<void> {
-  const ok = await saveKitchen(room.code, snapshot(room.host.world, room.host.level.id));
+  const ok = await saveKitchen(room.code, snapshot(room.host.world, room.host.level));
   if (ok) room.saved = signature;
 }
 
@@ -260,6 +254,32 @@ async function writeThrough(room: Room, signature: string): Promise<void> {
  * Refusing an over-long code is friendlier than silently reinterpreting it, and
  * the join screen already limits what a player can type.
  */
+/**
+ * Which kitchen this room is, in the one place that decides it.
+ *
+ * A room that has been played already **is** a kitchen, and its save says which
+ * one. Only a room being made for the first time can honour what the person at
+ * the door asked for — otherwise joining a friend with the wrong thing selected
+ * would rebuild their restaurant as a different level, which `restore` would
+ * then refuse as stale and quietly reset.
+ *
+ * A **generated** kitchen is carried by the save itself rather than looked up,
+ * and that is the whole point of storing it: the generator may be retuned
+ * tomorrow, and this room's building must not change underneath it. Nothing
+ * here ever asks the code what a room's walls used to look like.
+ *
+ * Seeded from the room code, so the link that invites somebody *is* the
+ * kitchen — the same trick the hash in the URL already plays.
+ */
+function levelFor(code: string, save: Save | null | undefined, wanted: string): LevelDef {
+  if (save?.def) return save.def;
+  const id = save?.level || wanted;
+  if (id === RANDOM_LEVEL_ID) return generateLevel(seedFromCode(code));
+  const level = (id ? levelById(id) : null) ?? levelById(DEFAULT_LEVEL_ID);
+  if (!level) throw new Error(`missing default level ${DEFAULT_LEVEL_ID}`);
+  return level;
+}
+
 const ROOM_CODE = /^[A-Z0-9]{1,8}$/;
 
 function normaliseRoom(raw: string): string | null {
@@ -592,7 +612,7 @@ const listener = Bun.serve<SocketData, "/ws">({
         send(client, {
           t: "welcome",
           room: code,
-          level: room.host.level.id,
+          level: room.host.level,
           you: client.players,
           layout: encodeLayout(room.host.world),
           frame: encodeFrame(room.host.world, room.host.acks),

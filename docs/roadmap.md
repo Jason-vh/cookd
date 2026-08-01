@@ -88,7 +88,15 @@ Bigger:
   refusing the sale is the wrong instrument. What is *not* checked is anything
   about how far things are from each other: a kitchen may be terribly laid out,
   and that is the game.
-- **Procedural kitchens** and a run-based meta layer à la PlateUp.
+- **A run-based meta layer** à la PlateUp. [Procedural
+  kitchens](content.md#kitchens-nobody-drew) are in — one template, seeded from
+  the room code — but they are worth much less on their own than they look. A
+  room keeps its kitchen for ever and it is saved, so today a generated building
+  is a one-time coin flip whose only visible effect is that some rooms got a
+  worse restaurant than others. Randomisation pays rent when you get a *new*
+  kitchen each run, which is the half that is missing. The generator was still
+  worth doing first: it is where the second template, and any notion of a
+  kitchen being *good* rather than merely legal, has to be worked out.
 
 ## The build phase
 

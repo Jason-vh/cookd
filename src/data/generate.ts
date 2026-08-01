@@ -27,6 +27,21 @@ import { at, crate, rect, run, wall, type LevelDef, type Placement, type WallRun
  * bug, and a retry loop is how you never find out.
  */
 
+/**
+ * A seed from a room code, so the link that invites somebody *is* the kitchen.
+ *
+ * The hash in the URL is already the invitation; this makes it the floor plan
+ * too, which means a room has a building before anybody has agreed on one and
+ * two people typing the same code get the same restaurant.
+ */
+export function seedFromCode(code: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < code.length; i++) {
+    hash = Math.imul(hash ^ code.charCodeAt(i), 0x01000193);
+  }
+  return hash | 0;
+}
+
 /** The building always sits this far in from the edge of the grid. */
 const MARGIN = 2;
 

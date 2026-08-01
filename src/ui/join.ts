@@ -1,4 +1,4 @@
-import { DEFAULT_LEVEL_ID, LEVELS } from "../data/level";
+import { DEFAULT_LEVEL_ID, LEVELS, RANDOM_LEVEL_ID } from "../data/level";
 import type { InputManager } from "../input";
 import type { Identity } from "../identity";
 
@@ -38,11 +38,18 @@ type Options = {
 
 type Mode = "create" | "join";
 
-/** Every kitchen the game knows about, named. Levels are content, not a menu. */
+/**
+ * Every kitchen the game knows about, named, and then the one it does not.
+ *
+ * Levels are content, not a menu — so the drawn ones are listed from the
+ * registry and the generated one is a single extra entry rather than a second
+ * control. What it builds depends on the room code, which is the next field up.
+ */
 function levelOptions(): string {
-  return Object.values(LEVELS)
+  const drawn = Object.values(LEVELS)
     .map((level) => `<option value="${level.id}">${level.name}</option>`)
     .join("");
+  return `${drawn}<option value="${RANDOM_LEVEL_ID}">Surprise me</option>`;
 }
 
 function randomRoom(): string {
@@ -130,7 +137,9 @@ export class JoinScreen {
     this.nameField.value = identity.name;
     this.codeField.value = room || identity.room;
     this.root.querySelector("[data-code]")!.textContent = room;
-    this.levelField.value = LEVELS[identity.level] ? identity.level : DEFAULT_LEVEL_ID;
+    const remembered = identity.level;
+    this.levelField.value =
+      LEVELS[remembered] || remembered === RANDOM_LEVEL_ID ? remembered : DEFAULT_LEVEL_ID;
 
     // One signal for every listener, so `dispose` cannot detach some of them
     // and leave others. The keydown handler in particular outlived the screen

@@ -1,4 +1,5 @@
 import { adoptPlayer, touchLayout } from "../sim/world";
+import type { LevelDef } from "../data/level";
 import type {
   Appliance,
   Customer,
@@ -47,8 +48,11 @@ import type {
  * protocols — but a missing field is a v2 server, and `parseFrameCustomer`
  * rejects the frame it is missing from, which is every frame with anybody in
  * the dining room.
+ *
+ * v4 sends the kitchen itself in `welcome` rather than its id. See the note
+ * there: the id stopped being enough the moment a level could be generated.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /**
  * Ticks between broadcasts: a 60Hz simulation goes out at 20Hz.
@@ -255,13 +259,31 @@ export type ClientMessage =
 
 export type ServerMessage =
   /**
-   * `level` is an *id*, never geometry. Both ends compile the same registry, so
-   * naming a kitchen is enough for a client to build the right walls, door and
-   * biome — and a server cannot get somebody's floor plan wrong. Before this,
-   * the client silently assumed the one level it happened to be built with,
-   * which made a second level a protocol change rather than a data addition.
+   * `level` is the **kitchen itself**, not its id.
+   *
+   * It was an id, and the argument for that was a good one: both ends compile
+   * the same registry, so naming a kitchen is enough to build the right walls,
+   * and a server cannot get somebody's floor plan wrong. But that argument
+   * rests on the client already holding an independently correct copy — the id
+   * is a pointer into two identical registries, and any drift between them is a
+   * reviewed source edit with `-3` on the end of it.
+   *
+   * A [generated kitchen](../data/generate.ts) inverts that. There is no copy to
+   * point at, so the id stops pinning the geometry and the *bundle* pins it
+   * instead: a client on yesterday's deploy and a server on today's would build
+   * different walls from the same id, silently, with no message shape changed to
+   * notice it. That is precisely the failure the id was chosen to prevent.
+   *
+   * So the room's geometry is one fact, held by whoever is running the room, and
+   * sent once at the door. It costs a few KB on a connection that then carries
+   * ~900 bytes twenty times a second — about two frames, paid once — and it buys
+   * a generator that can be retuned without a migration story, because no
+   * existing room ever asks the code what its building looked like.
+   *
+   * Parsed like everything else that arrives over a socket, and then run past
+   * `levelProblems`: see `game/wire.ts`.
    */
-  | { t: "welcome"; room: string; level: string; you: number[]; layout: Layout; frame: Frame }
+  | { t: "welcome"; room: string; level: LevelDef; you: number[]; layout: Layout; frame: Frame }
   | { t: "layout"; layout: Layout }
   | { t: "frame"; frame: Frame }
   | { t: "joined"; id: number }

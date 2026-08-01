@@ -140,7 +140,7 @@ class Server {
         from.deliver({
           t: "welcome",
           room: "TEST",
-          level: this.host.level.id,
+          level: this.host.level,
           you,
           layout: encodeLayout(this.host.world),
           frame: this.frame(),

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "../data/level";
+import { generateLevel, seedFromCode } from "../data/generate";
 import { Host } from "./host";
 import { beginDay } from "../sim/day";
 import { encodeFrame, encodeLayout, PROTOCOL_VERSION } from "./protocol";
@@ -158,7 +159,7 @@ describe("server messages", () => {
     const message = {
       t: "welcome" as const,
       room: "MAIN",
-      level: LEVEL.id,
+      level: LEVEL,
       you: [0],
       layout: encodeLayout(host.world),
       frame: encodeFrame(host.world, host.acks),
@@ -166,6 +167,48 @@ describe("server messages", () => {
     const parsed = decode(JSON.stringify(message), parseServerMessage);
     expect(parsed).not.toBeNull();
     expect(parsed).toEqual(message);
+  });
+
+  // The kitchen itself is on the wire now, so it is also the largest thing a
+  // server can get wrong. A guest's whole floor plan arrives this way, and a
+  // building with no door would be a room they can watch and never enter.
+  test("a generated kitchen round-trips, walls and all", () => {
+    const host = new Host();
+    const level = generateLevel(seedFromCode("PIER"));
+    const message = {
+      t: "welcome" as const,
+      room: "PIER",
+      level,
+      you: [0],
+      layout: encodeLayout(host.world),
+      frame: encodeFrame(host.world, host.acks),
+    };
+    expect(decode(JSON.stringify(message), parseServerMessage)).toEqual(message);
+  });
+
+  test("a welcome carrying a kitchen nobody could cook in is dropped", () => {
+    const host = new Host();
+    const welcome = (level: unknown) =>
+      decode(
+        JSON.stringify({
+          t: "welcome",
+          room: "PIER",
+          level,
+          you: [0],
+          layout: encodeLayout(host.world),
+          frame: encodeFrame(host.world, host.acks),
+        }),
+        parseServerMessage,
+      );
+
+    const level = generateLevel(seedFromCode("PIER"));
+    // Structurally fine, and still not a restaurant: no way in, so no customer
+    // can ever arrive. That is `levelProblems` talking, not the parser.
+    expect(welcome({ ...level, door: { x: 0, y: 0 } })).toBeNull();
+    // And the plain refusals, which is the parser.
+    expect(welcome({ ...level, size: { width: 4096, height: 4096 } })).toBeNull();
+    expect(welcome(level.id)).toBeNull();
+    expect(welcome(level)).not.toBeNull();
   });
 
   test("a frame carrying a busy appliance round-trips its item", () => {

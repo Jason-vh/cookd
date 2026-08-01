@@ -1,14 +1,16 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BEACH_SHACK, LEVEL } from "../src/data/level";
+import { BEACH_SHACK, LEVEL, RANDOM_LEVEL_ID } from "../src/data/level";
+import { generateLevel, seedFromCode } from "../src/data/generate";
 import { PROTOCOL_VERSION } from "../src/game/protocol";
 import { parseServerMessage } from "../src/game/wire";
 import type { ServerMessage } from "../src/game/protocol";
 import type { PlayerInput } from "../src/sim/types";
 import { emptyInput } from "../src/sim/world";
-import { parseSave } from "../src/save";
+import { parseSave, snapshot } from "../src/save";
+import { createWorld } from "../src/sim/world";
 
 /**
  * The transport, over a real socket.
@@ -125,7 +127,7 @@ describe("the handshake", () => {
     const client = await connected("HELLO", "Ann", 2);
     const welcome = await client.waitFor("welcome");
     expect(welcome?.t === "welcome" && welcome.you.length).toBe(2);
-    expect(welcome?.t === "welcome" && welcome.level).toBe(LEVEL.id);
+    expect(welcome?.t === "welcome" && welcome.level.id).toBe(LEVEL.id);
     expect(welcome?.t === "welcome" && welcome.layout.appliances.length).toBeGreaterThan(20);
     client.close();
   });
@@ -141,7 +143,29 @@ describe("the handshake", () => {
     const guest = await new Client().open();
     guest.hello("BEACH", "Bea", 1, "", LEVEL.id);
     const welcome = await guest.waitFor("welcome");
-    expect(welcome?.t === "welcome" && welcome.level).toBe(BEACH_SHACK.id);
+    expect(welcome?.t === "welcome" && welcome.level.id).toBe(BEACH_SHACK.id);
+
+    host.close();
+    guest.close();
+  });
+
+  test("a kitchen nobody drew is built from the room code, and shared whole", async () => {
+    // The two halves of what makes a generated room work: the *server* decides
+    // the building once, from the code in the link, and then hands the whole
+    // thing to everybody who walks in. A guest's bundle is never asked to
+    // rebuild it from an id, which is the failure this design exists to avoid.
+    const host = await new Client().open();
+    host.hello("ROLL", "Ann", 1, "", RANDOM_LEVEL_ID);
+    const first = await host.waitFor("welcome");
+    const built = first?.t === "welcome" ? first.level : null;
+    expect(built?.id).toBe(generateLevel(seedFromCode("ROLL")).id);
+    expect(built?.appliances.length ?? 0).toBeGreaterThan(10);
+
+    // A guest asking for the park is a guest in somebody else's restaurant.
+    const guest = await new Client().open();
+    guest.hello("ROLL", "Bea", 1, "", LEVEL.id);
+    const second = await guest.waitFor("welcome");
+    expect(second?.t === "welcome" && second.level).toEqual(built!);
 
     host.close();
     guest.close();
@@ -410,6 +434,73 @@ describe("shutting down", () => {
       expect(saved?.day).toBe(1);
       // The board is on the tile the player moved it to.
       expect(saved?.appliances).toContainEqual({ kind: "board", x: 11, y: 6 });
+    } finally {
+      proc.kill();
+    }
+  }, 20_000);
+});
+
+/**
+ * The reason the building is written down rather than recomputed.
+ *
+ * A generated kitchen is the output of a function, and functions get retuned.
+ * If a room asked `generateLevel` what its walls were every time it woke up,
+ * the next tuning pass would move them underneath every room already playing —
+ * and their saved appliance coordinates with them, silently. So the file wins,
+ * always, over anything the code would say today.
+ */
+describe("a room remembers its own building", () => {
+  test("the save decides the kitchen, not the room code", async () => {
+    const port = 5396;
+    const dir = await mkdtemp(join(tmpdir(), "cookd-generated-"));
+
+    // Deliberately *not* what "SEEDED" would generate: this stands in for a
+    // room built by a generator that no longer produces this room.
+    const theirs = generateLevel(seedFromCode("SOMETHING-ELSE"));
+    expect(theirs.id).not.toBe(generateLevel(seedFromCode("SEEDED")).id);
+    await writeFile(
+      join(dir, "SEEDED.json"),
+      JSON.stringify(snapshot(createWorld(theirs, 0), theirs)),
+    );
+
+    const proc = Bun.spawn(["bun", "run", "server/index.ts"], {
+      env: { ...process.env, PORT: String(port), COOKD_SAVE_DIR: dir },
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    try {
+      for (let i = 0; i < 200; i++) {
+        try {
+          if ((await fetch(`http://127.0.0.1:${port}/health`)).ok) break;
+        } catch {
+          /* not up yet */
+        }
+        await Bun.sleep(25);
+      }
+
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      await new Promise((resolve) => socket.addEventListener("open", resolve, { once: true }));
+      const welcomed = new Promise<ServerMessage | null>((resolve) => {
+        socket.addEventListener("message", (event: MessageEvent) => {
+          const message = parseServerMessage(JSON.parse(String(event.data)));
+          if (message?.t === "welcome") resolve(message);
+        });
+      });
+      socket.send(
+        JSON.stringify({
+          t: "hello",
+          version: PROTOCOL_VERSION,
+          room: "SEEDED",
+          name: "Ann",
+          players: 1,
+          token: "t",
+          level: RANDOM_LEVEL_ID,
+        }),
+      );
+
+      const welcome = await welcomed;
+      expect(welcome?.t === "welcome" && welcome.level).toEqual(theirs);
+      socket.close();
     } finally {
       proc.kill();
     }

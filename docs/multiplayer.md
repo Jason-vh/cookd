@@ -33,6 +33,17 @@ localStorage. A joining client still has to build *some* world to predict
 against, so it loads its last kitchen as a guess; if the room turns out to stand
 somewhere else, `welcome` says so and the shell loads theirs.
 
+`welcome` carries the **kitchen itself**, not its id. It used to name one, and
+the argument for that was good: both ends compile the same registry, so a name
+is enough and a server cannot get somebody's floor plan wrong. But that rests on
+the client already holding a correct copy — and a
+[generated kitchen](content.md#kitchens-nobody-drew) is precisely the case where
+it does not, so the id would stop pinning the geometry and the *bundle* would
+pin it instead. Two peers on either side of a deploy would then build different
+walls from the same id, silently. The building is one fact now, held by whoever
+runs the room, sent once at the door for ~1.4 KB, and parsed on arrival like
+everything else that comes off a socket.
+
 Any number of players can share one browser — gamepads and the two keyboard
 schemes work exactly as they do offline. You join with one chef; more appear by
 pressing `P` or **pressing a button on another controller**, which is how couch

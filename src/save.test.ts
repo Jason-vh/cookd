@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { LEVEL } from "./data/level";
+import { generateLevel, seedFromCode } from "./data/generate";
 import { platesInWorld } from "./sim/plates";
 import { restockStall } from "./sim/shop";
 import { createWorld } from "./sim/world";
@@ -383,5 +384,62 @@ describe("what a save is not allowed to lose", () => {
     // ...and on the grid, not merely in the map: a phantom sink is a tile
     // players walk through and cannot use.
     expect(target.applianceAt.includes(sinks[0]!.id)).toBe(true);
+  });
+});
+
+/**
+ * A kitchen nobody drew has nowhere to be looked up, so the file has to carry
+ * it. These are the cases that decide whether the generator can ever be
+ * retuned: if a room's building comes back from `generateLevel` rather than
+ * from its own save, then every edit to that function silently moves the walls
+ * of every room already playing.
+ */
+describe("a generated kitchen", () => {
+  const generated = generateLevel(seedFromCode("TACO"));
+
+  test("is written down, because there is nothing to look it up in", () => {
+    const save = snapshot(createWorld(generated, 0), generated);
+    expect(save.def?.id).toBe(generated.id);
+    expect(save.level).toBe(generated.id);
+  });
+
+  test("is not written down for a level the registry already has", () => {
+    // The park is a pointer into a table both ends compile. A save carrying a
+    // copy of it is a save that disagrees with the park the day somebody moves
+    // one of its walls.
+    expect(snapshot(world(), LEVEL).def).toBeUndefined();
+  });
+
+  test("comes back from its own file, not from today's generator", () => {
+    const before = createWorld(generated, 0);
+    before.money = 42;
+    const read = parseSave(JSON.parse(JSON.stringify(snapshot(before, generated))));
+    expect(read?.def).toEqual(generated);
+
+    const def = read!.def!;
+    const after = createWorld(def, 0);
+    expect(restore(after, read!, def)).toEqual({ ok: true });
+    expect(places(after)).toEqual(places(before));
+    expect(after.money).toBe(42);
+  });
+
+  test("is refused when the building disagrees with the level it claims to be", () => {
+    // Two facts about which kitchen this is, and a file where they differ is a
+    // file where the coordinates below belong to neither.
+    const save = snapshot(createWorld(generated, 0), generated);
+    expect(parseSave({ ...save, level: "park-kitchen-3" })).toBeNull();
+  });
+
+  test("is refused when it is not a kitchen at all", () => {
+    const save = snapshot(createWorld(generated, 0), generated);
+    expect(
+      parseSave({ ...save, def: { ...generated, size: { width: -1, height: 9 } } }),
+    ).toBeNull();
+    expect(parseSave({ ...save, def: { ...generated, appliances: "lots" } })).toBeNull();
+  });
+
+  test("is the same restaurant for everybody who was sent the link", () => {
+    expect(generateLevel(seedFromCode("TACO"))).toEqual(generated);
+    expect(generateLevel(seedFromCode("TACOS"))).not.toEqual(generated);
   });
 });

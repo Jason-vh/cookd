@@ -400,6 +400,74 @@ player plate-and-slide while another runs food, but the gap means nobody is
 *forced* through a bottleneck — so cook, runner and busser stay things a group
 discovers rather than roles the level assigns.
 
+### Kitchens nobody drew
+
+`data/generate.ts` builds a `LevelDef` from a seed. There is **one template** —
+the *split room*, which is the shape the park and the beach already share:
+patio, dining room, a divider with a walk-through and a pass in it, a galley,
+patio again. The seed moves walls around inside that shape; it does not invent
+shapes. Uniform-random rectangles would give three good kitchens and infinitely
+many mediocre ones, and each hand-made level exists to *say something* — a big
+galley against a small dining room, or the reverse.
+
+The line between what is rolled and what is not is the whole design:
+
+> **Seed what a player can see and change; freeze what sets the difficulty
+> before they have touched anything.**
+
+So table *placement* is rolled — free sides per table decide which parties can
+be seated ([the dining room](dining-room.md)), and the build phase can undo it.
+Table *count* is not: customers arrive faster when seats are free, so the count
+is the difficulty dial, and [the shop](the-shop.md) is where that dial is meant
+to live. Starting equipment is not rolled either — a kitchen begins on one salad
+and grows through [recipe cards](the-menu.md), and a generator scattering ovens
+would be fighting a system that already works.
+
+**`levelProblems` is the specification it is written against.** A generated
+kitchen is legal by exactly the standard the hand-made ones are held to:
+reachability, a sign with a wall to hang on, three stall slots, plates against
+tables. It earns its keep — the first draft put a table in the divider's
+walk-through on one seed in ten, sealing the galley off from the dining room.
+There is deliberately **no retry-on-a-bad-roll loop**: a constraint that only
+holds most of the time is a bug, and a retry is how you never find out.
+
+### A generated kitchen is a fact, not a function
+
+The id of a generated level is a **hash of the built room** (`gen-b104fdc2`),
+not of the seed. That is the `park-kitchen-3` rule enforced instead of
+remembered — *changing where the walls are invalidates saves, touching the file
+does not* — and two seeds that happen to produce the same kitchen share an id,
+which is correct: it is the same kitchen, and a save from one belongs in the
+other.
+
+More importantly, the room's geometry is **written down** rather than
+recomputed. It rides the `welcome` message and it is stored in the save. This
+looks like duplication and is not:
+
+- An id is enough when both ends compile the same registry, because the client
+  already holds an independently correct copy and any drift is a reviewed source
+  edit. A generator inverts that. There is no copy to point at, so the id stops
+  pinning the geometry and the *bundle* pins it — a client on yesterday's deploy
+  and a server on today's would build different walls from the same id, in
+  silence. That is exactly the failure the id was chosen to prevent.
+- It is what makes the generator **safe to retune**. Nothing ever asks the code
+  what a room's walls used to look like, so tomorrow's `generateLevel` cannot
+  move the walls of a room already playing — or its saved appliances with them.
+- It makes `snapshot`'s rule honest. Immovable furniture is not saved because it
+  is rebuilt "from the level itself, the only place that can still be right
+  after the level changes". For a generated kitchen, the stored def *is* the
+  level itself.
+
+The cost is a few KB once per connection — measured at **1.4 KB**, about a frame
+and a half on a link that then carries ~900 bytes twenty times a second. Both
+the socket and the save file parse it back through `parseLevelDef` and then run
+`levelProblems` over the result: structure and sense are two questions, and a
+level can be structurally fine and still be a building with no door.
+
+The seed comes from the **room code**, so the link that invites somebody is the
+restaurant. Pick *Surprise me* on the join screen and `/#PIZZA` is a particular
+kitchen, the same one for everybody who opens it.
+
 ### The Highway Stop
 
 The third kitchen, and the first with **no dining room at all**: a long galley,

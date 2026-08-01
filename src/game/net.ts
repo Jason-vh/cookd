@@ -1,4 +1,4 @@
-import { LEVEL, type LevelDef, levelById } from "../data/level";
+import { LEVEL, type LevelDef } from "../data/level";
 import { DT } from "../sim/step";
 import type { Inputs, PlayerInput, World } from "../sim/types";
 import { emptyInput } from "../sim/world";
@@ -68,7 +68,7 @@ export type NetWiring = {
    * floor into one static batch when it is built, so the answer is a new game
    * and a new view, not a patch to this one.
    */
-  onLevel?: (id: string) => void;
+  onLevel?: (level: LevelDef) => void;
   /**
    * We are *making* this kitchen, so our level is a request rather than a
    * guess. Joining an existing room sends no opinion: the room's own save is
@@ -118,7 +118,7 @@ export class NetGame implements Game {
   readonly level: LevelDef;
 
   /** Told when the room turns out to be a different kitchen. See `NetWiring`. */
-  private readonly onLevel?: (id: string) => void;
+  private readonly onLevel?: (level: LevelDef) => void;
 
   /** See `NetWiring.creating`. */
   private readonly creating: boolean;
@@ -184,15 +184,19 @@ export class NetGame implements Game {
         // playing on with somebody else's floor plan — which is what happened
         // before, silently, because the client simply assumed the one level it
         // was compiled with.
-        if (message.level !== this.level.id) {
+        if (message.level.id !== this.level.id) {
           // Somebody else made this room, and they chose a different kitchen.
           // Load theirs: a room code is an invitation to *their* restaurant,
           // and the alternative is telling the guest they picked wrong.
-          if (this.onLevel && levelById(message.level)) {
+          //
+          // The whole building arrives with the invitation now, so this no
+          // longer depends on the guest's bundle having heard of it — which is
+          // what makes a generated kitchen shareable at all.
+          if (this.onLevel) {
             this.onLevel(message.level);
             return;
           }
-          this.die(`This kitchen is "${message.level}" — refresh to load it`);
+          this.die(`This kitchen is "${message.level.name}" — refresh to load it`);
           return;
         }
         // A reconnect is a *new session*: new ids, acks back at zero, and the

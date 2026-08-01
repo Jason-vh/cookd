@@ -48,7 +48,8 @@ src/
     economy.ts            the ledger: what the stall stocks, and what it pays
     progression.ts        the cards: what a kitchen starts with, and how its menu grows
     recipes.ts            transforms, combines, recipes + derived lookup maps
-    level.ts              kitchen layouts, the geometry helpers, and the registry
+    level.ts              kitchen layouts, the geometry helpers, the registry, and the parser
+    generate.ts           kitchens nobody drew: one template, and a seed to move it about
     biomes.ts             locations: sky, sunlight, ground and scenery recipes
     validate.ts           is the content coherent? checked at startup in dev
   game/                   who is running the game, and where

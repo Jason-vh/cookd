@@ -1,3 +1,4 @@
+import { isApplianceKind } from "./appliances";
 import type { ApplianceKind, ItemSpec, Lane, Rect, Seam, Vec2 } from "../sim/types";
 
 /**
@@ -400,6 +401,175 @@ export const DEFAULT_LEVEL_ID = PARK_KITCHEN.id;
 
 export function levelById(id: string): LevelDef | null {
   return LEVELS[id] ?? null;
+}
+
+/**
+ * What the join screen sends when it wants a kitchen nobody drew.
+ *
+ * A sentinel rather than a flag beside the id, because "which kitchen" is one
+ * question and a room may only have one answer to it.
+ */
+export const RANDOM_LEVEL_ID = "random";
+
+// --- reading a level from somewhere untrusted ---------------------------------
+
+/**
+ * Ceilings, so a malformed level is refused rather than allocated.
+ *
+ * A level used to be compiled in, which is why nothing here existed: the only
+ * levels that could reach `createWorld` were the three in this file. A
+ * generated kitchen arrives over a socket or off a disk instead, and
+ * `createWorld` stamps tiles by index — a grid claiming to be 40,000 squares
+ * wide is an allocation, not an error message.
+ */
+const LIMITS = {
+  grid: 64,
+  appliances: 512,
+  walls: 256,
+  paving: 64,
+  spawns: 16,
+  text: 64,
+  processes: 8,
+};
+
+/**
+ * A `LevelDef` from JSON, or `null`.
+ *
+ * The same rule `game/wire.ts` and `save.ts` are both built on: **parse, don't
+ * cast.** This half only answers "is this the right shape, and is it small
+ * enough to build" — whether the kitchen it describes makes any sense is
+ * `levelProblems`, and callers run it afterwards. Two questions, two answers:
+ * a level can be structurally fine and still be a building with no door.
+ */
+export function parseLevelDef(value: unknown): LevelDef | null {
+  if (!isRecord(value)) return null;
+  const id = text(value.id);
+  const name = text(value.name);
+  const biome = text(value.biome);
+  const dayLength = num(value.dayLength);
+  const plates = whole(value.plates);
+  const size = parseSize(value.size);
+  const room = parseRect(value.room);
+  const door = parseVec(value.door);
+  if (id === null || name === null || biome === null) return null;
+  if (dayLength === null || dayLength <= 0 || plates === null) return null;
+  if (!size || !room || !door) return null;
+
+  const paving = list(value.paving, LIMITS.paving, parseRect);
+  const walls = list(value.walls, LIMITS.walls, parseWallRun);
+  const spawns = list(value.spawns, LIMITS.spawns, parseVec);
+  const appliances = list(value.appliances, LIMITS.appliances, parsePlacement);
+  if (!paving || !walls || !spawns || !appliances) return null;
+
+  // Absent is a kitchen with a dining room, which is most of them. Present but
+  // malformed is a file we do not understand.
+  const lane = parseLane(value.lane);
+  if (lane === undefined) return null;
+
+  return {
+    id,
+    name,
+    biome,
+    size,
+    room,
+    paving,
+    door,
+    walls,
+    ...(lane ? { lane } : {}),
+    appliances,
+    spawns,
+    dayLength,
+    plates,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function num(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** A non-negative integer. Every coordinate in a level is one. */
+function whole(value: unknown): number | null {
+  const found = num(value);
+  return found !== null && Number.isInteger(found) && found >= 0 ? found : null;
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 && value.length <= LIMITS.text
+    ? value
+    : null;
+}
+
+function list<T>(value: unknown, cap: number, parse: (entry: unknown) => T | null): T[] | null {
+  if (!Array.isArray(value) || value.length > cap) return null;
+  const out: T[] = [];
+  for (const entry of value) {
+    const parsed = parse(entry);
+    if (parsed === null) return null;
+    out.push(parsed);
+  }
+  return out;
+}
+
+function parseVec(value: unknown): Vec2 | null {
+  if (!isRecord(value)) return null;
+  const x = whole(value.x);
+  const y = whole(value.y);
+  return x === null || y === null || x > LIMITS.grid || y > LIMITS.grid ? null : { x, y };
+}
+
+function parseSize(value: unknown): { width: number; height: number } | null {
+  if (!isRecord(value)) return null;
+  const width = whole(value.width);
+  const height = whole(value.height);
+  if (width === null || height === null) return null;
+  if (width < 1 || height < 1 || width > LIMITS.grid || height > LIMITS.grid) return null;
+  return { width, height };
+}
+
+function parseRect(value: unknown): Rect | null {
+  if (!isRecord(value)) return null;
+  const corner = parseVec(value);
+  const size = parseSize(value);
+  return corner && size ? { x: corner.x, y: corner.y, ...size } : null;
+}
+
+function parseWallRun(value: unknown): WallRun | null {
+  if (!isRecord(value)) return null;
+  const from = parseVec(value.from);
+  const to = parseVec(value.to);
+  return from && to ? { from, to } : null;
+}
+
+function parsePlacement(value: unknown): Placement | null {
+  if (!isRecord(value)) return null;
+  const kind = typeof value.kind === "string" && isApplianceKind(value.kind) ? value.kind : null;
+  const tile = parseVec(value.at);
+  if (kind === null || !tile) return null;
+  const source = parseSpec(value.source);
+  return source === undefined ? null : { kind, at: tile, ...(source ? { source } : {}) };
+}
+
+/** `null` for absent, `undefined` for "present but malformed". */
+function parseSpec(value: unknown): ItemSpec | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value) || typeof value.base !== "string") return undefined;
+  const processes = list(value.processes, LIMITS.processes, (entry) =>
+    typeof entry === "string" ? entry : null,
+  );
+  return processes ? { base: value.base, processes } : undefined;
+}
+
+/** `null` for absent, `undefined` for "present but malformed". */
+function parseLane(value: unknown): Lane | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) return undefined;
+  const entry = parseVec(value.entry);
+  const exit = parseVec(value.exit);
+  return entry && exit ? { entry, exit } : undefined;
 }
 
 /**

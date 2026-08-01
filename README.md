@@ -10,6 +10,10 @@ bigger deck and a smaller galley, and a highway stop with no dining room at all
 Inspirations: **Overcooked** (moment-to-moment chaos, hold-to-chop, plate-and-serve
 loop) and **PlateUp!** (kitchen as a thing you design and optimise across days).
 
+Three locations are hand-drawn; a fourth is generated. A seeded template builds
+kitchens nobody drew, held to the same standard the hand-made ones are — see
+[kitchens nobody drew](docs/content.md#kitchens-nobody-drew).
+
 Status: **playable, and multiplayer.** Multiple chefs, a kitchen that starts with
 one dish and buys the rest from recipe cards, burning, a dining room with
 customers who walk in — alone or as a party — sit, order, eat and leave, tips
@@ -33,9 +37,11 @@ bun start            # build, then serve everything from one process
 ```
 
 Open the client, pick a name, a kitchen code and **where the kitchen is** — the
-city park, the beach shack or the highway stop — and share the URL — the code
-lives in the hash (`/#KITCHEN`), so the link *is* the invite. **Play offline**
-skips the server entirely.
+city park, the beach shack, the highway stop, or **Surprise me** for a kitchen
+nobody drew — and share the URL — the code lives in the hash (`/#KITCHEN`), so
+the link *is* the invite. A surprise kitchen is built from that code, so the
+link is the *restaurant* too: `/#PIZZA` is one particular building, the same one
+for everybody who opens it. **Play offline** skips the server entirely.
 
 For local development you only need `bun run dev` if you're playing offline; run
 the server too if you want online play.
