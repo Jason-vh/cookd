@@ -12,8 +12,34 @@ import type { ApplianceKind } from "./appliances";
  * This is content: plain data, expect to iterate on every number in it.
  */
 
-/** Slots on the stall. Matches the number of `$` tiles the level puts down. */
-export const STALL_SLOTS = 3;
+/**
+ * Squares in the delivery. Matches the number of `$` tiles the level puts down.
+ *
+ * Four, and two of them are spoken for: one is promised to something the
+ * kitchen is short of, and one holds a [recipe card](../../docs/the-menu.md).
+ * That leaves two wildcards, which is what stops a morning with two guarantees
+ * in it from being a morning with no surprise in it.
+ */
+export const STALL_SLOTS = 4;
+
+/**
+ * The first morning anything is delivered at all.
+ *
+ * Day one gets nothing: no goods, no card, and no pallets. A kitchen opens with
+ * $0, so a day-one delivery is four things it cannot buy — the first thing a
+ * room would ever learn about the shop would be a refusal — and it is four
+ * things to walk out and look at on the one morning when everything worth
+ * knowing is inside the walls.
+ *
+ * It is also simply true: a delivery arrives because there is a restaurant to
+ * deliver to, and on the first morning there is not one yet. The same shape as
+ * the two rent-free days, for the same reason — the days a room has no say in
+ * are the days it is neither charged nor sold to.
+ *
+ * Asked by the roll *and* by the renderer, so "nothing was delivered" is one
+ * fact rather than an empty slot the drawing code has to infer.
+ */
+export const FIRST_DELIVERY_DAY = 2;
 
 /**
  * What a sale pays, as a fraction of list price.

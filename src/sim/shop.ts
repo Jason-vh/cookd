@@ -1,6 +1,8 @@
 import { APPLIANCE_KINDS, ESSENTIAL, applianceDef, type ApplianceKind } from "../data/appliances";
-import { SCARCE_BELOW, SELLBACK, STOCK_WEIGHT } from "../data/economy";
-import { unlockedIngredients, unlockedKinds } from "./cards";
+import { FIRST_DELIVERY_DAY, SCARCE_BELOW, SELLBACK, STOCK_WEIGHT } from "../data/economy";
+import { offerable, rollCard, unlockedIngredients, unlockedKinds } from "./cards";
+import { cardFee } from "../data/progression";
+import { RECIPE_BY_ID } from "../data/recipes";
 import { ingredient } from "../data/ingredients";
 import { mulberry32 } from "./random";
 import type { Appliance, Offer, Vec2, World } from "./types";
@@ -10,7 +12,7 @@ import { applianceAtTile, inBounds, tileIndex, touchLayout } from "./world";
 /**
  * The shop: what is for sale, what it costs, and what a sale pays.
  *
- * It is a *place*, not a menu — three squares of paving outside the door with
+ * It is a *place*, not a menu — four squares of paving outside the door with
  * the morning's delivery standing on them, faced and grabbed exactly like
  * anything else in the kitchen. So there is nothing here about interaction;
  * `systems/interaction.ts` owns that, and this file owns only the questions it
@@ -32,14 +34,20 @@ import { applianceAtTile, inBounds, tileIndex, touchLayout } from "./world";
  *
  * ## It lands somewhere different every morning
  *
- * A delivery that appeared on the same three squares every day would be three
+ * A delivery that appeared on the same four squares every day would be four
  * squares the game had reserved, which is the shop-as-furniture problem coming
  * back in through the floor. So the squares themselves move: near the door,
  * never on the way in, and never twice in the same arrangement.
  *
- * The level still lists three of them, because a level says what a kitchen has
- * — it is only where they stand on the first morning, and the roll takes over
- * from there.
+ * The level still lists four of them, because a level says what a kitchen has
+ * — and on day one nothing is delivered to them at all, so where they stand is
+ * only ever a starting point the roll takes over from.
+ *
+ * ## One of the four is a recipe
+ *
+ * A card is a good like the rest: rolled from the same stream, standing on the
+ * same pallet, bought with the same `Grab`. It used to be a poster on the wall
+ * with a calendar of its own — see `sim/cards.ts` for why neither survived.
  *
  * ## The delivery is for *this* restaurant
  *
@@ -68,7 +76,8 @@ export function stallSlots(world: World): Appliance[] {
 }
 
 export function offerPrice(offer: Offer): number {
-  return applianceDef(offer.kind).price;
+  const recipe = offer.recipe === undefined ? null : RECIPE_BY_ID.get(offer.recipe);
+  return recipe ? cardFee(recipe.tier) : applianceDef(offer.kind).price;
 }
 
 /** What the stall pays for one of these. Rounded down: the house rounds. */
@@ -77,8 +86,15 @@ export function sellPrice(kind: ApplianceKind): number {
 }
 
 export function offerLabel(offer: Offer): string {
+  const recipe = offer.recipe === undefined ? null : RECIPE_BY_ID.get(offer.recipe);
+  if (recipe) return recipe.name;
   if (offer.source) return `${ingredient(offer.source.base).name} crate`;
   return applianceDef(offer.kind).label;
+}
+
+/** Is there a delivery at all this morning? Everything but the first — see `FIRST_DELIVERY_DAY`. */
+export function hasDelivery(world: World): boolean {
+  return world.day >= FIRST_DELIVERY_DAY;
 }
 
 /**
@@ -132,22 +148,48 @@ export function restockStall(world: World): void {
   const slots = stallSlots(world);
   if (slots.length === 0) return;
 
+  // Day one is delivered nothing at all: no goods, no card, and the squares
+  // left where the level put them so the renderer draws no pallets either. A
+  // kitchen with $0 in the till has nothing to do out here — see
+  // `FIRST_DELIVERY_DAY`.
+  if (!hasDelivery(world)) {
+    for (const slot of slots) {
+      slot.offer = null;
+      slot.taken = null;
+    }
+    touchLayout(world);
+    return;
+  }
+
   // A stream of its own, from two numbers that cannot drift. `| 0` keeps the
   // seed in the same 32-bit shape `mulberry32` is written for.
   const random = mulberry32((world.seed * 0x9e37 + world.day * 0x85eb) | 0);
   landDelivery(world, slots, random);
 
-  // One slot is promised to something the kitchen is short of, so a morning is
-  // never three duds. Which slot is itself rolled, or the guarantee would
-  // always be sitting in the same place and stop reading as luck.
+  // Two of the four squares are spoken for: one holds a recipe, and one is
+  // promised to something the kitchen is short of, so a morning is never four
+  // duds. Both are *rolled*, and never the same square — a guarantee always
+  // sitting in the same place stops reading as luck.
   const sold = soldKinds(world);
   const sources = unlockedIngredients(world);
   const scarce = scarceKinds(world, sold);
-  const promised = slots.length > 0 ? Math.floor(random() * slots.length) : -1;
+
+  // Every draw happens whether or not it is used, so the stream advances by the
+  // same amount on every morning in every room. A room with an exhausted
+  // library still draws its card, and still gets the same goods as one that has
+  // not — randomness spent conditionally is randomness that makes two clients
+  // on one seed disagree.
+  const cardSlot = Math.floor(random() * slots.length);
+  const promised = (cardSlot + 1 + Math.floor(random() * (slots.length - 1))) % slots.length;
+  const card = rollCard(offerable(world), random);
 
   for (const [index, slot] of slots.entries()) {
-    const guaranteed = index === promised && scarce.length > 0;
-    slot.offer = rollFrom(guaranteed ? scarce : sold, random, sources);
+    if (index === cardSlot && card) {
+      slot.offer = { kind: "cards", source: null, recipe: card.id };
+    } else {
+      const guaranteed = index === promised && scarce.length > 0;
+      slot.offer = rollFrom(guaranteed ? scarce : sold, random, sources);
+    }
     slot.taken = null;
   }
 

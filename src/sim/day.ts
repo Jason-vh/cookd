@@ -1,5 +1,4 @@
 import { rentFor } from "../data/economy";
-import { clearCards, restockCards } from "./cards";
 import { platesInWorld, stockPlates } from "./plates";
 import { kitchenWarnings } from "./queries";
 import { restockStall } from "./shop";
@@ -11,8 +10,8 @@ import { emptyLedger, log } from "./world";
  *
  * Split out of `step.ts` so the thing that *causes* a day to open — the sign by
  * the door, in `systems/sign.ts` — can call it without importing the module
- * that runs the systems. Same shape as `cards.ts` beside `systems/cards.ts`:
- * the rules live in `sim/`, the thing that happens to them lives in `systems/`.
+ * that runs the systems: the rules live in `sim/`, and the thing that happens
+ * to them lives in `systems/`.
  */
 
 /**
@@ -58,9 +57,6 @@ export function beginDay(world: World, by = ""): void {
   // about a walled-off dining room; the stall added a dozen more ways to reach
   // the same place, and they are all the same sentence. See `kitchenWarnings`
   // for why refusing the sale would be the wrong instrument.
-  // Unpicked cards leave with the morning. The choice was optional, the next
-  // offer comes on schedule regardless, and a room may consolidate on purpose.
-  clearCards(world);
   for (const warning of kitchenWarnings(world)) log(world, warning);
   // Named when somebody did it, because opening is a decision one player makes
   // on behalf of a room that may not have finished shopping — the same reason
@@ -110,10 +106,10 @@ export function endDay(world: World): void {
   chargeRent(world);
 
   world.day++;
+  // The morning's delivery, recipe card and all, rolled from the seed and the
+  // day it now is. An unbought card leaves with the pallets, like every other
+  // thing nobody carried in: there is another one tomorrow.
   restockStall(world);
-  // The morning's cards, rolled from the seed and the day it now is. Most
-  // mornings that is nothing at all — see `isCardMorning`.
-  restockCards(world);
 }
 
 /**

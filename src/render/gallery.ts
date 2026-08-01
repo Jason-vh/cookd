@@ -69,8 +69,6 @@ function sampleAppliance(kind: ApplianceKind, source: ItemSpec | null): Applianc
     offer: null,
     taken: null,
     card: null,
-    armedBy: null,
-    armTime: 0,
     heldBy: null,
     tip: 0,
   };

@@ -1,6 +1,7 @@
 import { applianceDef, type ApplianceDef } from "../data/appliances";
 import { runSeams, wallRuns, type LevelDef } from "../data/level";
-import { STARTING_RECIPES } from "../data/progression";
+import { STARTING_RECIPES, cardFee } from "../data/progression";
+import { RECIPE_BY_ID } from "../data/recipes";
 import { plateCount, stockPlates } from "./plates";
 import { nextRandom } from "./random";
 import { restockStall } from "./shop";
@@ -326,8 +327,6 @@ export function spawnAppliance(
     offer: null,
     taken: null,
     card: null,
-    armedBy: null,
-    armTime: 0,
     heldBy,
     tip: 0,
   };
@@ -484,6 +483,19 @@ export function removePlayer(world: World, id: number): void {
  * kitchen with no free floor.
  */
 function returnAppliance(world: World, appliance: Appliance): void {
+  // A card has no home to go back to — it is spent where it is put down, and
+  // nobody is left to put it down. So it goes back to the pallet in the only
+  // form that survives its owner: the money, which the pallet would still have
+  // handed back all morning. Refunding beats guessing which dish they meant to
+  // add to everybody else's menu.
+  if (appliance.kind === "cards") {
+    const recipe = appliance.card === null ? null : RECIPE_BY_ID.get(appliance.card);
+    world.appliances.delete(appliance.id);
+    if (!recipe) return;
+    world.money += cardFee(recipe.tier);
+    log(world, `The ${recipe.name} card went back  +$${cardFee(recipe.tier)}`);
+    return;
+  }
   if (applianceDef(appliance.kind).fitting) {
     const host = nearestWorktop(world, appliance.tile);
     world.appliances.delete(appliance.id);

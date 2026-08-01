@@ -225,7 +225,29 @@ It is a filter at roll time, never a write to `STOCK_WEIGHT`: the weights are
 content, and a shop that edited them would be a shop whose tuning depended on
 who had been playing.
 
+## A card that nobody puts down
+
+It exists only between being bought and being set down, both inside one
+morning. Two things can interrupt that, and both answer the same way: **the
+money comes back**, because the pallet it came from would have taken it back at
+full price anyway, and choosing a dish on the room's behalf is the one thing
+worse than a refund.
+
+- **A chef disconnects holding one.** `returnAppliance` pays the fee back and
+  the card ceases to be. Every other appliance goes home to a tile; a card has
+  no home, because where it goes is *spent*.
+- **A save is written while somebody is carrying one.** The card is not
+  described in the file and its fee is added to the money that is. Same problem
+  `parkFittings` solves for a carried board, in the currency a card has instead
+  of a tile — and it keeps `snapshot` free of side effects, which is a rule the
+  save format is otherwise very strict about.
+
 ## Saving
+
+No schema bump: a card was never in the file. The offers are re-derived from
+`(seed, day)` on the way back in, and a square somebody has already bought from
+is emptied from `stall` — so a restored room is not offered the dish it has just
+paid for, by exactly the machinery that stops it being sold a second oven.
 
 `unlocked` and `unlockedDay` are the room's whole menu history, and they are
 saved.
@@ -241,9 +263,9 @@ saved.
   restaurant away.
 - A recipe id the content no longer knows is dropped on the way in. The menu is
   the order pool, and a customer asking for a dish that does not exist is one
-  nobody can ever serve.
-- The bump that came with this change drops `armedBy` and `armTime` from every
-  appliance, and turns the two wall posters into nothing. No menu is lost.
+  nobody can ever serve. The same rule covers the id on an offer arriving over
+  the wire: it is checked where it is *used*, so one unknown dish cannot make a
+  whole layout unparseable.
 
 ## Deliberately not built
 

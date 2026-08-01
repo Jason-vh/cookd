@@ -113,13 +113,12 @@ export function generateLevel(seed: number): LevelDef {
     : roll.int(first, Math.min(last, first + 3));
 
   const appliances: Placement[] = [
-    // The morning's delivery and the posters, grouped around the door rather
-    // than lined up along it — see the note on `stall` in `data/appliances.ts`.
+    // The morning's delivery, grouped around the door rather than lined up
+    // along it — see the note on `stall` in `data/appliances.ts`.
     at("stall", MARGIN - 1, door.y - 2),
     at("stall", MARGIN - 2, door.y - 1),
     at("stall", MARGIN - 2, door.y + 1),
-    at("cards", MARGIN - 1, door.y - 1),
-    at("cards", MARGIN - 1, door.y + 1),
+    at("stall", MARGIN - 1, door.y + 1),
     at("sign", sign.x, sign.y),
     // The back run.
     crate("tomato", prep, north),

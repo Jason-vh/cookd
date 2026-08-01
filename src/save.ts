@@ -1,7 +1,8 @@
 import { APPLIANCES, ESSENTIAL, applianceDef } from "./data/appliances";
 import { LEVEL, type LevelDef, levelById, parseLevelDef } from "./data/level";
-import { BACKFILL_RECIPES } from "./data/progression";
-import { restockCards, setUnlocked } from "./sim/cards";
+import { BACKFILL_RECIPES, cardFee } from "./data/progression";
+import { RECIPE_BY_ID } from "./data/recipes";
+import { setUnlocked } from "./sim/cards";
 import { MAX_PLATES, platesInWorld, stockPlates } from "./sim/plates";
 import { restockStall, stallSlots } from "./sim/shop";
 import type { ApplianceKind, ItemSpec, Vec2, World } from "./sim/types";
@@ -175,6 +176,10 @@ export function snapshot(world: World, level: LevelDef = LEVEL): Save {
     // Fitted ones ride their host's `topper` below; carried ones are parked on
     // a worktop by `parkFittings`.
     if (applianceDef(appliance.kind).fitting) continue;
+    // Nor has a card, and a card cannot be parked either: it is spent where it
+    // is set down, and choosing a dish on the owner's behalf is not something a
+    // save gets to do. It comes back as its fee — see `carriedCardFees`.
+    if (appliance.kind === "cards") continue;
     appliances.push({
       kind: appliance.kind,
       x: appliance.tile.x,
@@ -192,7 +197,7 @@ export function snapshot(world: World, level: LevelDef = LEVEL): Save {
     // somebody moves one of its walls.
     ...(levelById(level.id) ? {} : { def: level }),
     appliances,
-    money: world.money,
+    money: world.money + carriedCardFees(world),
     day: world.day,
     plates: platesInWorld(world),
     stall: takenSlots(world),
@@ -223,6 +228,28 @@ export function snapshot(world: World, level: LevelDef = LEVEL): Save {
  * there the board is genuinely lost — the same answer, and the same rarity, as
  * an appliance whose owner disconnects into a kitchen with no free floor.
  */
+/**
+ * What a card in somebody's hands is worth to a save: its fee, back in the till.
+ *
+ * The same problem `parkFittings` solves and the same answer, in the currency a
+ * card has instead of a tile. It is an offer they paid for and have not yet
+ * spent, the pallet it came from would still take it back at full price, and a
+ * server restart is not a reason to lose it.
+ *
+ * Read rather than written, so `snapshot` still mutates nothing: the money goes
+ * into the file, not into the running kitchen, and the card simply is not
+ * described.
+ */
+function carriedCardFees(world: World): number {
+  let total = 0;
+  for (const appliance of world.appliances.values()) {
+    if (appliance.kind !== "cards" || appliance.card === null) continue;
+    const recipe = RECIPE_BY_ID.get(appliance.card);
+    if (recipe) total += cardFee(recipe.tier);
+  }
+  return total;
+}
+
 function parkFittings(world: World, appliances: SavedAppliance[]): void {
   for (const appliance of world.appliances.values()) {
     if (!applianceDef(appliance.kind).fitting) continue;
@@ -538,16 +565,15 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
   // the stack. See the note on `Save["plates"]`.
   stockPlates(world, migrated.plates);
   // The stock is rolled again from the seed and the day — the same roll, so the
-  // same three things — and then emptied where the file says it was emptied.
+  // same four things, this morning's recipe card among them — and then emptied
+  // where the file says it was emptied. A card already bought is a slot already
+  // taken, so a restored room is not offered the dish it has just paid for.
   restockStall(world);
   const slots = stallSlots(world);
   for (const index of migrated.stall) {
     const slot = slots[index];
     if (slot) slot.offer = null;
   }
-  // And this morning's cards, if it is a card morning and the room has not
-  // already chosen — `unlockedDay` is what remembers that.
-  restockCards(world);
   touchLayout(world);
   return { ok: true };
 }

@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { APPLIANCE_KINDS, applianceDef } from "../data/appliances";
-import { SELLBACK, STALL_SLOTS } from "../data/economy";
-import { CARD_SLOTS } from "../data/progression";
+import { FIRST_DELIVERY_DAY, SELLBACK, STALL_SLOTS } from "../data/economy";
 import { LEVEL } from "../data/level";
 import { RECIPES } from "../data/recipes";
 import { Host } from "../game/host";
 import { restore, snapshot } from "../save";
 import { plateCount, platesInWorld, STACK_PLATES } from "./plates";
 import { seatsAround } from "./pathing";
-import { outward } from "./walls";
 import { canPlace } from "./queries";
 import { offerPrice, restockStall, stallSlots } from "./shop";
 import { beginDay, endDay } from "./day";
@@ -17,7 +15,6 @@ import type { Appliance, ApplianceKind, PlayerInput, Vec2, World } from "./types
 import {
   applianceAtTile,
   createWorld,
-  isSolid,
   emptyInput,
   nearestFreeTile,
   removePlayer,
@@ -33,10 +30,18 @@ import {
  * function would be testing a different feature from the one that shipped.
  */
 
-/** A kitchen in its morning, with nobody due through the door. */
+/**
+ * A kitchen in its morning, with nobody due through the door.
+ *
+ * The *second* morning, because the first is delivered nothing at all and a
+ * shop with nothing in it is not what any of this is about — see
+ * `FIRST_DELIVERY_DAY`, and the day-one test below.
+ */
 function morning(): World {
   const world = createWorld(LEVEL, 1);
   world.nextArrivalIn = Infinity;
+  world.day = FIRST_DELIVERY_DAY;
+  restockStall(world);
   return world;
 }
 
@@ -163,16 +168,28 @@ describe("the stall", () => {
     }
   });
 
-  test("the recipe posters hang on a wall, and the paving under them stays paving", () => {
-    // Mounted, like the sign: a poster occupies a wall rather than a square, so
-    // the tile in front of it is still somewhere a chef or a customer may walk.
+  test("day one is delivered nothing, and stands nothing outside", () => {
+    // A kitchen opens with $0, so four things it cannot buy would be four
+    // refusals — and the one morning everything worth knowing is inside the
+    // walls is not the morning to put a shop outside them.
+    const world = createWorld(LEVEL, 1);
+    expect(world.day).toBe(1);
+    expect(world.money).toBe(0);
+    for (const slot of stallSlots(world)) expect(slot.offer).toBeNull();
+  });
+
+  test("nothing stands outside but the delivery", () => {
+    // The recipe posters used to hang on the shell out here, and they were the
+    // last thing outside that existed only to hold an offer. A card is a good
+    // on a pallet now, so the paving has four squares on it and nothing else.
     const world = morning();
-    for (const stand of [...world.appliances.values()].filter((a) => a.kind === "cards")) {
-      expect(applianceDef(stand.kind).mounted).toBe(true);
-      expect(isSolid(world, stand.tile.x, stand.tile.y)).toBe(false);
-      expect(outward(world.room, stand.tile)).toBeDefined();
+    const { x, y, width, height } = world.room;
+    for (const appliance of world.appliances.values()) {
+      const tile = appliance.tile;
+      const outside = tile.x < x || tile.x >= x + width || tile.y < y || tile.y >= y + height;
+      if (outside) expect(appliance.kind).toBe("stall");
     }
-    expect(counts(world, "cards")).toBe(CARD_SLOTS);
+    expect(counts(world, "cards")).toBe(0);
   });
 
   test("a new morning's stock is a layout change", () => {
@@ -180,9 +197,6 @@ describe("the stall", () => {
     // version moves. Without this a client spent the whole of day two looking
     // at day one's slots — reading "Plate" off one and being handed the bin the
     // host had actually rolled into it.
-    // Restocked directly rather than through a day, because `endDay` also rolls
-    // the cards and that alone would move the version — the stall has to be the
-    // thing under test, or it can quietly stop doing its half.
     const world = morning();
     const before = world.layoutVersion;
     world.day++;

@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
 import { ingredient } from "../data/ingredients";
 import type { Appliance, ApplianceKind } from "../sim/types";
-import { buildIngredientSample, buildProduceHeap } from "./models";
+import { RECIPE_BY_ID } from "../data/recipes";
+import { buildIngredientSample, buildItemModel, buildProduceHeap } from "./models";
 import { PALETTE, shade, type SurfaceName } from "./palette";
 import {
   cabinetFace,
@@ -29,7 +30,6 @@ import {
   sweep,
   torus,
 } from "./primitives";
-import { WALL_THICKNESS } from "./shell-meshes";
 import { makeLabel } from "./sprites";
 import { jitter, type Jitter } from "./wobble";
 import { cssHex, textTexture } from "./text";
@@ -135,7 +135,7 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   } else if (appliance.kind === "stall") {
     buildPitch(parts, nudge);
   } else if (appliance.kind === "cards") {
-    buildPoster(parts, h);
+    buildCard(parts, h, appliance.card);
   } else if (appliance.kind === "sign") {
     buildSign(parts, h);
   } else if (appliance.kind === "crate") {
@@ -347,38 +347,52 @@ export const PITCH_DECK = 0.11;
  * goods use: a bare square means nothing to buy, a bare board means nothing to
  * choose.
  */
-function buildPoster(parts: ApplianceParts, h: number): void {
-  const group = parts.root;
-
-  // Flat against the masonry, and *proud* of it. The wall stands on the seam
-  // behind this square, so its outer face is half a tile back less half its own
-  // thickness — measured from `WALL_THICKNESS` rather than guessed at, which is
-  // how the first version of this ended up pasted inside the wall and invisible
-  // from every angle.
-  const face = -(0.5 - WALL_THICKNESS / 2);
-
-  const backing = mesh(roundedBox(0.66, 0.84, 0.04, 0.02), PALETTE.cardEdge, "wood");
-  backing.position.set(0, h - 0.48, face + 0.02);
-  group.add(backing);
-
-  // The card: parked at its mount, so the animator only has to add the lift.
-  const mount = new THREE.Group();
-  mount.position.set(0, h - 0.48, face + 0.06);
-  group.add(mount);
-
+/**
+ * A recipe card: paper, propped up, with the dish standing on it.
+ *
+ * It used to be a poster measured off the wall's thickness and pasted flat on the
+ * outside of the shell. A card is a **good** now — it stands on a pallet in the
+ * delivery and is carried inside — so it is built the way everything else on a
+ * pallet is: around its own square, at its own height, owing nothing to a wall
+ * that may not be there.
+ *
+ * The dish is drawn here rather than dressed on afterwards, exactly as a
+ * crate's ingredient is: which dish is on a card cannot change while it exists,
+ * so a rebuild is the honest way to change it and there is nothing to animate.
+ */
+function buildCard(parts: ApplianceParts, h: number, id: string | null): void {
   const card = new THREE.Group();
-  card.visible = false;
-  mount.add(card);
+  // Leaning back, the way a card propped against something stands. Enough to
+  // read from the front and to catch the light differently from the paving.
+  card.rotation.x = -0.16;
+  card.position.y = h * 0.62;
+  parts.root.add(card);
   parts.card = card;
 
-  const paper = mesh(roundedBox(0.56, 0.74, 0.02, 0.02), PALETTE.cardFace, "ceramic");
+  const backing = mesh(roundedBox(0.52, 0.68, 0.03, 0.02), PALETTE.cardEdge, "wood");
+  card.add(backing);
+  const paper = mesh(roundedBox(0.46, 0.6, 0.02, 0.02), PALETTE.cardFace, "ceramic");
+  paper.position.z = 0.02;
   card.add(paper);
 
   // Where the dish stands, proud of the paper like a thing pinned to it.
   const art = new THREE.Group();
-  art.position.set(0, -0.02, 0.12);
+  art.position.set(0, -0.02, 0.1);
   card.add(art);
   parts.cardArt = art;
+
+  const recipe = id === null ? null : RECIPE_BY_ID.get(id);
+  if (!recipe) return;
+  // The dish itself, at a third scale — the same object the plate will carry,
+  // for the same reason the pallet beside it shows a real fryer.
+  const dish = buildItemModel({
+    id: -1,
+    base: recipe.dish.base,
+    processes: [...recipe.dish.processes],
+    contents: [],
+  });
+  dish.scale.setScalar(0.5);
+  art.add(dish);
 }
 
 /** What the board says, and the colour it says it in. */

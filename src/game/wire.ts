@@ -369,9 +369,15 @@ function parseOffer(value: unknown): Offer | null | undefined {
   if (!isRecord(value)) return undefined;
   const kind = str(value.kind, MAX_NAME);
   if (kind === null || !isApplianceKind(kind)) return undefined;
-  if (value.source === null || value.source === undefined) return { kind, source: null };
+  // The dish on a recipe card. Not checked against the cookbook here, for the
+  // same reason `unlocked` is not: an id the content does not know is dropped
+  // where it is *used*, so one stale save cannot make a whole layout unparseable.
+  const recipe = optionalStr(value.recipe, MAX_NAME);
+  if (recipe === undefined) return undefined;
+  const card = recipe === null ? {} : { recipe };
+  if (value.source === null || value.source === undefined) return { kind, source: null, ...card };
   const source = parseSpec(value.source);
-  return source === undefined ? undefined : { kind, source };
+  return source === undefined ? undefined : { kind, source, ...card };
 }
 
 /** Returns `undefined` for "present but malformed", distinct from a real absence. */
@@ -553,13 +559,12 @@ function parseFrameAppliance(value: unknown): Frame["appliances"][number] | null
   const item = parseNullableItem(value.item);
   if (item === undefined) return null;
   const heldBy = optionalInt(value.heldBy);
-  const armedBy = optionalInt(value.armedBy);
-  if (heldBy === undefined || armedBy === undefined) return null;
+  if (heldBy === undefined) return null;
 
   const motion = value.motion === null ? null : parseMotion(value.motion);
   if (motion === undefined) return null;
 
-  return { id, item, progress, overcook, motion, heldBy, justFinished, tip, armedBy };
+  return { id, item, progress, overcook, motion, heldBy, justFinished, tip };
 }
 
 /** Exhaustive by type — see the note on `APPLIANCE_KINDS`. */

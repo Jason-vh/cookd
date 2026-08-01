@@ -15,7 +15,7 @@ import {
   unshelvePlate,
 } from "../plates";
 import { countKind, isEssential, offerLabel, offerPrice, sellPrice } from "../shop";
-import type { Appliance, Inputs, Item, Offer, Player, World } from "../types";
+import type { Appliance, Inputs, Item, Offer, Player, Vec2, World } from "../types";
 import {
   PLAYER_RADIUS,
   applianceAtTile,
@@ -29,7 +29,8 @@ import {
 } from "../world";
 
 import { serveHatch, serveTable } from "./customers";
-import { useCardStand } from "./cards";
+import { RECIPE_BY_ID } from "../../data/recipes";
+import { missingFor, unlockRecipe } from "../cards";
 import { useSign } from "./sign";
 import { canPlace, itemLabel, reachedTile, targetAppliance } from "../queries";
 
@@ -435,12 +436,6 @@ function buildGrab(world: World, player: Player): void {
     useStall(world, player, faced);
     return;
   }
-  // The recipe board on the caravan's flank, on the same terms: immovable, so
-  // every rule below would refuse it silently.
-  if (faced?.kind === "cards") {
-    useCardStand(world, player, faced);
-    return;
-  }
   // And the sign, which is how the morning ends. Before the carry rules below
   // rather than after: `beginDay` is the thing that refuses a held appliance,
   // and it says so out loud instead of letting the grab fall through in silence.
@@ -459,6 +454,12 @@ function buildGrab(world: World, player: Player): void {
     // grid rules below — there is no tile for it to occupy.
     if (applianceDef(appliance.kind).fitting) {
       fitTopper(world, player, appliance, faced);
+      return;
+    }
+    // A card is spent where it is set down, and it never occupies the tile
+    // either: what lands there is the equipment it owes the kitchen.
+    if (appliance.kind === "cards") {
+      commitCard(world, player, appliance, tile);
       return;
     }
     if (!canPlace(world, tile.x, tile.y, appliance.kind)) return;
@@ -546,6 +547,39 @@ function liftTopper(world: World, player: Player, host: Appliance): void {
   touchLayout(world);
 }
 
+// --- recipe cards ------------------------------------------------------------
+
+/**
+ * Set a bought card down inside the kitchen: the dish joins the menu.
+ *
+ * Putting it down is the whole confirmation. It replaced an arm-and-confirm
+ * dance on a stand — lift, a four-second timer, press again — which existed to
+ * ask "did you mean it", and carrying a thing across a room already answers
+ * that. The two endings are the only two the paving allows: inside, or back on
+ * the pallet for a full refund.
+ *
+ * The tile is the **anchor** for what comes with it, so where somebody sets the
+ * card down is where the fryer arrives. A refusal changes nothing and leaves
+ * the card in their hands, which is where the refund still is.
+ */
+function commitCard(world: World, player: Player, card: Appliance, tile: Vec2): void {
+  const recipe = card.card === null ? null : RECIPE_BY_ID.get(card.card);
+  if (!recipe) return;
+  // Inside only, by the rule every placement goes by: the paving refuses
+  // everything, so a card in your hands either goes in or goes back.
+  if (!canPlace(world, tile.x, tile.y, "counter")) return;
+  const delivery = missingFor(world, recipe);
+  if (!unlockRecipe(world, recipe, who(player), tile)) return;
+
+  world.appliances.delete(card.id);
+  player.carriedAppliance = null;
+  if (delivery.kinds.length + delivery.crates.length === 0) {
+    // Nothing arrived, so nothing on screen said the card was spent.
+    log(world, `${recipe.name} needs nothing this kitchen has not got`);
+  }
+  touchLayout(world);
+}
+
 // --- the stall ---------------------------------------------------------------
 
 /**
@@ -606,7 +640,11 @@ function buyAppliance(
   offer: Offer,
   price: number,
 ): void {
-  const home = nearestFreeTile(world, slot.tile);
+  // A card occupies no tile, ever: it is spent where it is set down and what
+  // lands there is the equipment. So it is the one purchase a kitchen with no
+  // floor left may still make — asking it for a free tile would refuse the
+  // thing that is about to deliver one.
+  const home = offer.recipe === undefined ? nearestFreeTile(world, slot.tile) : slot.tile;
   if (!home) {
     refuse(world, slot, "Nowhere to put it");
     return;
@@ -617,6 +655,7 @@ function buyAppliance(
   }
 
   const bought = spawnAppliance(world, offer.kind, home, offer.source, player.id);
+  bought.card = offer.recipe ?? null;
   if (offer.kind === "plates") stockNewStack(world, bought);
   world.money -= price;
   slot.taken = bought.id;
@@ -669,6 +708,15 @@ function sellToStall(world: World, player: Player, slot: Appliance, appliance: A
   }
 
   if (slot.taken === null && slot.offer) return; // the slot is full; nothing to do
+
+  // A card is worth its fee to the pallet it came from and nothing to any
+  // other, because what it is worth is the dish on it rather than the paper.
+  // Without this, carrying one to an emptied square would "sell" it for $0 and
+  // the money would simply be gone.
+  if (appliance.kind === "cards") {
+    refuse(world, slot, "Take it inside, or back where you got it");
+    return;
+  }
 
   const def = applianceDef(appliance.kind);
   if (isEssential(appliance.kind) && countKind(world, appliance.kind) <= 1) {

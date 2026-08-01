@@ -209,17 +209,17 @@ export const PARK_KITCHEN: LevelDef = {
   // **The level is a starting point, not an endpoint.** There is no fryer, no
   // oven, and no crate but tomato and lettuce, because a kitchen contains only
   // what its menu needs and the menu is one salad. Equipment enters this world
-  // through the recipe posters, which deliver whatever a new recipe wants — so by
+  // through the recipe cards, which deliver whatever a new recipe wants — so by
   // day ten no two rooms are the same restaurant.
   appliances: [
-    // Where the morning's delivery lands, and the posters beside the door.
-    // Grouped rather than lined up, and clear of the row customers walk in
-    // along — see the note on `stall` in `data/appliances.ts`.
+    // Where the morning's delivery lands. Grouped rather than lined up, and
+    // clear of the row customers walk in along — see the note on `stall` in
+    // `data/appliances.ts`. Only ever true of one morning: the squares are
+    // re-rolled each day, and the first day has no delivery at all.
     at("stall", 1, 3),
     at("stall", 0, 4),
     at("stall", 0, 6),
-    at("cards", 1, 4),
-    at("cards", 1, 6),
+    at("stall", 1, 6),
     // The sign hangs on the wall beside the door, on the first tile inside it,
     // so opening the day is somebody walking to the door. It has to be against
     // the shell and not in a corner — that is the wall it is screwed to, and
@@ -270,12 +270,11 @@ export const BEACH_SHACK: LevelDef = {
   // counters stand against.
   walls: [wall(9, 1, 9, 2), wall(9, 3, 9, 4), wall(9, 5, 9, 6), wall(9, 7, 9, 9)],
   appliances: [
-    // The delivery, and the posters either side of the door.
+    // The delivery, on the paving outside the door.
     at("stall", 1, 3),
     at("stall", 0, 4),
     at("stall", 0, 6),
-    at("cards", 1, 4),
-    at("cards", 1, 6),
+    at("stall", 1, 6),
     at("sign", 2, 4),
     // The galley: crates and bin along the top, wash-up along the bottom.
     crate("tomato", 10, 1),
@@ -346,13 +345,12 @@ export const HIGHWAY_STOP: LevelDef = {
   // lane runs *past* the building rather than into it. Nobody reverses.
   lane: { entry: { x: 19, y: 8 }, exit: { x: 0, y: 8 } },
   appliances: [
-    // The delivery and the posters, as every kitchen has them, and the sign on
-    // the wall inside the door.
+    // The delivery, as every kitchen has it, and the sign on the wall inside
+    // the door.
     at("stall", 1, 2),
     at("stall", 0, 3),
     at("stall", 0, 5),
-    at("cards", 1, 3),
-    at("cards", 1, 5),
+    at("stall", 1, 5),
     at("sign", 2, 5),
     // The back run: crates and prep at the west end, wash-up at the east.
     crate("tomato", 3, 2),

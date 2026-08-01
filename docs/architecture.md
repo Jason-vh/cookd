@@ -26,7 +26,7 @@ src/
     items.ts              item identity + canonical keys
     plates.ts             the crockery, and the promise that none of it is ever destroyed
     shop.ts               the stall's stock: rolled from the seed and the day, not from play
-    cards.ts              the menu: what a room has unlocked, and the stand that grows it
+    cards.ts              the menu: what a room has unlocked, and what a card costs to add to it
     day.ts                opening, closing and restarting a day, and what closing up clears
     pathing.ts            BFS over steps somebody could take: routes and reachability
     walls.ts              walls, which live on the seams between tiles

@@ -38,8 +38,8 @@ import type {
 /**
  * Bumped whenever a message shape changes in a way an older peer cannot read.
  *
- * v2 added the menu to the layout — which recipes a room has unlocked, and what
- * is on the card stand. A v1 server sends layouts without it, and a v2 client
+ * v2 added the menu to the layout — which recipes a room has unlocked, and the
+ * card on offer. A v1 server sends layouts without it, and a v2 client
  * rejects those wholesale (see `parseLayout`), so it would sit at "connecting"
  * with nothing logged. The version check turns that into the one sentence it
  * should be: refresh the page.
@@ -105,13 +105,12 @@ export type LayoutAppliance = {
    */
   topper: Appliance["topper"];
   /**
-   * What a card stand is holding this morning.
+   * The dish on a recipe card somebody is carrying.
    *
-   * Rides the layout for the same reasons the stall's offer does — rare,
-   * structural, and about where things are. Sent rather than recomputed even
-   * though every client could roll the same pair from the seed and the day,
-   * because what is *left* on the stand is not derivable: it depends on what
-   * somebody chose.
+   * A card standing in the delivery travels as its square's `offer`, like the
+   * oven beside it. This is the other half of its short life: once bought, it
+   * is an appliance in somebody's hands until they set it down, and a client
+   * that did not know which dish was on it would draw a blank card.
    */
   card: string | null;
 };
@@ -164,14 +163,6 @@ export type FrameAppliance = {
   heldBy: number | null;
   justFinished: boolean;
   tip: number;
-  /**
-   * Who has a card lifted but not yet taken.
-   *
-   * In the frame rather than the layout, unlike the card itself: arming ticks
-   * down, clears when somebody walks away, and is drawn as a card hovering. It
-   * is the same sort of fact as `heldBy` and it travels the same way.
-   */
-  armedBy: number | null;
 };
 
 /**
@@ -416,7 +407,6 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
           appliance.motion !== null ||
           appliance.heldBy !== null ||
           appliance.justFinished ||
-          appliance.armedBy !== null ||
           appliance.tip > 0,
       )
       .map((appliance) => ({
@@ -428,7 +418,6 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
         heldBy: appliance.heldBy,
         justFinished: appliance.justFinished,
         tip: appliance.tip,
-        armedBy: appliance.armedBy,
       })),
     acks: Object.fromEntries(acks),
   };
@@ -468,8 +457,6 @@ export function applyLayout(world: World, layout: Layout): void {
       taken: saved.taken,
       topper: saved.topper,
       card: saved.card,
-      armedBy: null,
-      armTime: 0,
       tip: 0,
     });
     world.applianceAt[saved.y * world.width + saved.x] = saved.id;
@@ -562,7 +549,6 @@ export function applyFrame(world: World, frame: Frame): void {
     appliance.heldBy = null;
     appliance.justFinished = false;
     appliance.tip = 0;
-    appliance.armedBy = null;
     world.applianceAt[appliance.tile.y * world.width + appliance.tile.x] = appliance.id;
   }
   for (const snapshot of frame.appliances) {
@@ -575,7 +561,6 @@ export function applyFrame(world: World, frame: Frame): void {
     appliance.heldBy = snapshot.heldBy;
     appliance.justFinished = snapshot.justFinished;
     appliance.tip = snapshot.tip;
-    appliance.armedBy = snapshot.armedBy;
     // A held appliance is off the grid, or it would leave a solid phantom tile.
     if (snapshot.heldBy !== null) {
       world.applianceAt[appliance.tile.y * world.width + appliance.tile.x] = 0;

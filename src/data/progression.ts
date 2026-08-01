@@ -1,10 +1,12 @@
 /**
  * How a kitchen's menu grows: the cards, their cadence, and their weights.
  *
- * Deliberately not in `economy.ts`, whose subject is the *shop* — what a square
- * holds and what a sale pays. A recipe poster looks like a shop and is not one:
- * nothing here has a price, and the only currency is the day number. Two
- * systems, two tables.
+ * Kept apart from `economy.ts`, whose subject is what a square holds and what a
+ * sale pays, even though a recipe is now bought from the same paving as an
+ * oven. The two tables answer different questions: that one prices *objects* by
+ * what they do for a kitchen, this one prices *dishes* by how much kitchen they
+ * ask for. A card's fee is a fact about the menu, and it belongs beside the
+ * weights that decide which dish is offered in the first place.
  *
  * This is content: plain data, expect to iterate on every number in it.
  */
@@ -31,40 +33,45 @@ export const STARTING_RECIPES: string[] = ["salad"];
  */
 export const BACKFILL_RECIPES: string[] = ["salad", "fries", "pizza"];
 
-/** The morning the first recipe posters go up. */
-export const FIRST_CARD_DAY = 2;
-
-/** And every this-many mornings after it: 2, 5, 8, 11… */
-export const CARD_INTERVAL = 3;
-
-/**
- * Cards on the stand. Matches the number of `?` tiles the level puts down.
- *
- * Two, and it is a **choice between them** rather than two things to collect:
- * picking one takes the offer with it. That is what makes the stand a decision
- * about what kind of restaurant this is, and it is why an unpicked pair is
- * allowed to simply leave at open — a room may consolidate on purpose.
- */
-export const CARD_SLOTS = 2;
-
 /**
  * How likely each tier is to be offered.
  *
  * Read like `STOCK_WEIGHT`: early mornings are mostly simple dishes, and
  * **pizza arrives late and rare, as the event it deserves to be**. A tier is a
  * claim about how much kitchen a dish demands, not about its reward — the two
- * correlate, and where they do not, the tier is what the stand goes by.
+ * correlate, and where they do not, the tier is what the morning goes by.
  */
 export const TIER_WEIGHT: Record<number, number> = { 1: 5, 2: 2, 3: 1 };
 
 /**
- * How long an armed card stays armed, in seconds.
+ * What a card costs, by the same tier the roll is weighted by.
  *
- * The same number and the same reason as the pause menu's reset: an armed
- * choice left alone should not still be one press from happening when somebody
- * comes back to it.
+ * The fee is **flat**, and the equipment the kitchen lacks still comes free on
+ * top of it — so a card is how a room gets its *first* fryer, and the shop is
+ * where it buys the second. The two are not competing to sell you an oven; they
+ * are selling different things, and a card is the only one that also tells you
+ * why you wanted it.
+ *
+ * A tier-1 fee is about one good day's takings, which is what puts the first
+ * affordable card on the morning of day 2 — where the old `FIRST_CARD_DAY`
+ * used to put it by decree.
+ *
+ * Not in `appliances.ts` with the other prices: those are what a *thing* costs,
+ * and every card is the same object. What varies is the dish on it.
  */
-export const ARM_SECONDS = 4;
+export const TIER_FEE: Record<number, number> = { 1: 30, 2: 60, 3: 100 };
+
+/**
+ * What a card costs, by tier.
+ *
+ * Takes the tier rather than the recipe so that this stays a data module
+ * nothing else in `data/` has to import. Four callers ask it — the price on the
+ * pallet, the refund a disconnect pays, the money a save writes for a card
+ * somebody was holding, and the tests — and one answer is the point.
+ */
+export function cardFee(tier: number): number {
+  return TIER_FEE[tier] ?? 0;
+}
 
 /**
  * Roughly what share of the first service day's orders the newest dish takes.

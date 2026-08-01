@@ -207,11 +207,12 @@ describe("protocol", () => {
     expect(crate?.source?.base).toBeTruthy();
   });
 
-  test("layout carries the menu and the cards on the stand", () => {
+  test("layout carries the menu, and the card on offer this morning", () => {
     // The menu is what customers order from, so a client that had it wrong
     // would draw order bubbles for dishes this kitchen has never unlocked. It
-    // rides the layout rather than the frame because it changes every third
-    // morning and never during service — the same kind of fact as a counter.
+    // rides the layout rather than the frame because it changes on a morning
+    // somebody buys a card and never during service — the same kind of fact as
+    // a counter, and the same kind of fact as the offer beside it.
     const host = new Host();
     while (host.world.day < 2) {
       beginDay(host.world);
@@ -223,7 +224,9 @@ describe("protocol", () => {
     const layout = encodeLayout(host.world);
     expect(layout.unlocked).toEqual(["salad", "fries"]);
     expect(layout.unlockedDay).toBe(2);
-    expect(layout.appliances.filter((a) => a.kind === "cards" && a.card !== null)).not.toEqual([]);
+    // The card is an *offer* on a delivery square now, not a poster on a wall,
+    // so it travels the way the oven for sale beside it does.
+    expect(layout.appliances.some((a) => a.offer?.recipe !== undefined)).toBe(true);
 
     // Copied on the way out, never aliased: one layout is applied to two worlds
     // and one of them is replayed over.

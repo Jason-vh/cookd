@@ -1,41 +1,52 @@
 import { APPLIANCE_KINDS, applianceDef, type ApplianceKind } from "../data/appliances";
 import { ingredient } from "../data/ingredients";
-import { CARD_INTERVAL, FIRST_CARD_DAY, TIER_WEIGHT } from "../data/progression";
+import { TIER_WEIGHT } from "../data/progression";
 import { RECIPE_BY_ID, RECIPE_NEEDS, RECIPES } from "../data/recipes";
-import { mulberry32 } from "./random";
-import type { Appliance, ItemSpec, Recipe, Station, Vec2, World } from "./types";
+import type { ItemSpec, Recipe, Station, Vec2, World } from "./types";
 import { fittedDef, log, nearestFreeTile, spawnAppliance, touchLayout } from "./world";
 
 /**
- * The menu, and the stand that grows it.
+ * The menu: what this kitchen may be asked for, and what it costs to widen it.
  *
- * A kitchen starts with one dish and buys the rest with *days*: on the morning
- * of day 2, and every third morning after it, two recipe cards stand on the
- * west apron beside the stall. Face one, `Grab` to lift it, `Grab` again to
- * take it. It is a choice **between** the two, not two things to collect — the
- * pair leaves together, either in somebody's hands or at open.
+ * A kitchen starts with one dish and buys the rest with **money**, from the
+ * same paving the oven is sold on. One square of every morning's delivery holds
+ * a recipe card; carrying it inside and putting it down is what spends it. The
+ * roll and the price live here, the pallet it stands on lives in `shop.ts`, and
+ * the grab that buys it lives in `systems/interaction.ts`.
  *
- * ## The same three rules as the stall
+ * ## What this replaced
  *
- * 1. **The offer is derived, not stored.** It is rolled from `(seed, day)`
- *    through its own generator, never from `random(world)`, which play has
+ * Two cards on a stand, then two posters on the outside wall, on day 2 and
+ * every third morning after. The wall was the last thing outside that existed
+ * only because the game needed somewhere to put an offer — the same fault as
+ * the market stall and the caravan before it — and the cadence was the calendar
+ * still authoring the menu, one level up from the `unlockDay` it replaced.
+ *
+ * A card is a good now, and the only calendar left is "is there a delivery
+ * today", which is a question about the shop.
+ *
+ * ## The rules it inherits from the delivery
+ *
+ * 1. **The offer is derived, not stored.** The card is rolled from
+ *    `(seed, day)` in `restockStall`, never from `random(world)`, which play has
  *    already consumed by the time anybody reaches the patio. Two clients on one
- *    seed must see one pair of cards.
- * 2. **The result is ordinary world state.** The cards live on the stand
- *    appliances and ride the layout message, so a card being taken is a layout
- *    change like an oven moving.
+ *    seed must be offered one card.
+ * 2. **The result is ordinary world state.** It rides the layout message on its
+ *    slot, so a card being bought is a layout change like an oven moving.
  * 3. **What cannot be recomputed is written down.** `world.unlocked` is the
- *    room's whole history and is saved; `world.unlockedDay` is what stops a
- *    morning offering a second card, and a reloaded room re-offering the pair
- *    it already spent.
+ *    room's whole history and is saved; `world.unlockedDay` carries the launch
+ *    share and stops a restored save re-running it.
  *
  * ## Cards deliver what they need
  *
- * Picking a recipe hands the kitchen, free, every requirement it lacks: the
+ * Buying a recipe hands the kitchen, free, every requirement it lacks: the
  * appliance kinds and the ingredient crates. Those are **derived from the
  * recipe data** (`RECIPE_NEEDS`) rather than listed on the card, because a
  * hand-written "fries need a fryer and a potato crate" is a second opinion
  * about the content and it goes stale the day a step changes.
+ *
+ * So the fee is flat and the kit is free: a card is how a room gets its *first*
+ * fryer, and the shop is where it buys the second.
  */
 
 // --- the menu ------------------------------------------------------------------
@@ -117,24 +128,7 @@ export function setUnlocked(world: World, ids: string[], day: number): void {
   world.unlockedDay = day;
 }
 
-// --- the stand -----------------------------------------------------------------
-
-/** The card stands, in a stable order: the level's `?` tiles, top to bottom. */
-export function cardStands(world: World): Appliance[] {
-  const stands: Appliance[] = [];
-  for (const appliance of world.appliances.values()) {
-    if (appliance.kind === "cards") stands.push(appliance);
-  }
-  // Sorted rather than trusted to insertion order, for the same reason the
-  // stall's slots are: a layout arriving over the wire is whatever the server's
-  // map iteration produced, and card one has to be card one on both ends.
-  return stands.sort((a, b) => a.tile.y - b.tile.y || a.tile.x - b.tile.x);
-}
-
-/** Is this a morning the cards come out? Day 2, then every third: 5, 8, 11… */
-export function isCardMorning(day: number): boolean {
-  return day >= FIRST_CARD_DAY && (day - FIRST_CARD_DAY) % CARD_INTERVAL === 0;
-}
+// --- the morning's card --------------------------------------------------------
 
 /** Recipes that could be offered right now: locked, and with their prereq met. */
 export function offerable(world: World): Recipe[] {
@@ -145,42 +139,17 @@ export function offerable(world: World): Recipe[] {
 }
 
 /**
- * Put this morning's cards on the stands, or leave them bare.
+ * One card, weighted by tier — see `TIER_WEIGHT`.
  *
- * Called wherever `restockStall` is: on a world being built, on a day closing,
- * and on a save being restored. The roll is a pure function of the seed, the
- * day and the menu, so doing it again is doing it identically.
+ * Null only when there is genuinely nothing left to offer, which is a room that
+ * has bought the whole library. The morning then holds four goods instead of
+ * three, and nothing anywhere has to say so.
  *
- * The stands are left empty on three occasions, and they are all the same
- * sentence — *there is nothing to choose today*: it is not a card morning, the
- * room has already chosen this morning, or the library is exhausted.
+ * The stream is the delivery's own: a card is one of the four squares, so it is
+ * one event with the rest of the morning rather than a second roll to keep in
+ * step.
  */
-export function restockCards(world: World): void {
-  const stands = cardStands(world);
-  if (stands.length === 0) return;
-  for (const stand of stands) clearCard(stand);
-  // A card rides the layout message, exactly as a stall offer does, so the
-  // morning's roll is a layout change. One bump covers everything this call
-  // goes on to write: the server reads the version once, after the tick.
-  touchLayout(world);
-  if (!isCardMorning(world.day) || world.unlockedDay === world.day) return;
-
-  // A stream of its own, from numbers that cannot drift, mixed differently from
-  // the stall's so the two do not move in lockstep on the same morning.
-  const random = mulberry32((world.seed * 0x2545 + world.day * 0x9e3779b1) | 0);
-  const pool = offerable(world);
-  // Never two cards of the same recipe: each pick is removed from the pool
-  // before the next is drawn, so a one-recipe library offers one card.
-  for (const stand of stands) {
-    const picked = drawByTier(pool, random);
-    if (!picked) return;
-    pool.splice(pool.indexOf(picked), 1);
-    stand.card = picked.id;
-  }
-}
-
-/** One card, weighted by tier — see `TIER_WEIGHT`. */
-function drawByTier(pool: Recipe[], random: () => number): Recipe | null {
+export function rollCard(pool: Recipe[], random: () => number): Recipe | null {
   let total = 0;
   for (const recipe of pool) total += TIER_WEIGHT[recipe.tier] ?? 1;
   if (total <= 0) return null;
@@ -190,18 +159,6 @@ function drawByTier(pool: Recipe[], random: () => number): Recipe | null {
     if (roll < 0) return recipe;
   }
   return pool.at(-1) ?? null;
-}
-
-/** Take every card off the stands, armed or not. */
-export function clearCards(world: World): void {
-  for (const stand of cardStands(world)) clearCard(stand);
-  touchLayout(world);
-}
-
-function clearCard(stand: Appliance): void {
-  stand.card = null;
-  stand.armedBy = null;
-  stand.armTime = 0;
 }
 
 // --- what a card costs the world to honour ------------------------------------
@@ -274,7 +231,7 @@ export function deliveryLabel(delivery: Delivery): string {
   return parts.join(", ");
 }
 
-// --- taking a card -------------------------------------------------------------
+// --- setting a card down -------------------------------------------------------
 
 /**
  * Unlock a recipe and deliver everything the kitchen lacks for it.
@@ -283,6 +240,11 @@ export function deliveryLabel(delivery: Delivery): string {
  * is the pathological case — a kitchen with no free interior tile left — and it
  * has to be **refused out loud**: quietly unlocking a dish whose oven was
  * dropped on the floor is a menu the room cannot cook and cannot diagnose.
+ *
+ * A refusal leaves the card **in the buyer's hands**, which is where the money
+ * still is: the pallet it came from will take it back at full price all
+ * morning. The old stand refused after the choice was spent; this refuses
+ * before, because a card is a thing you are carrying until you put it down.
  *
  * Everything is logged, by name. Money is one shared number and the menu is one
  * shared list; the log is the only honest account of who changed either.
@@ -303,10 +265,9 @@ export function unlockRecipe(world: World, recipe: Recipe, chooser: string, from
   for (const base of delivery.crates) {
     deliver(world, "crate", { base, processes: [] }, from);
   }
-  clearCards(world);
-  // The unlock itself changes no tile when nothing is delivered, and the cards
-  // and the menu both ride the layout. Without this a room that already owned
-  // everything would unlock a dish nobody else in it could see.
+  // The unlock itself changes no tile when nothing is delivered, and the menu
+  // rides the layout. Without this a room that already owned everything would
+  // unlock a dish nobody else in it could see.
   touchLayout(world);
   return true;
 }

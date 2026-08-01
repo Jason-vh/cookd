@@ -1,12 +1,12 @@
 import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
 import { RECIPE_BY_ID } from "../data/recipes";
-import type { Appliance, Offer, Recipe, World } from "../sim/types";
+import type { Appliance, Offer, World } from "../sim/types";
 import { playerById } from "../sim/world";
-import { inward, outward } from "../sim/walls";
+import { inward } from "../sim/walls";
 import { deliveryLabel, missingFor } from "../sim/cards";
 import { canPlace, reachedTile, targetTile, unreachableTables } from "../sim/queries";
-import { offerLabel, offerPrice } from "../sim/shop";
+import { hasDelivery, offerLabel, offerPrice } from "../sim/shop";
 import { chopLift, ease, workPhase } from "./anim";
 import { setGlow } from "./glow";
 import { Dial } from "./dial";
@@ -20,7 +20,6 @@ import {
   type ApplianceParts,
   type SignFace,
 } from "./appliance-meshes";
-import { buildItemModel } from "./models";
 import { buildHighlight } from "./overlay-meshes";
 import { PALETTE } from "./palette";
 import { makeCardLabel, makeLabel } from "./sprites";
@@ -56,13 +55,11 @@ type Visual = ApplianceParts & {
    */
   offerKey: string;
   /**
-   * What this card stand is currently showing: the recipe, and what it would
-   * have delivered. Both are on the key because the second changes without the
-   * first — buy the oven yourself and the card stops promising you one.
+   * What a recipe card on this square would be delivered with, as its label
+   * says it. Kept because it changes without the offer changing — buy the oven
+   * yourself and the card stops promising you one.
    */
-  cardKey: string;
-  /** How far the card is lifted while somebody is considering it, 0..1. */
-  armed: number;
+  needs: string;
   /** What the sign says, and the pop as it changes. 1..0. */
   signFace: SignFace;
   signPop: number;
@@ -162,7 +159,6 @@ export class ApplianceViews {
       this.animateParts(appliance, visual, phase, dt);
       this.syncDial(appliance, visual, dt, time);
       if (appliance.kind === "stall") this.syncStall(world, appliance, visual, dt);
-      if (appliance.kind === "cards") this.syncCards(world, appliance, visual, dt, time);
       if (appliance.kind === "sign") this.syncSign(world, appliance, visual, dt);
     }
   }
@@ -252,56 +248,6 @@ export class ApplianceViews {
     ringMaterial(visual.warning).opacity = 0.62 + Math.sin(time * 5) * 0.3;
   }
 
-  /**
-   * Dress a recipe board: the dish on the card, what the card says, and the
-   * lift that means somebody is about to choose it.
-   *
-   * The board is bolted to the caravan either way. What comes and goes is the
-   * paper on it, which is the same grammar as the hatch: whether there is a
-   * decision to make is legible from across the grass.
-   */
-  private syncCards(
-    world: World,
-    appliance: Appliance,
-    visual: Visual,
-    dt: number,
-    time: number,
-  ): void {
-    // Pasted flat on the outside of the shell, facing whoever walks up to it.
-    // The same rule the sign uses on the inside face of the same wall, and for
-    // the same reason: which wall a poster is on is a fact about the building,
-    // not about where the camera happens to be.
-    const face = outward(world.room, appliance.tile);
-    visual.root.rotation.y = Math.atan2(face.x, face.y);
-
-    // Cards are a morning thing. A day opening takes them with it, and the
-    // simulation agrees — `beginDay` clears them — but the phase is what the
-    // renderer can see first, on the very frame it changes.
-    const id = world.phase === "build" ? appliance.card : null;
-    const recipe = id === null ? undefined : RECIPE_BY_ID.get(id);
-    // What it needs is asked of the world, so it answers for *this* kitchen and
-    // stops promising an oven the moment the room buys one.
-    const needs = recipe ? deliveryLabel(missingFor(world, recipe)) : "";
-    const key = recipe ? `${recipe.id}|${needs}` : "";
-    if (key !== visual.cardKey) {
-      visual.cardKey = key;
-      this.dressCard(appliance, visual, recipe, needs);
-    }
-    if (visual.card) visual.card.visible = recipe !== undefined;
-
-    // Armed: the card lifts off the board and sways, so a second player across
-    // the pitch can see a choice being made before it is made. Lifted *within*
-    // its mount, which is what puts the board's own height and lean in the
-    // builder rather than half here and half there.
-    const target = appliance.armedBy !== null && recipe ? 1 : 0;
-    visual.armed += (target - visual.armed) * ease(12, dt);
-    if (visual.card) {
-      visual.card.position.set(0, visual.armed * 0.24, visual.armed * 0.1);
-      visual.card.rotation.z = Math.sin(time * 3.4) * 0.05 * visual.armed;
-      visual.card.scale.setScalar(1 + visual.armed * 0.08);
-    }
-  }
-
   /** Repaint the sign when the restaurant opens or closes. See `signFaceOf`. */
   private syncSign(world: World, appliance: Appliance, visual: Visual, dt: number): void {
     // Faces into the room off the wall it is bolted to, and stays there. It used
@@ -339,48 +285,31 @@ export class ApplianceViews {
   }
 
   /** Put a recipe on the card: its dish, and everything the card promises. */
-  private dressCard(
-    appliance: Appliance,
-    visual: Visual,
-    recipe: Recipe | undefined,
-    needs: string,
-  ): void {
-    const art = visual.cardArt;
-    if (art) {
-      const old = art.children.slice();
-      art.clear();
-      for (const child of old) disposeSubtree(child);
-      if (recipe) {
-        // The dish itself, at a third scale — the same object the plate will
-        // carry, for the same reason the stall shows a real fryer.
-        const dish = buildItemModel({
-          id: -1,
-          base: recipe.dish.base,
-          processes: [...recipe.dish.processes],
-          contents: [],
-        });
-        dish.scale.setScalar(0.62);
-        art.add(dish);
-      }
-    }
-
-    if (visual.label) {
-      visual.root.remove(visual.label);
-      disposeSubtree(visual.label);
-      visual.label = undefined;
-    }
-    if (!recipe) return;
-    // Name, reward, steps, requirements — the whole card, read only when a chef
-    // is standing in front of it. See `makeCardLabel`.
-    const label = makeCardLabel([
-      `${recipe.name}  +$${recipe.reward}`,
-      recipe.steps.join(" \u2192 "),
-      needs ? `needs: ${needs}` : "",
-    ]);
-    label.position.y = applianceDef(appliance.kind).height + 0.5;
-    label.visible = false;
-    visual.root.add(label);
-    visual.label = label;
+  /**
+   * A price, or a whole recipe card.
+   *
+   * Goods get one line, because the name and the number are all there is to
+   * say about an oven somebody can already see. A card's face is the thing it
+   * is *for* — the dish, what it pays, the steps, and what the kitchen would be
+   * sent — and it survives from the poster this replaced, with the price it
+   * never used to have on the end of the first line.
+   */
+  private offerSprite(visual: Visual, offer: Offer, refused: boolean): THREE.Object3D {
+    const recipe = offer.recipe === undefined ? undefined : RECIPE_BY_ID.get(offer.recipe);
+    const colour = refused ? PALETTE.progressBurn : 0xffffff;
+    if (!recipe) return makeLabel(`${offerLabel(offer)}  $${offerPrice(offer)}`, colour);
+    return makeCardLabel(
+      [
+        `${recipe.name}  $${offerPrice(offer)}`,
+        recipe.steps.join(" \u2192 "),
+        // "with nothing" is worth saying out loud: it is the difference between
+        // a card that is also a free fryer and a card that is only a dish, and
+        // a blank line reads as the label having failed to say something.
+        visual.needs ? `with ${visual.needs}` : "with nothing",
+        `+$${recipe.reward} a plate`,
+      ],
+      colour,
+    );
   }
 
   private create(appliance: Appliance, world: World): Visual {
@@ -403,9 +332,8 @@ export class ApplianceViews {
       // joining mid-service does not watch three deliveries fly away.
       presence: 0,
       offerKey: "",
-      cardKey: "",
+      needs: "",
       topper: null,
-      armed: 0,
       refused: 0,
       signFace,
       signPop: 0,
@@ -428,7 +356,11 @@ export class ApplianceViews {
    * the reason nothing out here needs a shutter.
    */
   private syncStall(world: World, appliance: Appliance, visual: Visual, dt: number): void {
-    const open = world.phase === "build";
+    // Nothing is delivered on the first morning, and that has to include the
+    // pallets: an empty one means "already carried inside", which on day one
+    // would be a lie about a delivery that never came. Asked of the same rule
+    // the roll asks, so the paving and the simulation cannot disagree.
+    const open = world.phase === "build" && hasDelivery(world);
 
     // The delivery is set down in the morning and collected when the day opens,
     // and both are worth *seeing*: three things blinking into existence is the
@@ -473,13 +405,18 @@ export class ApplianceViews {
     // on the phase, though: what is standing here has to *ride the pallet out*
     // at opening rather than evaporating off it as it goes.
     const offer = appliance.taken === null ? appliance.offer : null;
+    // What a card would deliver is asked of the *world*, so it answers for this
+    // kitchen and stops promising an oven the moment the room buys one. On the
+    // key because it changes while the offer does not.
+    const recipe = offer?.recipe === undefined ? null : RECIPE_BY_ID.get(offer.recipe);
+    const needs = recipe ? deliveryLabel(missingFor(world, recipe)) : "";
     // The price is the half that is gated, because a label on a shop that has
     // closed is a price nobody may pay. `open` is on the key so that closing
     // rebuilds the label without rebuilding the goods.
-    const key = offer ? `${offerKeyOf(offer)}|${open}` : "";
+    const key = offer ? `${offerKeyOf(offer)}|${needs}|${open}` : "";
     if (key !== visual.offerKey) {
       visual.offerKey = key;
-      this.restock(visual, offer, open);
+      this.restock(visual, offer, open, needs);
     }
 
     // Red for as long as the refusal is worth noticing, then back to white.
@@ -495,7 +432,7 @@ export class ApplianceViews {
   }
 
   /** Stand this morning's goods on the square, and their price over them. */
-  private restock(visual: Visual, offer: Offer | null, sellable: boolean): void {
+  private restock(visual: Visual, offer: Offer | null, sellable: boolean, needs: string): void {
     const counter = visual.counter;
     if (counter) {
       // Detached first, then freed: `clear()` mutates the array being walked.
@@ -504,6 +441,7 @@ export class ApplianceViews {
       for (const child of old) disposeSubtree(child);
       if (offer) counter.add(goodsModel(offer));
     }
+    visual.needs = needs;
     this.priceLabel(visual, sellable ? offer : null, false);
   }
 
@@ -514,10 +452,7 @@ export class ApplianceViews {
       visual.label = undefined;
     }
     if (!offer) return;
-    const sprite = makeLabel(
-      `${offerLabel(offer)}  $${offerPrice(offer)}`,
-      refused ? PALETTE.progressBurn : 0xffffff,
-    );
+    const sprite = this.offerSprite(visual, offer, refused);
     // Over the goods rather than over the square, because the goods are what is
     // standing here: a plate needs the label at plate height and an oven needs
     // it a foot higher. This is the whole of the shop's signage — contextual,
@@ -746,9 +681,9 @@ function goodsModel(offer: Offer): THREE.Object3D {
     source: offer.source,
     offer: null,
     taken: null,
-    card: null,
-    armedBy: null,
-    armTime: 0,
+    // A card on a pallet is dressed with its dish, exactly as a crate on one is
+    // dressed with its ingredient.
+    card: offer.recipe ?? null,
     heldBy: null,
     tip: 0,
   }).root;

@@ -1,7 +1,6 @@
 import { CLOSING_GRACE, endDay } from "./day";
 import type { Inputs, World } from "./types";
 import { applianceSystem } from "./systems/appliances";
-import { cardSystem } from "./systems/cards";
 import { customerSystem } from "./systems/customers";
 import { interactionSystem } from "./systems/interaction";
 import { movementSystem } from "./systems/movement";
@@ -26,7 +25,6 @@ export function step(world: World, inputs: Inputs, dt: number = DT): void {
   movementSystem(world, inputs, dt);
   interactionSystem(world, inputs);
   applianceSystem(world, dt);
-  cardSystem(world, dt);
   customerSystem(world, dt);
   clockSystem(world, dt);
   expire(world, dt);

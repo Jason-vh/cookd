@@ -1,5 +1,5 @@
 import { LEVEL, type LevelDef } from "../data/level";
-import { restockCards, setUnlocked } from "../sim/cards";
+import { setUnlocked } from "../sim/cards";
 import { restockStall } from "../sim/shop";
 import { DT, step } from "../sim/step";
 import { restartDay } from "../sim/day";
@@ -382,7 +382,6 @@ export class Host {
     // belongs.
     if (!evicted) setUnlocked(this.world, unlocked, unlockedDay);
     restockStall(this.world);
-    restockCards(this.world);
     this.accumulator = 0;
     for (const { id, name, away } of players) {
       const player = addPlayer(this.world, this.level, name);

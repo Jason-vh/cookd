@@ -13,7 +13,13 @@ import { decode, parseClientMessage, parseInput, parseServerMessage } from "./wi
  * something that used to be accepted *and then ruin a room for everybody in it*.
  */
 
-const INPUT = { move: { x: 0, y: 0 }, grab: false, use: false, start: false, menu: false };
+const INPUT = {
+  move: { x: 0, y: 0 },
+  grab: false,
+  use: false,
+  start: false,
+  menu: false,
+};
 
 function inputMessage(input: unknown): string {
   return JSON.stringify({ t: "input", seq: 1, inputs: { 0: input } });
@@ -78,8 +84,16 @@ describe("input is parsed, not trusted", () => {
   });
 
   test("an honest input survives unchanged", () => {
-    const parsed = parseInput({ ...INPUT, move: { x: 0.5, y: -0.25 }, grab: true });
-    expect(parsed).toEqual({ ...INPUT, move: { x: 0.5, y: -0.25 }, grab: true });
+    const parsed = parseInput({
+      ...INPUT,
+      move: { x: 0.5, y: -0.25 },
+      grab: true,
+    });
+    expect(parsed).toEqual({
+      ...INPUT,
+      move: { x: 0.5, y: -0.25 },
+      grab: true,
+    });
   });
 });
 
@@ -215,7 +229,12 @@ describe("server messages", () => {
     const host = new Host();
     host.join("Ann");
     const board = [...host.world.appliances.values()].find((a) => a.kind === "counter")!;
-    board.item = { id: 4, base: "tomato", processes: ["chopped"], contents: [] };
+    board.item = {
+      id: 4,
+      base: "tomato",
+      processes: ["chopped"],
+      contents: [],
+    };
     board.progress = 0.5;
     board.motion = "chop";
     const frame = encodeFrame(host.world, host.acks);
@@ -268,7 +287,11 @@ describe("server messages", () => {
   });
 
   test("an honest layout carries the menu through unchanged", () => {
-    const layout = { ...layoutWith("oven", 1, 1), unlocked: ["salad", "fries"], unlockedDay: 2 };
+    const layout = {
+      ...layoutWith("oven", 1, 1),
+      unlocked: ["salad", "fries"],
+      unlockedDay: 2,
+    };
     const parsed = parseServerMessage({ t: "layout", layout });
     expect(parsed?.t).toBe("layout");
     expect(parsed?.t === "layout" && parsed.layout.unlocked).toEqual(["salad", "fries"]);
@@ -280,10 +303,42 @@ describe("server messages", () => {
       expect(parseServerMessage({ t: "layout", layout: { ...base, unlocked } })).toBeNull();
     }
     expect(parseServerMessage({ t: "layout", layout: { ...base, unlockedDay: -1 } })).toBeNull();
-    expect(parseServerMessage({ t: "layout", layout: { ...base, unlockedDay: "2" } })).toBeNull();
+    expect(
+      parseServerMessage({
+        t: "layout",
+        layout: { ...base, unlockedDay: "2" },
+      }),
+    ).toBeNull();
   });
 
-  test("a card that is not a recipe id is rejected, not coerced", () => {
+  test("a recipe on an offer travels, and a malformed one is rejected", () => {
+    // The card in the delivery is an offer like the oven beside it, so this is
+    // the surface that carries which dish is for sale this morning.
+    const base = layoutWith("stall", 0, 7);
+    const withOffer = (offer: unknown): unknown => ({
+      ...base,
+      appliances: [Object.assign({}, base.appliances[0], { offer })],
+    });
+    expect(
+      parseServerMessage({
+        t: "layout",
+        layout: withOffer({ kind: "cards", recipe: 7 }),
+      }),
+    ).toBeNull();
+    const good = parseServerMessage({
+      t: "layout",
+      layout: withOffer({ kind: "cards", source: null, recipe: "fries" }),
+    });
+    expect(good?.t === "layout" && good.layout.appliances[0]?.offer?.recipe).toBe("fries");
+    // An offer with no recipe on it stays a plain good, not a card with no dish.
+    const plain = parseServerMessage({
+      t: "layout",
+      layout: withOffer({ kind: "oven", source: null }),
+    });
+    expect(plain?.t === "layout" && plain.layout.appliances[0]?.offer?.recipe).toBeUndefined();
+  });
+
+  test("a card in somebody's hands carries its dish, and a bad id is rejected", () => {
     const base = layoutWith("cards", 0, 7);
     const withCard = (card: unknown): unknown => ({
       ...base,
@@ -311,11 +366,17 @@ describe("server messages", () => {
     // A kind this build has never heard of is a *newer server*, which is an
     // ordinary state of the world mid-deploy. It resolves to a regular where it
     // is read; rejecting the frame would freeze a whole kitchen over a coat.
-    const future = { ...frame, customers: [{ ...frame.customers[0], kind: "astronaut" }] };
+    const future = {
+      ...frame,
+      customers: [{ ...frame.customers[0], kind: "astronaut" }],
+    };
     expect(parseServerMessage({ t: "frame", frame: future })).not.toBeNull();
     // A kind that is not a *string* is a malformed message, and those are still
     // dropped whole.
-    const broken = { ...frame, customers: [{ ...frame.customers[0], kind: 7 }] };
+    const broken = {
+      ...frame,
+      customers: [{ ...frame.customers[0], kind: 7 }],
+    };
     expect(parseServerMessage({ t: "frame", frame: broken })).toBeNull();
   });
 

@@ -98,23 +98,17 @@ export type Appliance = {
   /** For crates: the item this appliance dispenses. */
   source: ItemSpec | null;
   /**
-   * For card stands: the recipe on the card, or null for an empty stand.
+   * For a recipe card: the dish on it.
    *
-   * Rolled at restock from the room's seed and the day, exactly as a stall
-   * offer is, and for the same reason — see `sim/cards.ts`.
+   * Set when the card is bought, from the offer that was standing on the
+   * pallet, and read when it is set down. It is the whole of what makes one
+   * card different from another — the same relationship a crate's `source` has
+   * to the crate.
+   *
+   * A card exists only between those two moments, so this is never saved and
+   * never true of anything standing on a tile.
    */
   card: string | null;
-  /**
-   * For card stands: the player who has lifted this card but not yet taken it.
-   *
-   * Choosing is the reset pattern: `Grab` arms, `Grab` again confirms. The
-   * arming lives on the *stand* rather than on the player because it is a fact
-   * about the card — it is what makes the card lift, and what everyone else in
-   * the room can see happening.
-   */
-  armedBy: number | null;
-  /** Seconds an armed card has left before it settles back down. */
-  armTime: number;
   /**
    * For stall slots: what is on sale here this morning, or null for a slot
    * that has been emptied. Rolled at restock — see `sim/shop.ts`.
@@ -374,8 +368,14 @@ export type Tile = {
  * understands appliances, so the grab meant to set a plate on a counter lifted
  * the counter instead. Plates are sold by the **stack** now, crockery included,
  * and the shop has one shape again.
+ *
+ * `recipe` is the dish on a `cards` offer, and it kept the shape: a card *is*
+ * an appliance you carry, and which dish is on it is a property of that one
+ * object exactly as which ingredient is in it is a property of a crate. It
+ * names an id rather than holding a `Recipe` because an offer rides the wire,
+ * and content is not something to send — both ends have the cookbook.
  */
-export type Offer = { kind: ApplianceKind; source: ItemSpec | null };
+export type Offer = { kind: ApplianceKind; source: ItemSpec | null; recipe?: string };
 
 /**
  * One day's takings, kept apart from the lifetime totals beside them.
@@ -490,12 +490,11 @@ export type World = {
    * (`buildGrab`, `returnAppliance`) are the only two places allowed to write
    * to `applianceAt` outside world construction.
    *
-   * **It is not only about position.** A slot's `offer` and a stand's `card`
-   * ride the same message, so the morning roll is a layout change too — it is
-   * missed easily, because nothing has moved. `restockStall`, `restockCards`
-   * and `clearCards` do it themselves rather than trusting their callers: the
-   * day one of them did not, a client spent a whole day reading yesterday's
-   * price off a slot the host had already restocked.
+   * **It is not only about position.** A slot's `offer` rides the same message
+   * — the recipe card among them — so the morning roll is a layout change too,
+   * and it is missed easily, because nothing has moved. `restockStall` does it
+   * itself rather than trusting its callers: the day it did not, a client spent
+   * a whole day reading yesterday's price off a slot the host had restocked.
    */
   layoutVersion: number;
 
@@ -570,11 +569,14 @@ export type World = {
    * The day the newest recipe was unlocked, or 0 for a room that has never
    * picked a card.
    *
-   * One number, three jobs, and they are the same fact seen from three sides:
-   * it is how long `unlocked`'s last entry keeps its launch-day share of the
-   * orders; it is how the morning knows its card offer has already been taken
-   * (one choice per stand, not two purchases); and it is what lets a save come
-   * back into a morning without being offered the cards it already spent.
+   * Two jobs, and they are one fact seen from two sides: it is how long
+   * `unlocked`'s last entry keeps its launch-day share of the orders, and it is
+   * what lets a save come back into a morning without re-running that.
+   *
+   * It used to have a third — "this morning's offer is already spent" — and a
+   * card being a good took it away. A bought card empties its square through
+   * `taken`, exactly as a bought oven does, and one fewer special case is the
+   * whole reason to put the two on the same paving.
    */
   unlockedDay: number;
 

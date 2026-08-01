@@ -11,7 +11,7 @@ import { hatchOf, servingSpot } from "../sim/lane";
 import { reachableFrom, seatsAround } from "../sim/pathing";
 import { canReach } from "../sim/walls";
 import { createWorld, isSolid, tileIndex } from "../sim/world";
-import { BACKFILL_RECIPES, CARD_SLOTS, STARTING_RECIPES, TIER_WEIGHT } from "./progression";
+import { BACKFILL_RECIPES, STARTING_RECIPES, TIER_WEIGHT } from "./progression";
 import { COMBINES, RAW_INGREDIENTS, RECIPES, RECIPE_NEEDS, TRANSFORMS } from "./recipes";
 
 /**
@@ -345,25 +345,13 @@ export function levelProblems(level: LevelDef): string[] {
     say("the door is not against the building's wall, so no customer can ever arrive");
   }
 
-  // The same question from the other side of the masonry: a recipe poster is
-  // pasted on the *outside* of the shell, so its square is the paving directly
-  // against it. One tile further out and it is a poster floating in the park,
-  // which nothing would say out loud — `outward` would still answer, and it
-  // would answer wrongly.
-  const outsideShell = (tile: Vec2): boolean =>
-    (tile.x === room.x - 1 || tile.x === room.x + room.width) !==
-    (tile.y === room.y - 1 || tile.y === room.y + room.height);
-
-  // And the sign hangs on that wall from the inside, so it needs one to hang
+  // The sign hangs on that wall from the inside, so it needs one to hang
   // on. Two things depend on it: `inward` decides which way the sign faces from
   // the seam it stands against, and `addWalls` leaves that seam at full
   // height so the board is never screwed to a wall the camera has cut away.
   for (const placement of level.appliances) {
     if (placement.kind === "sign" && !againstShell(placement.at)) {
       say(`a sign at ${placement.at.x},${placement.at.y} with no wall to hang on`);
-    }
-    if (placement.kind === "cards" && !outsideShell(placement.at)) {
-      say(`a poster at ${placement.at.x},${placement.at.y} with no wall to hang on`);
     }
   }
 
@@ -453,12 +441,6 @@ export function levelProblems(level: LevelDef): string[] {
   // `data/economy.ts` describes wrongly.
   if (count("stall") !== STALL_SLOTS) {
     say(`${count("stall")} stall slots, expected ${STALL_SLOTS}`);
-  }
-  // The posters are the only way a menu grows, and `restockCards` fills
-  // exactly the tiles the level puts down: a level with one stand would offer
-  // no choice, which is the one thing it is for.
-  if (count("cards") !== CARD_SLOTS) {
-    say(`${count("cards")} recipe posters, expected ${CARD_SLOTS}`);
   }
   // The sign is the only way into service, so a kitchen without one can never
   // open — the most complete failure a level can ship. Exactly one: two signs

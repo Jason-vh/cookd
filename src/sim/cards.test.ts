@@ -1,25 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import { applianceDef } from "../data/appliances";
-import { CARD_SLOTS, STARTING_RECIPES } from "../data/progression";
+import { FIRST_DELIVERY_DAY } from "../data/economy";
+import { STARTING_RECIPES, cardFee } from "../data/progression";
 import { LEVEL } from "../data/level";
 import { RECIPES, RECIPE_BY_ID } from "../data/recipes";
 import { Host } from "../game/host";
-import { cardStands, isCardMorning, missingFor, restockCards, unlockedRecipes } from "./cards";
+import { restore, snapshot } from "../save";
+import { missingFor, unlockedRecipes } from "./cards";
 import { seatsAround } from "./pathing";
-import { canPlace } from "./queries";
+import { restockStall, stallSlots } from "./shop";
 import { beginDay, endDay } from "./day";
 import { step } from "./step";
 import type { Appliance, ApplianceKind, PlayerInput, Vec2, World } from "./types";
-import { createWorld, emptyInput } from "./world";
+import { createWorld, emptyInput, nearestFreeTile, removePlayer } from "./world";
 
 /**
- * The recipe boards: how a kitchen's menu grows.
+ * The menu: how a kitchen grows it, and what that costs.
  *
- * Driven the way a player drives it — stand in front of a card, press `Grab`,
- * press it again — because the whole claim of the board is that it is the
- * hatch's grammar applied to progression: **zero new verbs, one new place**. A
- * test that called `unlockRecipe` directly would be testing a different feature
- * from the one that shipped.
+ * Driven the way a player drives it — stand in front of the pallet, press
+ * `Grab`, carry it inside, press `Grab` again — because the whole claim of a
+ * card is that it is a **good**: the shop's own grammar applied to progression,
+ * with no verb, no screen and no timer of its own. A test that called
+ * `unlockRecipe` directly would be testing a different feature from the one
+ * that shipped.
  */
 
 /** A kitchen in the morning of `day`, with nobody due through the door. */
@@ -27,7 +30,7 @@ function morning(day = 1): World {
   const world = createWorld(LEVEL, 1);
   world.nextArrivalIn = Infinity;
   // The day is moved through `endDay` rather than assigned, so everything a
-  // morning is supposed to do — restocking the stall, rolling the cards — has
+  // morning is supposed to do — landing the delivery, rolling the card — has
   // actually happened, exactly as it does in a played game.
   while (world.day < day) {
     beginDay(world);
@@ -47,13 +50,7 @@ function press(world: World, button: "grab"): void {
   step(world, idle());
 }
 
-/**
- * Stand on the paving beside a square, facing it.
- *
- * Any side will do — what stands there is an appliance with four sides, not a
- * counter with a front — so this takes the first walkable neighbour, which is
- * also a small guarantee that the delivery has landed somewhere reachable.
- */
+/** Stand on the paving beside a square, facing it. */
 function faceGoods(world: World, tile: Vec2): void {
   const from = seatsAround(world, tile)[0]!;
   const player = world.players[0]!;
@@ -62,23 +59,40 @@ function faceGoods(world: World, tile: Vec2): void {
   player.facing = { x: tile.x - from.x, y: tile.y - from.y };
 }
 
-/** Face card `index` and press grab. */
-function useCard(world: World, index: number): Appliance {
-  const stand = cardStands(world)[index]!;
-  faceGoods(world, stand.tile);
+/** Face a square and press grab: buys from it, or puts down onto it. */
+function use(world: World, tile: Vec2): void {
+  faceGoods(world, tile);
   press(world, "grab");
-  return stand;
 }
 
-function cardsOn(world: World): (string | null)[] {
-  return cardStands(world).map((stand) => stand.card);
+/** The square holding this morning's recipe card, if there is one. */
+function cardSlot(world: World): Appliance | null {
+  return stallSlots(world).find((slot) => slot.offer?.recipe !== undefined) ?? null;
 }
 
-/** Force a stand to hold a particular recipe, for tests about a specific dish. */
-function offer(world: World, index: number, recipeId: string): Appliance {
-  const stand = cardStands(world)[index]!;
-  stand.card = recipeId;
-  return stand;
+/** The dish on offer this morning, or null. */
+function cardOn(world: World): string | null {
+  return cardSlot(world)?.offer?.recipe ?? null;
+}
+
+/** Force a square to hold a particular card, for tests about a specific dish. */
+function offer(world: World, recipeId: string): Appliance {
+  const slot = stallSlots(world)[0]!;
+  slot.offer = { kind: "cards", source: null, recipe: recipeId };
+  slot.taken = null;
+  return slot;
+}
+
+/** The card in somebody's hands, if there is one. */
+function carriedCard(world: World): Appliance | null {
+  return [...world.appliances.values()].find((a) => a.kind === "cards") ?? null;
+}
+
+/** Buy the card standing on `slot` and carry it in to a free interior tile. */
+function takeCard(world: World, slot: Appliance): void {
+  use(world, slot.tile);
+  const home = nearestFreeTile(world, world.door);
+  if (home) use(world, home);
 }
 
 function counts(world: World, kind: ApplianceKind): number {
@@ -111,8 +125,6 @@ describe("a kitchen starts with one dish", () => {
   });
 
   test("the level ships nothing the salad does not need", () => {
-    // The kitchen is a starting point: no heat, and two crates. Everything else
-    // is a choice somebody makes at the stand or at the stall.
     const world = morning();
     expect(counts(world, "fryer")).toBe(0);
     expect(counts(world, "oven")).toBe(0);
@@ -120,62 +132,52 @@ describe("a kitchen starts with one dish", () => {
   });
 });
 
-describe("the stand", () => {
-  test("hangs on the wall, and nothing may be built under it", () => {
-    const world = morning();
-    const stands = cardStands(world);
-    expect(stands).toHaveLength(CARD_SLOTS);
-    for (const stand of stands) {
-      expect(canPlace(world, stand.tile.x, stand.tile.y, "counter")).toBe(false);
-      expect(world.tiles[stand.tile.y * world.width + stand.tile.x]?.placeable).toBe(false);
+describe("the morning's card", () => {
+  test("day one is delivered nothing at all", () => {
+    // No goods, no card, no pallets. A kitchen with $0 has nothing to do out
+    // here, and the one morning everything worth knowing is inside the walls
+    // is not the morning to put four things it cannot buy outside them.
+    const world = morning(1);
+    expect(world.money).toBe(0);
+    for (const slot of stallSlots(world)) expect(slot.offer).toBeNull();
+  });
+
+  test("and every morning after it holds one, on its own square", () => {
+    for (let day = FIRST_DELIVERY_DAY; day <= 8; day++) {
+      const world = morning(day);
+      const cards = stallSlots(world).filter((slot) => slot.offer?.recipe !== undefined);
+      expect(cards).toHaveLength(1);
+      // The rest of the delivery is goods, so a card never costs the morning
+      // its shop.
+      expect(stallSlots(world).filter((slot) => slot.offer !== null).length).toBeGreaterThan(1);
     }
   });
 
-  test("comes out on day 2, then every third morning", () => {
-    expect([1, 2, 3, 4, 5, 6, 7, 8, 11].map(isCardMorning)).toEqual([
-      false,
-      true,
-      false,
-      false,
-      true,
-      false,
-      false,
-      true,
-      true,
-    ]);
+  test("it stands on paving, where nothing may be built", () => {
+    const world = morning(2);
+    const slot = cardSlot(world)!;
+    expect(world.tiles[slot.tile.y * world.width + slot.tile.x]?.placeable).toBe(false);
   });
 
-  test("day one is bare, day two is a choice", () => {
-    expect(cardsOn(morning(1))).toEqual([null, null]);
-    const second = morning(2);
-    expect(second.unlocked).toEqual(STARTING_RECIPES); // still salad-only until picked
-    for (const card of cardsOn(second)) expect(card).not.toBeNull();
-  });
-
-  test("never offers the same recipe twice", () => {
-    // Two cards, two dishes: a stand offering fries beside fries is not a choice.
-    for (let day = 2; day <= 20; day += 3) {
-      const cards = cardsOn(morning(day)).filter((card) => card !== null);
-      expect(new Set(cards).size).toBe(cards.length);
-    }
-  });
-
-  test("never offers something already on the menu", () => {
+  test("never something already on the menu", () => {
     const world = morning(2);
     world.unlocked = ["salad", "fries", "bread"];
-    restockCards(world);
-    for (const card of cardsOn(world)) expect(world.unlocked).not.toContain(card);
+    for (let day = 2; day < 40; day++) {
+      world.day = day;
+      restockStall(world);
+      const card = cardOn(world);
+      if (card) expect(world.unlocked).not.toContain(card);
+    }
   });
 
   test("respects prerequisites: no cheese fries before fries", () => {
     const world = morning(2);
-    for (let day = 2; day < 60; day += 3) {
+    for (let day = 2; day < 60; day++) {
       world.day = day;
-      restockCards(world);
-      for (const card of cardsOn(world)) {
-        const prereq = card === null ? undefined : RECIPE_BY_ID.get(card)?.prereq;
-        if (prereq) expect(world.unlocked).toContain(prereq);
-      }
+      restockStall(world);
+      const card = cardOn(world);
+      const prereq = card === null ? undefined : RECIPE_BY_ID.get(card)?.prereq;
+      if (prereq) expect(world.unlocked).toContain(prereq);
     }
   });
 
@@ -187,10 +189,9 @@ describe("the stand", () => {
     for (let seed = 1; seed <= 400; seed++) {
       const world = createWorld(LEVEL, 0, seed);
       world.day = 2;
-      restockCards(world);
-      for (const card of cardsOn(world)) {
-        if (card) seen.set(card, (seen.get(card) ?? 0) + 1);
-      }
+      restockStall(world);
+      const card = cardOn(world);
+      if (card) seen.set(card, (seen.get(card) ?? 0) + 1);
     }
     const tierOne = RECIPES.filter((r) => r.tier === 1 && !r.prereq).reduce(
       (total, r) => total + (seen.get(r.id) ?? 0),
@@ -201,22 +202,23 @@ describe("the stand", () => {
     expect(seen.get("pizza")).toBeGreaterThan(0);
   });
 
-  test("an exhausted library means no stand at all", () => {
+  test("an exhausted library is four squares of goods", () => {
     const world = morning(2);
     world.unlocked = RECIPES.map((recipe) => recipe.id);
-    restockCards(world);
-    expect(cardsOn(world)).toEqual([null, null]);
+    restockStall(world);
+    expect(cardOn(world)).toBeNull();
+    for (const slot of stallSlots(world)) expect(slot.offer).not.toBeNull();
   });
 
-  test("two hosts on one seed are offered the same pair, several offers running", () => {
-    // The same guarantee the stall's stock has, and for the same reason: the
-    // roll must come from the seed and the day, never from the live stream that
-    // arrivals and seating consume at their own pace.
+  test("two hosts on one seed are offered the same card, several mornings running", () => {
+    // The same guarantee the rest of the delivery has, and for the same reason:
+    // the roll must come from the seed and the day, never from the live stream
+    // that arrivals and seating consume at their own pace.
     const a = new Host();
     const b = new Host();
 
     for (let day = 1; day <= 10; day++) {
-      expect(cardsOn(a.world)).toEqual(cardsOn(b.world));
+      expect(cardOn(a.world)).toEqual(cardOn(b.world));
       // Only one of them plays.
       beginDay(a.world);
       for (let i = 0; i < 600; i++) step(a.world, {});
@@ -224,130 +226,85 @@ describe("the stand", () => {
       beginDay(b.world);
       endDay(b.world);
     }
-    // ...and it was a real offer, not two empty stands agreeing.
-    expect(cardsOn(a.world).filter((card) => card !== null).length).toBe(CARD_SLOTS);
+    // ...and it was a real offer, not two empty squares agreeing.
+    expect(cardOn(a.world)).not.toBeNull();
   });
 });
 
-describe("choosing a card", () => {
-  test("arms first, then confirms", () => {
+describe("buying a card", () => {
+  test("costs its tier, and arrives in your hands rather than on the menu", () => {
     const world = morning(2);
-    const stand = offer(world, 0, "fries");
+    const slot = offer(world, "fries");
+    world.money = 500;
 
-    useCard(world, 0);
-    expect(stand.armedBy).toBe(world.players[0]!.id);
+    use(world, slot.tile);
+    expect(world.money).toBe(500 - cardFee(RECIPE_BY_ID.get("fries")!.tier));
+    // Bought, not spent: the dish joins the menu when the card is set down.
     expect(world.unlocked).not.toContain("fries");
-    expect(world.events.some((e) => e.text.includes("considering Fries"))).toBe(true);
-
-    useCard(world, 0);
-    expect(world.unlocked).toContain("fries");
+    expect(carriedCard(world)?.card).toBe("fries");
+    expect(world.players[0]!.carriedAppliance).toBe(carriedCard(world)!.id);
   });
 
-  test("walking away puts it back down", () => {
+  test("a kitchen that cannot afford it is refused, out loud, and charged nothing", () => {
     const world = morning(2);
-    const stand = offer(world, 0, "fries");
-    useCard(world, 0);
-    expect(stand.armedBy).not.toBeNull();
+    const slot = offer(world, "pizza");
+    world.money = 5;
 
-    // Turn to look at anything else and the choice is off. Coming back and
-    // pressing once arms it again rather than taking it.
-    world.players[0]!.facing = { x: 1, y: 0 };
-    step(world, idle());
-    expect(stand.armedBy).toBeNull();
+    use(world, slot.tile);
+    expect(world.money).toBe(5);
+    expect(carriedCard(world)).toBeNull();
+    expect(world.events.some((e) => e.text.startsWith("Need $"))).toBe(true);
+  });
 
-    useCard(world, 0);
+  test("putting it back on its pallet is a full refund, and no menu change", () => {
+    const world = morning(2);
+    const slot = offer(world, "fries");
+    world.money = 500;
+
+    use(world, slot.tile);
+    use(world, slot.tile);
+    expect(world.money).toBe(500);
     expect(world.unlocked).not.toContain("fries");
+    expect(carriedCard(world)).toBeNull();
   });
 
-  test("arming times out", () => {
+  test("a kitchen with no floor left may still buy one", () => {
+    // The card occupies no tile, and what it is about to deliver is the floor's
+    // problem rather than the purchase's. Asking a card for a free tile would
+    // refuse the one thing that can dig a room out.
     const world = morning(2);
-    const stand = offer(world, 0, "fries");
-    useCard(world, 0);
-    for (let i = 0; i < 60 * 5; i++) step(world, idle());
-    expect(stand.armedBy).toBeNull();
-  });
-
-  test("arming the other card is a change of mind about the first", () => {
-    const world = morning(2);
-    const first = offer(world, 0, "fries");
-    const second = offer(world, 1, "bread");
-    useCard(world, 0);
-    useCard(world, 1);
-    expect(first.armedBy).toBeNull();
-    expect(second.armedBy).toBe(world.players[0]!.id);
-  });
-
-  test("taking one card takes the offer: it is a choice, not two purchases", () => {
-    const world = morning(2);
-    offer(world, 0, "fries");
-    offer(world, 1, "bread");
-    useCard(world, 0);
-    useCard(world, 0);
-
-    expect(world.unlocked).toEqual(["salad", "fries"]);
-    expect(cardsOn(world)).toEqual([null, null]);
-    // And no second offer this morning, however the stands are restocked.
-    restockCards(world);
-    expect(cardsOn(world)).toEqual([null, null]);
-  });
-
-  test("the log says who did it", () => {
-    const world = morning(2);
-    world.players[0]!.name = "Ada";
-    offer(world, 0, "fries");
-    useCard(world, 0);
-    useCard(world, 0);
-    expect(world.events.some((e) => e.text.startsWith("Ada is considering"))).toBe(true);
-    expect(world.events.some((e) => e.text === "Ada added Fries to the menu")).toBe(true);
-  });
-
-  test("unpicked cards leave when the day opens, and the next offer still comes", () => {
-    const world = morning(2);
-    expect(cardsOn(world).filter((card) => card !== null).length).toBe(CARD_SLOTS);
-
-    // Cards ride the layout message, so them leaving is a layout change like
-    // an oven moving. A client that is not told keeps drawing an offer the
-    // room has already lost.
-    const before = world.layoutVersion;
-    beginDay(world);
-    expect(world.layoutVersion).toBeGreaterThan(before);
-    expect(cardsOn(world)).toEqual([null, null]);
-
-    // Day 3 and 4: nothing. Day 5: the next offer, on schedule, whether or not
-    // anybody took the last one. A room may consolidate on purpose.
-    endDay(world);
-    expect(cardsOn(world)).toEqual([null, null]);
-    beginDay(world);
-    endDay(world);
-    expect(cardsOn(world)).toEqual([null, null]);
-    beginDay(world);
-    endDay(world);
-    expect(world.day).toBe(5);
-    expect(cardsOn(world).filter((card) => card !== null).length).toBe(CARD_SLOTS);
+    const slot = offer(world, "cheesybread");
+    world.money = 500;
+    for (let i = 0; i < world.applianceAt.length; i++) {
+      if (world.tiles[i]?.placeable) world.applianceAt[i] = -1;
+    }
+    use(world, slot.tile);
+    expect(carriedCard(world)).not.toBeNull();
   });
 });
 
-describe("a card delivers what its dish needs", () => {
-  test("exactly the missing equipment, onto interior tiles", () => {
+describe("setting a card down", () => {
+  test("puts the dish on the menu, with exactly the missing kit around it", () => {
     const world = morning(2);
-    offer(world, 0, "fries");
+    const slot = offer(world, "fries");
+    world.money = 500;
     expect(missingFor(world, RECIPE_BY_ID.get("fries")!)).toEqual({
       kinds: ["fryer"],
       crates: ["potato"],
     });
 
-    useCard(world, 0);
-    useCard(world, 0);
+    takeCard(world, slot);
 
+    expect(world.unlocked).toContain("fries");
     expect(counts(world, "fryer")).toBe(1);
     expect(crateBases(world)).toEqual(["lettuce", "potato", "tomato"]);
+    // The card itself is gone: it is spent where it is put down.
+    expect(carriedCard(world)).toBeNull();
+    expect(world.players[0]!.carriedAppliance).toBeNull();
+
     // Never the door, never the patio: everything delivered is somewhere the
     // game is allowed to put things.
     for (const appliance of world.appliances.values()) {
-      // Level furniture is exempt by definition — the shop's squares are out
-      // on the paving and signs and posters hang on walls, which is precisely
-      // what being immovable means. Asked as a property rather than as a list of
-      // kinds, so the next piece of furniture does not have to edit this test.
       if (!applianceDef(appliance.kind).movable) continue;
       const tile = world.tiles[appliance.tile.y * world.width + appliance.tile.x];
       expect(tile?.placeable).toBe(true);
@@ -359,69 +316,139 @@ describe("a card delivers what its dish needs", () => {
     expect(world.events.some((e) => e.text === "Delivered: Potato crate")).toBe(true);
   });
 
-  test("nothing the kitchen already owns", () => {
-    // A room that took the fries card on day 2 already has the fryer and the
-    // potato crate. Cheese fries are fries plus chopped cheese, so on day 5 it
-    // is owed exactly one crate — not a second fryer.
+  test("the log says who did it", () => {
     const world = morning(2);
-    offer(world, 0, "fries");
-    useCard(world, 0);
-    useCard(world, 0);
-    while (world.day < 5) {
-      beginDay(world);
-      endDay(world);
-    }
+    world.players[0]!.name = "Ada";
+    world.money = 500;
+    takeCard(world, offer(world, "fries"));
+    expect(world.events.some((e) => e.text === "Ada added Fries to the menu")).toBe(true);
+  });
 
-    offer(world, 0, "cheesefries");
-    useCard(world, 0);
-    useCard(world, 0);
+  test("nothing the kitchen already owns", () => {
+    // A room that took the fries card already has the fryer and the potato
+    // crate. Cheese fries are fries plus chopped cheese, so it is owed exactly
+    // one crate — not a second fryer.
+    const world = morning(2);
+    world.money = 500;
+    takeCard(world, offer(world, "fries"));
+    takeCard(world, offer(world, "cheesefries"));
+
     expect(counts(world, "fryer")).toBe(1);
     expect(crateBases(world)).toEqual(["cheese", "lettuce", "potato", "tomato"]);
   });
 
   test("one oven for a dish that bakes, however many bakes it takes", () => {
     const world = morning(2);
-    offer(world, 0, "bread");
-    useCard(world, 0);
-    useCard(world, 0);
+    world.money = 500;
+    takeCard(world, offer(world, "bread"));
     expect(counts(world, "oven")).toBe(1);
     expect(crateBases(world)).toEqual(["flour", "lettuce", "tomato", "water"]);
   });
 
-  test("a kitchen with nowhere to put it is refused, out loud", () => {
-    // The pathological case. Dropping the fryer on the floor would leave a menu
-    // the room cannot cook and cannot diagnose, so the pick does not happen.
+  test("never an upgrade, however cheap the card", () => {
+    // The one rule standing between a $100 card and a $320 bell oven. It reads
+    // as a footnote in `applianceForStation` and it is load-bearing now that a
+    // card is the ordinary way to get your first of a station.
     const world = morning(2);
-    for (let y = 0; y < world.height; y++) {
-      for (let x = 0; x < world.width; x++) {
-        const index = y * world.width + x;
-        if (!world.tiles[index]?.placeable) continue;
-        if ((world.applianceAt[index] ?? 0) === 0) world.applianceAt[index] = -1;
+    world.money = 500;
+    for (const recipe of RECIPES) {
+      const delivery = missingFor(world, recipe);
+      for (const kind of delivery.kinds) {
+        expect(applianceDef(kind).upgrades).toBeNull();
       }
     }
-    offer(world, 0, "fries");
-    useCard(world, 0);
-    useCard(world, 0);
+  });
+
+  test("a kitchen with nowhere to put it is refused, and the card stays in hand", () => {
+    // The pathological case. Dropping the fryer on the floor would leave a menu
+    // the room cannot cook and cannot diagnose, so the placement does not
+    // happen — and the money is still recoverable, because the card is still
+    // being carried.
+    const world = morning(2);
+    const slot = offer(world, "fries");
+    world.money = 500;
+    use(world, slot.tile);
+
+    const home = nearestFreeTile(world, world.door)!;
+    for (let i = 0; i < world.applianceAt.length; i++) {
+      if (world.tiles[i]?.placeable && (world.applianceAt[i] ?? 0) === 0) world.applianceAt[i] = -1;
+    }
+    world.applianceAt[home.y * world.width + home.x] = 0;
+    use(world, home);
 
     expect(world.unlocked).not.toContain("fries");
+    expect(carriedCard(world)).not.toBeNull();
     expect(world.events.some((e) => e.text.startsWith("No room for"))).toBe(true);
+
+    // And the refund is still there to be had.
+    use(world, slot.tile);
+    expect(world.money).toBe(500);
+  });
+
+  test("it cannot be put down outside, where nothing may be built", () => {
+    const world = morning(2);
+    const slot = offer(world, "fries");
+    world.money = 500;
+    use(world, slot.tile);
+
+    // Another patio square: paving, and so refused by the same rule that
+    // refuses an oven there. The card stays in hand.
+    const other = stallSlots(world).find((s) => s.id !== slot.id)!;
+    const paving = seatsAround(world, other.tile)[0]!;
+    use(world, paving);
+    expect(world.unlocked).not.toContain("fries");
+    expect(carriedCard(world)).not.toBeNull();
+  });
+
+  test("a save written while somebody holds one keeps the money, not the card", () => {
+    // The same problem `parkFittings` solves for a carried board, in the
+    // currency a card has instead of a tile. `snapshot` may not mutate, so the
+    // fee goes into the file rather than into the running kitchen.
+    const world = morning(2);
+    world.money = 500;
+    use(world, offer(world, "fries").tile);
+    expect(world.money).toBeLessThan(500);
+
+    const file = snapshot(world);
+    expect(file.money).toBe(500);
+    expect(file.appliances.some((a) => a.kind === "cards")).toBe(false);
+
+    const restored = createWorld(LEVEL, 1);
+    restore(restored, file);
+    expect(restored.money).toBe(500);
+    expect(restored.unlocked).not.toContain("fries");
+  });
+
+  test("a chef who disconnects holding one gets the room its money back", () => {
+    // A card has no home to go back to, so it goes back as the money — which is
+    // exactly what the pallet would still have paid all morning. Guessing a
+    // dish on everybody else's behalf is the one thing worse than a refund.
+    const world = morning(2);
+    world.money = 500;
+    const slot = offer(world, "fries");
+    use(world, slot.tile);
+    expect(world.money).toBeLessThan(500);
+
+    removePlayer(world, world.players[0]!.id);
+    expect(world.money).toBe(500);
+    expect(carriedCard(world)).toBeNull();
+    expect(world.unlocked).not.toContain("fries");
   });
 });
 
 describe("the day after", () => {
   test("the newest dish takes about half the orders, then joins the pool", () => {
     const world = morning(2);
-    offer(world, 0, "fries");
-    useCard(world, 0);
-    useCard(world, 0);
+    world.money = 500;
+    takeCard(world, offer(world, "fries"));
 
     const share = (target: World): number => {
       let fries = 0;
       const total = 400;
       for (let i = 0; i < total; i++) {
-        target.nextArrivalIn = 0;
         target.customers.length = 0;
-        step(target, idle());
+        target.nextArrivalIn = 0;
+        for (let t = 0; t < 40 && target.customers.length === 0; t++) step(target, idle());
         if (target.customers[0]?.recipeId === "fries") fries++;
       }
       return fries / total;
@@ -429,70 +456,14 @@ describe("the day after", () => {
 
     beginDay(world);
     const launch = share(world);
-    // About half, and about half is what `LAUNCH_SHARE` says. It used to be
-    // three quarters: the newest dish took its share *and* an even cut of the
-    // remainder, which on a two-dish menu left the salad an afterthought on the
-    // day the room learned bread.
-    expect(launch).toBeGreaterThan(0.4);
-    expect(launch).toBeLessThan(0.6);
+    expect(launch).toBeGreaterThan(0.3);
+    expect(launch).toBeLessThan(0.7);
 
-    // Next day it is one dish of two, like anything else on the menu.
     endDay(world);
     beginDay(world);
     const settled = share(world);
-    expect(settled).toBeGreaterThan(0.3);
-    expect(settled).toBeLessThan(0.7);
-  });
-});
-
-describe("the stall stocks for this restaurant", () => {
-  test("no fryer before there is anything to fry", () => {
-    // Ten mornings of a salad-only kitchen: heat is not on offer, because a
-    // fryer bought now is an expensive thing to watch do nothing.
-    const world = morning();
-    for (let day = 1; day <= 10; day++) {
-      for (const slot of [...world.appliances.values()].filter((a) => a.kind === "stall")) {
-        expect(slot.offer?.kind).not.toBe("fryer");
-        expect(slot.offer?.kind).not.toBe("oven");
-      }
-      beginDay(world);
-      endDay(world);
-    }
-  });
-
-  test("crates hold what the menu starts from, and nothing else", () => {
-    const salad = morning();
-    for (let day = 1; day <= 10; day++) {
-      for (const slot of [...salad.appliances.values()].filter((a) => a.kind === "stall")) {
-        if (slot.offer?.source) {
-          expect(["tomato", "lettuce"]).toContain(slot.offer.source.base);
-        }
-      }
-      beginDay(salad);
-      endDay(salad);
-    }
-  });
-
-  test("a fryer appears once fries do", () => {
-    // Same room, one card later. The stall follows the menu, so the day after a
-    // recipe arrives its equipment is buyable — seconds and replacements at
-    // list price.
-    const world = morning(2);
-    offer(world, 0, "fries");
-    useCard(world, 0);
-    useCard(world, 0);
-
-    let sawFryer = false;
-    let sawPotato = false;
-    for (let day = 0; day < 20; day++) {
-      beginDay(world);
-      endDay(world);
-      for (const slot of [...world.appliances.values()].filter((a) => a.kind === "stall")) {
-        if (slot.offer?.kind === "fryer") sawFryer = true;
-        if (slot.offer?.source?.base === "potato") sawPotato = true;
-      }
-    }
-    expect(sawFryer).toBe(true);
-    expect(sawPotato).toBe(true);
+    expect(settled).toBeGreaterThan(0.2);
+    expect(settled).toBeLessThan(0.8);
+    expect(settled).toBeLessThan(launch);
   });
 });

@@ -259,17 +259,7 @@ const SVG = "http://www.w3.org/2000/svg";
 function legend(): string {
   // No board: it is a fitting set on a counter rather than a block of its own,
   // so nothing on a plan is ever drawn as one.
-  const shown = [
-    "crate",
-    "counter",
-    "plates",
-    "sink",
-    "bin",
-    "table",
-    "stall",
-    "cards",
-    "sign",
-  ] as const;
+  const shown = ["crate", "counter", "plates", "sink", "bin", "table", "stall", "sign"] as const;
   const swatches = shown.map((kind) => {
     const def = APPLIANCES[kind];
     const colour = `#${def.color.toString(16).padStart(6, "0")}`;
