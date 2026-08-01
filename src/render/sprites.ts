@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { cssHex, textSprite } from "./text";
+import { markUI } from "./layers";
+import { PILL_HEIGHT_PX, cssHex, panelTexture, spriteMaterial, textSprite } from "./text";
 
 /**
  * The two labelled sprites in the world: a chef's name tag, and the contextual
@@ -49,44 +50,60 @@ export function makeLabel(text: string, color = 0xffffff): THREE.Sprite {
   );
 }
 
-const CARD_LINE_HEIGHT = 0.38;
-const CARD_LINE_FONT = "600 26px system-ui, sans-serif";
+/**
+ * World units per canvas pixel, taken from what a plain label already does.
+ *
+ * A pill is `LABEL_HEIGHT` tall for `PILL_HEIGHT_PX` of canvas, so this ratio is
+ * the size type comes out at everywhere else in the game. Applying it to the
+ * card's *own* canvas height is what keeps a four-line card and a one-line
+ * label the same to read — rather than the card being a fixed world height that
+ * quietly shrinks its type every time a line is added to it.
+ */
+const CARD_SCALE = LABEL_HEIGHT / PILL_HEIGHT_PX;
+
+export type RecipeCardText = {
+  name: string;
+  price: string;
+  /** What the kitchen would be sent with it, already phrased. */
+  delivery: string;
+  blurb: string;
+};
 
 /**
- * A stacked, multi-line contextual label: what a recipe card actually says.
+ * The recipe card a chef reads by standing in front of the board.
  *
- * A card has four things to tell you — the dish, what it pays, how it is made,
- * and what it will have delivered — and one pill of running text is a sentence
- * nobody reads while standing in front of it. Lines are separate sprites rather
- * than one multi-line canvas so each is only as wide as its own string, which
- * is the same reason `textSprite` measures before it sizes.
+ * It is the same object as the print on the A-frame outside — one you look at,
+ * one you are close enough to read — so it is drawn as a **card**: cream stock,
+ * a rule under the name, the price with it, and the blurb below. It used to be
+ * four dark pills of different widths stacked in the air, which is what a
+ * debugger shows you, not what a restaurant does.
  *
- * The first line is the dish and is drawn at full label size; the rest are the
- * detail, and are smaller because they are read second.
+ * The board itself carries no lettering at all. At the followed camera a panel
+ * is about forty pixels across, so this is the only surface in the feature that
+ * can actually be read — which is the reason it is worth drawing properly.
  */
-export function makeCardLabel(lines: string[], color = 0xffffff): THREE.Object3D {
-  const group = new THREE.Group();
-  let y = 0;
-  for (const [index, line] of lines.entries()) {
-    if (!line) continue;
-    const sprite =
-      index === 0
-        ? makeLabel(line, color)
-        : textSprite(
-            line,
-            {
-              font: CARD_LINE_FONT,
-              color: cssHex(color),
-              backing: { kind: "pill", color: "rgba(10,11,16,0.72)" },
-              padding: 20,
-              supersample: 2,
-            },
-            CARD_LINE_HEIGHT,
-            10,
-          );
-    sprite.position.y = y;
-    group.add(sprite);
-    y -= index === 0 ? LABEL_HEIGHT * 0.92 : CARD_LINE_HEIGHT * 0.92;
-  }
-  return group;
+export function makeRecipeCard(text: RecipeCardText, tint = 0xffffff): THREE.Sprite {
+  const ink = cssHex(tint === 0xffffff ? 0x2f2a24 : tint);
+  const muted = cssHex(tint === 0xffffff ? 0x6f6357 : tint);
+  const drawn = panelTexture(
+    [
+      { text: text.name, font: "700 30px Georgia, system-ui, serif", color: ink },
+      { text: text.price, font: "700 26px system-ui, sans-serif", color: ink, gap: 4 },
+      {
+        text: text.blurb,
+        font: "italic 22px Georgia, system-ui, serif",
+        color: muted,
+        gap: 14,
+        rule: true,
+      },
+      { text: text.delivery, font: "600 21px system-ui, sans-serif", color: muted, gap: 8 },
+    ].filter((line) => line.text !== ""),
+    { stock: "rgba(244,234,214,0.97)", edge: "rgba(47,42,36,0.35)", padding: 22, radius: 14 },
+  );
+  const height = drawn.pixelHeight * CARD_SCALE;
+  const sprite = new THREE.Sprite(spriteMaterial(drawn.texture));
+  sprite.scale.set(height * drawn.aspect, height, 1);
+  sprite.renderOrder = 10;
+  markUI(sprite);
+  return sprite;
 }

@@ -1,3 +1,4 @@
+import { unlockedRecipes } from "../sim/cards";
 import type { World } from "../sim/types";
 
 /**
@@ -42,6 +43,9 @@ export class PauseMenu {
   private root: HTMLElement;
   private list: HTMLElement;
   private title: HTMLElement;
+  private recipes: HTMLElement;
+  /** The menu the recipe list was last built for. */
+  private menuSignature = "";
   private items: MenuItem[] = [];
   /** A destructive action waiting for a second press. */
   private armed: MenuAction | null = null;
@@ -56,12 +60,14 @@ export class PauseMenu {
       <div class="card">
         <h1 data-title>Paused</h1>
         <ul data-list></ul>
+        <div class="recipes" data-recipes></div>
         <div class="controls" data-controls></div>
       </div>
     `;
     this.controlsRoot = root.querySelector("[data-controls]")!;
     this.title = root.querySelector("[data-title]")!;
     this.list = root.querySelector("[data-list]")!;
+    this.recipes = root.querySelector("[data-recipes]")!;
   }
 
   get isOpen(): boolean {
@@ -184,7 +190,49 @@ export class PauseMenu {
       : world.phase === "build"
         ? `Day ${world.day} closed`
         : "Paused";
+    this.syncRecipes(world);
     this.paint();
+  }
+
+  /**
+   * The cookbook: how to make everything this kitchen has unlocked.
+   *
+   * The steps used to be printed on the recipe card standing outside, which was
+   * the wrong place twice over. It answered "how is this made" about a dish
+   * nobody had bought yet, and it put a paragraph of instructions on an object
+   * whose whole job is to be a picture. A chef wanting the method is asking
+   * about **their own menu**, and the pause menu is already where the other
+   * "how does this work" surface lives — the controls table, directly below.
+   *
+   * Unlocked only, so it grows as the room does: a list that showed the whole
+   * library would be a spoiler and a shopping list for dishes the kitchen
+   * cannot cook.
+   */
+  private syncRecipes(world: World): void {
+    const menu = unlockedRecipes(world);
+    const signature = menu.map((recipe) => recipe.id).join("|");
+    if (signature === this.menuSignature) return;
+    this.menuSignature = signature;
+
+    const head = document.createElement("div");
+    head.className = "recipes-head";
+    head.textContent = menu.length === 1 ? "On the menu" : `On the menu · ${menu.length} dishes`;
+
+    // Nodes rather than an HTML string, for the reason the action list is: the
+    // strings are content today and content is the thing that changes.
+    this.recipes.replaceChildren(
+      head,
+      ...menu.map((recipe) => {
+        const row = document.createElement("div");
+        row.className = "recipes-row";
+        const name = document.createElement("b");
+        name.textContent = recipe.name;
+        const steps = document.createElement("span");
+        steps.textContent = recipe.steps.join(" \u2192 ");
+        row.append(name, steps);
+        return row;
+      }),
+    );
   }
 
   private paint(): void {

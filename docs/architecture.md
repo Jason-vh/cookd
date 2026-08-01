@@ -96,8 +96,9 @@ src/
     shell-meshes.ts       the kitchen's own fabric: wall segments, doorway, serving hatch, floor
     person-mesh.ts        one rig, two costumes: chefs and customers
     overlay-meshes.ts     drawn over the kitchen: tile highlight, tip coins
-    sprites.ts            name tags and appliance labels
+    sprites.ts            name tags, appliance labels and the recipe card
     models.ts             sculpted models for every ingredient and dish
+    photo.ts              a dish photographed once into a texture, for the recipe boards
     wobble.ts             deterministic jitter, so nothing is square to anything else
     primitives.ts         shared geometry/material factories and caches
     text.ts               text as a texture or a sprite, in one place

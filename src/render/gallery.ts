@@ -10,6 +10,7 @@ import { buildAppliance } from "./appliance-meshes";
 import { Daylight } from "./daylight";
 import { buildItemModel, modelledStates } from "./models";
 import { PALETTE } from "./palette";
+import { openStudio } from "./photo";
 import { buildChef, buildCustomer } from "./person-mesh";
 import { createPost, postEnabled, type Post } from "./post";
 import { makeLabel } from "./sprites";
@@ -142,6 +143,9 @@ export class Gallery {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // So a recipe board in the gallery has its picture printed, like every
+    // other appliance the gallery shows fully dressed.
+    openStudio(this.renderer);
     this.scene.background = new THREE.Color(PALETTE.wallLow);
 
     const entries = [...applianceEntries(), ...itemEntries(), ...peopleEntries()];

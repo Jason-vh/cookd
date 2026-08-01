@@ -14,6 +14,7 @@ import { KitchenCamera, type FollowTarget } from "./camera";
 import { Daylight } from "./daylight";
 import { disposeSubtree } from "./dispose";
 import { createEnvironment } from "./environment";
+import { openStudio } from "./photo";
 import { HighlightViews } from "./highlight-views";
 import { ItemViews } from "./item-views";
 import { mergeStatic } from "./merge";
@@ -74,6 +75,10 @@ export class View {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // The dish photographs on the recipe boards are taken with this renderer,
+    // and it has to be lent before the first board is built. `photo.ts` says
+    // why the studio cannot simply own one.
+    openStudio(this.renderer);
 
     // Orthographic at a 3/4 angle: real 3D, isometric read. It follows the
     // local chefs and never shows past these bounds — see render/camera.ts.

@@ -181,8 +181,25 @@ export type Recipe = {
    * chopped cheese — where the card would otherwise be unusable on arrival.
    */
   prereq?: string;
-  /** Human-readable steps, so a recipe cannot ship without saying how to make it. */
+  /**
+   * Human-readable steps, so a recipe cannot ship without saying how to make it.
+   *
+   * Read in the **pause menu**, for dishes this kitchen has unlocked. They were
+   * on the card outside until a card became a picture: a chef who wants to know
+   * how a dish is made is asking a question about their own menu, not about
+   * what is for sale this morning, and the pause menu is where the other "how
+   * does this work" surface — the controls table — already lives.
+   */
   steps: string[];
+  /**
+   * One line of menu copy, for the card a chef reads off the board.
+   *
+   * What a *restaurant* would say about the dish, rather than what the kitchen
+   * has to do to make it. The two used to be the same sentence and it read like
+   * an instruction manual pinned up outside — which is the tell that a card was
+   * a UI panel wearing a picture frame.
+   */
+  blurb: string;
 };
 
 /**

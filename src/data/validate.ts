@@ -94,6 +94,10 @@ export function validateContent(): string[] {
     if (byDish.has(dish)) problems.push(`${where}: another recipe already wants ${dish}`);
     byDish.add(dish);
     if (recipe.steps.length === 0) problems.push(`${where}: no steps`);
+    // The card outside carries no words at all, so this is the only sentence
+    // anybody reads about the dish. A recipe that ships without one has a
+    // card with a hole in it and nothing that says so.
+    if (recipe.blurb.trim() === "") problems.push(`${where}: no blurb`);
     if (recipe.patience <= 0) problems.push(`${where}: patience must be positive`);
     // A tier the posters have no weight for would be offered at weight 1 by
     // the fallback, which is a silent tuning decision nobody made.

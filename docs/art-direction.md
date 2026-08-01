@@ -270,8 +270,51 @@ the apron read as furniture that had been *spawned* there, and a caravan parked
 in the same spot read as a bigger one: neither could explain why it existed for
 one restaurant. The version that works has nothing to explain, because there is
 no shop — only the goods, standing outside on pallets. The recipe posters were
-the last holdout and went the same way: a recipe is a card on a pallet now. See
-[the shop](the-shop.md#there-is-no-shop).
+the last holdout and went the same way: a recipe is an **A-frame board** in the
+delivery now. See [the shop](the-shop.md#there-is-no-shop).
+
+## A photograph, not a model
+
+The recipe board carries a **photograph** of the dish: the same miniature,
+rendered once offscreen into a texture and printed on a card. It is the one
+place in the game where a thing is drawn as a picture of itself, and it is worth
+saying why, because the obvious implementation is the wrong one.
+
+The board used to carry the dish as a **model** — a real plate of food at half
+scale, lit by the same sun as the oven, floating proud of the paper. It never
+read as an image, because it was not one. It was food glued to a card, and no
+amount of framing around it would have fixed that: the giveaway is that the
+light on it moves.
+
+So `render/photo.ts` opens a studio. One offscreen render per dish, cached by
+what it is a picture of, with its own square frame and its own flat product-shot
+lighting — shot down the kitchen's own 3/4 line, so a dish is photographed the
+way it is seen rather than as a diagram. A print is then **unlit but
+tone-mapped**, which are two different questions:
+
+- **Unlit**, because the light in a photograph happened when it was taken. A sun
+  sliding a highlight across the picture is the tell that it is a model.
+- **Tone-mapped**, because it is nevertheless ink on a card standing in a
+  kitchen. A print that ignored the evening while the board it is on went orange
+  would be the *other* tell.
+
+It suits this art direction better than it would suit most: the whole look is a
+*photographed miniature*, so a menu card in that world holds a photograph of the
+same miniature, taken in the same room.
+
+### Nothing on the board is written
+
+At the followed camera (`FOLLOW_HALF_HEIGHT` of 5.5, so ~82px per world unit) a
+board panel is about **40 pixels across**, and at the whole-kitchen framing
+about **20**. Any lettering at that size is a texture that looks like writing
+rather than something anybody reads.
+
+So the board carries a picture and nothing else — legible at both sizes, because
+legible-at-20px is what an icon *is* — and every word lives on the card that
+appears when a chef stands in front of it. One consequence is accepted rather
+than designed around: the photograph is the only thing telling two dishes apart
+at distance, so bread and cheesy bread read alike until you walk up. That is
+already true of the plated dish in the dining room.
 
 ## Ingredient models
 

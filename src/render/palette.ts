@@ -81,9 +81,9 @@ export const PALETTE = {
   fryerBody: 0xa96b55,
   /** The canopy over a drive-through hatch: the one awning left in the game. */
   awning: 0xd8705c,
-  // The recipe poster on the outside wall. Paper and pine, lighter than the
-  // wall behind it, because a card is the one thing out here that is not for
-  // sale.
+  // The card stock a dish is printed on, and the mount around it. Paper, not
+  // timber: the A-frame holding it is the kitchen's one wood, and the print has
+  // to read *against* that or the board is a plank with a smudge on it.
   cardFace: 0xf4ead6,
   cardEdge: 0xd9c49a,
   // The sign hanging in the door. Painted board on a brass hook, and the two

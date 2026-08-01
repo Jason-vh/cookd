@@ -63,10 +63,20 @@ a wall and become something movable.
 
 | You do | What happens |
 | --- | --- |
-| face the card, `Grab` | money out, and you are **carrying** it |
+| face the board, `Grab` | money out, and you are **carrying** it |
 | put it down inside the kitchen | the dish joins the menu, and its equipment is delivered around the tile you chose |
-| put it back on its pallet | **full refund** — undo, not commerce |
+| put it back where it stood | **full refund** — undo, not commerce |
 | turn the sign while holding it | refused, exactly as it is for a held oven |
+
+It is drawn as an **A-frame board** with a photograph of the dish on both faces
+— a sandwich board being the thing a restaurant already owns for this, which is
+the test everything outside the walls has to pass. It carries no lettering at
+all, because at this camera a panel is forty pixels across; the words are on the
+card that appears when you face it. See
+[a photograph, not a model](art-direction.md#a-photograph-not-a-model).
+
+It is also the one delivery that arrives **without a pallet**, because it stands
+on its own feet.
 
 There are only two endings because the paving decides: nothing may be placed
 outside, `canPlace` asks the tile, so a card in your hands either goes in or
@@ -106,15 +116,18 @@ the world, so a kitchen that already owns an oven is not sent a second one, and
 a kitchen that sold its board still counts as able to prep because every counter
 can.
 
-So a card advertises its own value, and the number is not the whole story:
+So a card advertises its own value, and the number is not the whole story.
+Standing in front of the board gets you the card itself:
 
-> **Fries $30** — with fryer, potato crate
-> **Cheesy Bread $60** — with nothing
+> **Fries** — $30 · +$6 a plate
+> *Cut this morning, fried to order, salted while they spit.*
+> Delivered with it: fryer, potato crate
 
-Both sentences are already written by `deliveryLabel`, which was the second half
-of the poster's face and now earns its keep as the reason for a price. Waiting
-for the one that ships a fryer is a smart play, not an exploit — that is what
-the card *is*.
+The last line is `deliveryLabel`, which was the second half of the poster's face
+and now earns its keep as the reason for a price. "Nothing to deliver" is worth
+saying out loud: it is the difference between a card that is also a free fryer
+and a card that is only a dish. Waiting for the one that ships a fryer is a
+smart play, not an exploit — that is what the card *is*.
 
 ### Cards buy stations; the shop buys throughput
 
@@ -266,6 +279,21 @@ saved.
   nobody can ever serve. The same rule covers the id on an offer arriving over
   the wire: it is checked where it is *used*, so one unknown dish cannot make a
   whole layout unparseable.
+
+## The cookbook is in the pause menu
+
+How a dish is *made* — `steps` in `data/recipes.ts` — is listed in the pause
+menu, for the dishes this kitchen has unlocked.
+
+It used to be printed on the card outside, which was the wrong place twice over.
+It answered "how is this made" about a dish nobody had bought yet, and it put a
+paragraph of instructions on an object whose whole job is to be a picture. A
+chef who wants the method is asking about **their own menu**, and the pause menu
+is already where the game's other "how does this work" surface lives — the
+controls table, directly below it.
+
+Unlocked only, so the list grows as the room does. The whole library would be a
+spoiler and a shopping list for dishes the kitchen cannot cook.
 
 ## Deliberately not built
 

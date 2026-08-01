@@ -1,9 +1,10 @@
 import * as THREE from "three";
 import { applianceDef } from "../data/appliances";
 import { ingredient } from "../data/ingredients";
-import type { Appliance, ApplianceKind } from "../sim/types";
+import type { Appliance, ApplianceKind, Item } from "../sim/types";
 import { RECIPE_BY_ID } from "../data/recipes";
-import { buildIngredientSample, buildItemModel, buildProduceHeap } from "./models";
+import { buildIngredientSample, buildProduceHeap } from "./models";
+import { framedPhoto } from "./photo";
 import { PALETTE, shade, type SurfaceName } from "./palette";
 import {
   cabinetFace,
@@ -102,14 +103,14 @@ export type ApplianceParts = {
   lid?: THREE.Object3D;
   /** Shop square: the pallet and everything on it, so the delivery can arrive. */
   pitch?: THREE.Object3D;
+  /** Shop square: the pallet's planks alone, hidden for a delivery that stands up. */
+  deck?: THREE.Object3D;
   /** Shop square: where the goods stand, restocked by `appliance-views.ts`. */
   counter?: THREE.Object3D;
   /** Crate: the mouth of it, where the heap of stock sits. */
   produce?: THREE.Object3D;
-  /** Poster: the card itself — blank on ordinary mornings, lifted when armed. */
+  /** Recipe card: the whole A-frame, so the delivery can animate it. */
   card?: THREE.Object3D;
-  /** Poster: where the dish model stands, dressed by `appliance-views.ts`. */
-  cardArt?: THREE.Object3D;
   /** Sign: the board that turns over. */
   board?: THREE.Object3D;
   /** Sign: both faces of the board, repainted when the day opens or closes. */
@@ -308,15 +309,23 @@ function buildPitch(parts: ApplianceParts, nudge: Jitter): void {
   // Three bearers across, five boards along: the shape everybody recognises,
   // and the gaps between the boards are what make it read as one rather than
   // as a plank.
+  //
+  // Its own group inside the pallet, because one delivery does not come on a
+  // pallet: a recipe card is a sandwich board, and a sandwich board standing on
+  // a pallet reads as one nobody unpacked. Hiding the deck leaves the goods
+  // spot and the arrival animation exactly where they were.
+  const planks = new THREE.Group();
+  pallet.add(planks);
+  parts.deck = planks;
   for (const x of [-0.34, 0, 0.34]) {
     const bearer = mesh(roundedBox(0.14, 0.07, 0.82, 0.02), PALETTE.woodShadow, "wood");
     bearer.position.set(x, 0.035, 0);
-    pallet.add(bearer);
+    planks.add(bearer);
   }
   for (let i = 0; i < 5; i++) {
     const board = mesh(roundedBox(0.86, 0.04, 0.13, 0.015), PALETTE.woodDark, "wood");
     board.position.set(0, 0.09, -0.34 + i * 0.17);
-    pallet.add(board);
+    planks.add(board);
   }
 
   // Where the goods stand: an empty group, because what is on this pallet
@@ -348,51 +357,84 @@ export const PITCH_DECK = 0.11;
  * choose.
  */
 /**
- * A recipe card: paper, propped up, with the dish standing on it.
+ * A recipe card: an A-frame board with a photograph of the dish on it.
  *
- * It used to be a poster measured off the wall's thickness and pasted flat on the
- * outside of the shell. A card is a **good** now — it stands on a pallet in the
- * delivery and is carried inside — so it is built the way everything else on a
- * pallet is: around its own square, at its own height, owing nothing to a wall
- * that may not be there.
+ * Three goes at this. It was an easel, then a poster pasted flat on the outside
+ * of the shell, then — once a card became a good rather than furniture — a page
+ * hovering at knee height with nothing holding it up. All three had the same
+ * fault the market stall had: an object invented to hold an offer.
  *
- * The dish is drawn here rather than dressed on afterwards, exactly as a
- * crate's ingredient is: which dish is on a card cannot change while it exists,
- * so a rebuild is the honest way to change it and there is nothing to animate.
+ * A **sandwich board** is the thing a restaurant already owns for this. Two
+ * panels hinged at the top and splayed at the bottom, standing on their own
+ * feet on the paving, which is why it is also the one delivery that arrives
+ * without a pallet under it.
+ *
+ * **Printed on both faces**, and for the reason the sign by the door is: the
+ * camera turns to any of four corners, so half the time the player would be
+ * looking at the back of it.
+ *
+ * **No lettering anywhere on it.** At the followed camera a panel is about 40
+ * pixels across and at the wide framing about 20, so any text on it would be a
+ * texture that looks like writing rather than something anybody reads — and the
+ * label that appears when a chef faces it is already the readable copy. What a
+ * board carries is a picture, which is legible at both sizes because a picture
+ * is what an icon is.
  */
 function buildCard(parts: ApplianceParts, h: number, id: string | null): void {
-  const card = new THREE.Group();
-  // Leaning back, the way a card propped against something stands. Enough to
-  // read from the front and to catch the light differently from the paving.
-  card.rotation.x = -0.16;
-  card.position.y = h * 0.62;
-  parts.root.add(card);
-  parts.card = card;
-
-  const backing = mesh(roundedBox(0.52, 0.68, 0.03, 0.02), PALETTE.cardEdge, "wood");
-  card.add(backing);
-  const paper = mesh(roundedBox(0.46, 0.6, 0.02, 0.02), PALETTE.cardFace, "ceramic");
-  paper.position.z = 0.02;
-  card.add(paper);
-
-  // Where the dish stands, proud of the paper like a thing pinned to it.
-  const art = new THREE.Group();
-  art.position.set(0, -0.02, 0.1);
-  card.add(art);
-  parts.cardArt = art;
+  const board = new THREE.Group();
+  parts.root.add(board);
+  parts.card = board;
 
   const recipe = id === null ? null : RECIPE_BY_ID.get(id);
-  if (!recipe) return;
-  // The dish itself, at a third scale — the same object the plate will carry,
-  // for the same reason the pallet beside it shows a real fryer.
-  const dish = buildItemModel({
-    id: -1,
-    base: recipe.dish.base,
-    processes: [...recipe.dish.processes],
-    contents: [],
-  });
-  dish.scale.setScalar(0.5);
-  art.add(dish);
+  const dish: Item | null = recipe
+    ? { id: -1, base: recipe.dish.base, processes: [...recipe.dish.processes], contents: [] }
+    : null;
+
+  // The splay is the whole silhouette: two leaves at this angle read as a
+  // sandwich board from any side, where one leaf reads as a page whatever is
+  // drawn on it.
+  //
+  // **Each leaf hangs from the ridge.** The group's origin is the hinge, the
+  // panel hangs below it, and the rotation swings the *foot* out — which is how
+  // the hinge works on the real thing. Rotating a centred panel instead splays
+  // it from the middle, so the two leaves come apart at the top and the board
+  // stands on its own ridge, upside down.
+  const lean = 0.19;
+  const panelH = h * 0.95;
+  const panelW = 0.52;
+  const thickness = 0.035;
+  for (const side of [1, -1]) {
+    const leaf = new THREE.Group();
+    leaf.position.y = h;
+    leaf.rotation.x = side * lean;
+    board.add(leaf);
+
+    const panel = mesh(roundedBox(panelW, panelH, thickness, 0.015), PALETTE.wood, "wood");
+    panel.position.y = -panelH / 2;
+    leaf.add(panel);
+
+    if (!dish) continue;
+    // A leaf leaning one way has its outward face on that side, and the print
+    // goes on the face somebody can see. Proud of the panel by a hair, so it
+    // reads as pinned on rather than inlaid.
+    const print = framedPhoto(dish, panelW * 0.86, panelH * 0.78);
+    print.position.set(0, -panelH / 2, side > 0 ? -(thickness / 2 + 0.002) : thickness / 2 + 0.002);
+    print.rotation.y = side > 0 ? Math.PI : 0;
+    leaf.add(print);
+  }
+
+  // The hinge, and the feet. Both are what a board is *made of* rather than
+  // decoration: the batten is the thing the two leaves turn on, and without
+  // feet the panels end in a line and the board looks buried.
+  const hinge = mesh(roundedBox(panelW * 0.94, 0.055, 0.07, 0.025), PALETTE.woodDark, "wood");
+  hinge.position.y = h;
+  board.add(hinge);
+  const spread = Math.sin(lean) * panelH;
+  for (const side of [1, -1]) {
+    const foot = mesh(roundedBox(panelW, 0.05, 0.08, 0.02), PALETTE.woodDark, "wood");
+    foot.position.set(0, 0.025, -side * spread);
+    board.add(foot);
+  }
 }
 
 /** What the board says, and the colour it says it in. */
@@ -574,8 +616,9 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // on it is the appliance for sale, near enough full size. Labelled with a
   // price rather than a name.
   stall: { body: [PALETTE.woodDark, "wood"] },
-  // Built by `buildPoster`, and labelled with whatever is on the card.
-  cards: { body: [PALETTE.cardEdge, "wood"] },
+  // Built by `buildCard`: an A-frame in the kitchen's own timber, carrying a
+  // photograph of the dish. Labelled with the recipe card a chef can read.
+  cards: { body: [PALETTE.wood, "wood"] },
   // Built by `buildSign`. No contextual label: a sign that needs a label to say
   // what it is has failed at the only job it has.
   sign: { body: [PALETTE.woodDark, "wood"] },

@@ -42,6 +42,17 @@ export type TextTexture = {
   texture: THREE.Texture;
   /** Width per unit height, so a sprite can be scaled to fit its own string. */
   aspect: number;
+  /**
+   * The canvas's own height in pixels.
+   *
+   * What a caller needs to size a sprite so that **type comes out the same size
+   * on screen** whatever is drawn on it. A single-line pill is always
+   * `PILL_HEIGHT_PX` tall, so one world height suits every one of them; a panel
+   * is as tall as its contents came to, and scaling that to a fixed world
+   * height shrinks the type as lines are added — which is exactly how a
+   * four-line card ended up rendered at a quarter of label size.
+   */
+  pixelHeight: number;
 };
 
 /**
@@ -56,7 +67,12 @@ export type TextTexture = {
 const textures = new Map<string, TextTexture>();
 const materials = new Map<string, THREE.SpriteMaterial>();
 
-const CANVAS_HEIGHT = 64;
+/**
+ * The canvas height of a single-line pill, and the reference every other drawn
+ * surface is scaled against. See `TextTexture.pixelHeight`.
+ */
+export const PILL_HEIGHT_PX = 64;
+const CANVAS_HEIGHT = PILL_HEIGHT_PX;
 
 function keyOf(text: string, style: TextStyle): string {
   const backing =
@@ -143,6 +159,15 @@ function draw(text: string, style: TextStyle): TextTexture {
   ctx.fillStyle = style.color;
   ctx.fillText(text, width / 2, CANVAS_HEIGHT / 2);
 
+  return {
+    texture: canvasTexture(element),
+    aspect: width / CANVAS_HEIGHT,
+    pixelHeight: CANVAS_HEIGHT,
+  };
+}
+
+/** The four non-obvious settings every text texture in this game needs. */
+function canvasTexture(element: HTMLCanvasElement): THREE.Texture {
   const texture = new THREE.CanvasTexture(element);
   texture.colorSpace = THREE.SRGBColorSpace;
   // See the note at the top: mipmaps turn small text into a smudge.
@@ -150,8 +175,105 @@ function draw(text: string, style: TextStyle): TextTexture {
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.anisotropy = 8;
+  return texture;
+}
 
-  return { texture, aspect: width / CANVAS_HEIGHT };
+/** One line of a drawn panel: its text, its font, its colour, and how it sits. */
+export type PanelLine = {
+  text: string;
+  font: string;
+  color: string;
+  /** Space above this line, in canvas pixels. A rule is drawn in it if `rule`. */
+  gap?: number;
+  rule?: boolean;
+};
+
+export type PanelStyle = {
+  stock: string;
+  edge: string;
+  padding: number;
+  radius: number;
+};
+
+/**
+ * A drawn panel: several lines of type on one piece of stock, as one texture.
+ *
+ * The alternative, and what this replaced, is a sprite per line. That is fine
+ * for two lines and wrong for four: each pill is only as wide as its own
+ * string, so a name, a price and a note arrive as three different widths of
+ * dark lozenge stacked in the air, and the result reads as debug output rather
+ * than as something the game meant to show you.
+ *
+ * One canvas means one shape, one margin and one alignment for the whole thing
+ * — which is the difference between text in chips and a card.
+ *
+ * Sized to its own contents in both directions, so the caller never picks a box
+ * and hopes: the width is the widest line plus padding, and the height is what
+ * the lines and their gaps actually came to.
+ */
+export function panelTexture(lines: PanelLine[], style: PanelStyle): TextTexture {
+  const key = `panel|${lines.map((l) => `${l.text}~${l.font}~${l.color}~${l.gap ?? 0}~${l.rule ? 1 : 0}`).join("|")}|${style.stock}|${style.edge}|${style.padding}|${style.radius}`;
+  const cached = textures.get(key);
+  if (cached) return cached;
+
+  const scale = 2;
+  const measure = context(document.createElement("canvas"));
+  let width = 0;
+  let height = style.padding;
+  const tops: number[] = [];
+  for (const line of lines) {
+    measure.font = line.font;
+    width = Math.max(width, Math.ceil(measure.measureText(line.text).width));
+    height += line.gap ?? 0;
+    tops.push(height);
+    height += lineHeight(line.font);
+  }
+  width += style.padding * 2;
+  height += style.padding;
+
+  const element = document.createElement("canvas");
+  element.width = width * scale;
+  element.height = height * scale;
+  const ctx = context(element);
+  // After the resize, always: changing a canvas's size resets its context.
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = style.stock;
+  roundRect(ctx, 0.5, 0.5, width - 1, height - 1, style.radius);
+  ctx.fill();
+  ctx.strokeStyle = style.edge;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (const [index, line] of lines.entries()) {
+    const top = tops[index] ?? 0;
+    if (line.rule) {
+      // Centred in the gap above the line it belongs to, and inset from both
+      // margins so it reads as a rule rather than as the edge of something.
+      const y = Math.round(top - (line.gap ?? 0) / 2) + 0.5;
+      ctx.strokeStyle = style.edge;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(style.padding, y);
+      ctx.lineTo(width - style.padding, y);
+      ctx.stroke();
+    }
+    ctx.font = line.font;
+    ctx.fillStyle = line.color;
+    ctx.fillText(line.text, width / 2, top);
+  }
+
+  const drawn = { texture: canvasTexture(element), aspect: width / height, pixelHeight: height };
+  textures.set(key, drawn);
+  return drawn;
+}
+
+/** The line box for a CSS font shorthand: its pixel size plus a little leading. */
+function lineHeight(font: string): number {
+  const size = /(\d+(?:\.\d+)?)px/.exec(font);
+  return Math.round(Number(size?.[1] ?? 16) * 1.32);
 }
 
 function context(element: HTMLCanvasElement): CanvasRenderingContext2D {

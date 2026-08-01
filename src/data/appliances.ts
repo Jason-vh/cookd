@@ -100,14 +100,16 @@ const DEFS = {
   // is only the level saying where the morning's delivery lands. Immovable,
   // holds nothing, and does its whole job through `Grab`.
   stall: { ...PLAIN, stations: [], speed: 1, label: "Stall", color: 0x9c5f4a, height: 0.1, acceptsItems: false, movable: false, price: 0 },
-  // A recipe card: a **good**, sold from a pallet like the oven beside it. It
+  // A recipe card: a **good**, sold from the paving like the oven beside it. It
   // was a poster bolted to the outside wall until it turned out to be the last
   // thing outside that existed only to hold an offer — see `sim/cards.ts`.
-  // Movable, so buying it puts it in your hands and carrying it inside is what
-  // spends it. It is the one appliance that never stands on a tile: placing it
-  // unlocks the dish and ends the object. Its price is not here, because every
-  // card is the same object and what varies is the dish — see `TIER_FEE`.
-  cards: { ...PLAIN, stations: [], speed: 1, label: "Recipe card", color: 0xd9c9a8, height: 0.5, acceptsItems: false, movable: true, price: 0 },
+  // Drawn as an A-frame board with a photograph of the dish on both faces, and
+  // the one delivery that arrives without a pallet, because it stands up by
+  // itself. Movable, so buying it puts it in your hands and carrying it inside
+  // is what spends it; it never stands on a tile, because placing it unlocks
+  // the dish and ends the object. Its price is not here — every card is the
+  // same object and what varies is the dish, so see `TIER_FEE`.
+  cards: { ...PLAIN, stations: [], speed: 1, label: "Recipe card", color: 0xd9c9a8, height: 0.92, acceptsItems: false, movable: true, price: 0 },
   // The sign in the door: the third piece of level furniture, and the one that
   // decides when the day happens. Opening used to be a keypress with no object
   // in the room behind it — see `sim/systems/sign.ts`.

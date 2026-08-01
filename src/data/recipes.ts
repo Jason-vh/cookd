@@ -88,20 +88,28 @@ export const COMBINES: Combine[] = [
 // prettier-ignore
 export const RECIPES: Recipe[] = [
   { id: "salad", name: "Garden Salad", dish: { base: "salad", processes: [] }, patience: 60, reward: 8, tier: 1,
+    blurb: "Crisp leaves and ripe tomato, and the sense to stop there.",
     steps: ["Chop lettuce", "Chop tomato", "Combine", "Plate"] },
   { id: "fries", name: "Fries", dish: { base: "fries", processes: ["fried"] }, patience: 55, reward: 6, tier: 1,
+    blurb: "Cut this morning, fried to order, salted while they spit.",
     steps: ["Chop potato", "Fry", "Plate"] },
   { id: "bread", name: "Bread", dish: { base: "bread", processes: ["baked"] }, patience: 60, reward: 7, tier: 1,
+    blurb: "Flour, water, heat and patience — mostly patience.",
     steps: ["Flour + water", "Knead dough", "Bake", "Plate"] },
   { id: "cheesefries", name: "Cheese Fries", dish: { base: "cheesefries", processes: [] }, patience: 60, reward: 9, tier: 1, prereq: "fries",
+    blurb: "The fries, under a blanket.",
     steps: ["Chop potato", "Fry", "Chop cheese", "Combine", "Plate"] },
   { id: "cheesybread", name: "Cheesy Bread", dish: { base: "cheesybread", processes: ["baked"] }, patience: 65, reward: 10, tier: 2,
+    blurb: "A loaf that got into the cheese.",
     steps: ["Flour + water", "Knead dough", "Chop cheese", "Combine", "Bake", "Plate"] },
   { id: "bakedpotato", name: "Baked Potato", dish: { base: "bakedpotato", processes: [] }, patience: 70, reward: 10, tier: 2,
+    blurb: "Baked whole, split open, and filled while it steams.",
     steps: ["Bake a potato whole", "Chop cheese", "Combine", "Plate"] },
   { id: "pizza", name: "Pizza", dish: { base: "pizza", processes: ["sauced", "topped", "baked"] }, patience: 95, reward: 16, tier: 3,
+    blurb: "Sauced to the edge and baked until it blisters.",
     steps: ["Flour + water", "Knead dough", "Chop tomato twice -> sauce", "Chop cheese -> top", "Bake", "Plate"] },
   { id: "loadedpizza", name: "Loaded Pizza", dish: { base: "pizza", processes: ["sauced", "topped", "loaded", "baked"] }, patience: 100, reward: 22, tier: 3, prereq: "pizza",
+    blurb: "Everything the kitchen has, and then more cheese.",
     steps: ["Build a pizza, unbaked", "Chop cheese -> load it", "Bake", "Plate"] },
 ];
 

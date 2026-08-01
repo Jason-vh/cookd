@@ -22,7 +22,7 @@ import {
 } from "./appliance-meshes";
 import { buildHighlight } from "./overlay-meshes";
 import { PALETTE } from "./palette";
-import { makeCardLabel, makeLabel } from "./sprites";
+import { makeLabel, makeRecipeCard } from "./sprites";
 
 /**
  * Everything that draws an appliance: its mesh, its dial, its moving parts, and
@@ -297,17 +297,22 @@ export class ApplianceViews {
   private offerSprite(visual: Visual, offer: Offer, refused: boolean): THREE.Object3D {
     const recipe = offer.recipe === undefined ? undefined : RECIPE_BY_ID.get(offer.recipe);
     const colour = refused ? PALETTE.progressBurn : 0xffffff;
+    // A price is a name and a number, and a pill is the right shape for it.
     if (!recipe) return makeLabel(`${offerLabel(offer)}  $${offerPrice(offer)}`, colour);
-    return makeCardLabel(
-      [
-        `${recipe.name}  $${offerPrice(offer)}`,
-        recipe.steps.join(" \u2192 "),
+    return makeRecipeCard(
+      {
+        name: recipe.name,
+        price: `$${offerPrice(offer)}  \u00b7  +$${recipe.reward} a plate`,
+        blurb: recipe.blurb,
         // "with nothing" is worth saying out loud: it is the difference between
         // a card that is also a free fryer and a card that is only a dish, and
-        // a blank line reads as the label having failed to say something.
-        visual.needs ? `with ${visual.needs}` : "with nothing",
-        `+$${recipe.reward} a plate`,
-      ],
+        // an absent line reads as the card having failed to say something.
+        //
+        // Kept short because the card is sized by its own contents: this is
+        // reliably the longest line on it, so its wording sets the width of the
+        // whole thing.
+        delivery: visual.needs ? `Comes with: ${visual.needs}` : "Comes with nothing",
+      },
       colour,
     );
   }
@@ -405,6 +410,13 @@ export class ApplianceViews {
     // on the phase, though: what is standing here has to *ride the pallet out*
     // at opening rather than evaporating off it as it goes.
     const offer = appliance.taken === null ? appliance.offer : null;
+
+    // A sandwich board stands on its own feet, so the planks go and it lands on
+    // the paving: it is the one delivery that is not a boxed good. The pallet
+    // *group* stays, so arriving and being collected animate as they always did.
+    const boarded = offer?.recipe !== undefined;
+    if (visual.deck) visual.deck.visible = !boarded;
+    if (visual.counter) visual.counter.position.y = boarded ? 0 : PITCH_DECK;
     // What a card would deliver is asked of the *world*, so it answers for this
     // kitchen and stops promising an oven the moment the room buys one. On the
     // key because it changes while the offer does not.
@@ -687,7 +699,8 @@ function goodsModel(offer: Offer): THREE.Object3D {
     heldBy: null,
     tip: 0,
   }).root;
-  sample.scale.setScalar(GOODS_SCALE);
+  // A card is not shrunk with the rest: see `offerHeight`.
+  if (offer.recipe === undefined) sample.scale.setScalar(GOODS_SCALE);
   return sample;
 }
 
@@ -703,6 +716,10 @@ const GOODS_SCALE = 0.8;
 
 /** How high the top of the goods is, pallet included, so the price sits over it. */
 function offerHeight(offer: Offer): number {
+  // A recipe card stands on the paving rather than on the deck, and at full
+  // size: a sandwich board shrunk to four fifths beside a full-size oven would
+  // be a sandwich board for a smaller restaurant.
+  if (offer.recipe !== undefined) return applianceDef(offer.kind).height;
   return PITCH_DECK + applianceDef(offer.kind).height * GOODS_SCALE;
 }
 

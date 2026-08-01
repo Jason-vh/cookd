@@ -170,8 +170,22 @@ describe("the content the game actually ships", () => {
   });
 
   test("every recipe says how to make it", () => {
+    // Read in the pause menu, for dishes this kitchen has unlocked.
     for (const recipe of RECIPES) {
       expect(recipe.steps.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("and says what it is, in a sentence a customer would read", () => {
+    // The board outside carries no words at all — it is a picture on an A-frame
+    // — so the blurb is the only prose about a dish anybody sees while deciding
+    // whether to buy it. A missing one is a card with a hole in it.
+    for (const recipe of RECIPES) {
+      expect(recipe.blurb.trim().length).toBeGreaterThan(0);
+      // Long enough to be a sentence, short enough to fit the card: past about
+      // this the panel is wider than the board it is standing over.
+      expect(recipe.blurb.length).toBeLessThan(64);
+      expect(recipe.blurb).not.toContain("\u2192"); // that is a step, not a blurb
     }
   });
 

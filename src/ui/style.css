@@ -605,6 +605,48 @@ body {
   line-height: 1.5;
 }
 
+/* --- the cookbook, shown only inside the pause menu ------------------------ */
+
+/* Sits between the actions and the controls table, and is separated from both
+   the same way they are separated from each other: one hairline, no box. */
+.recipes {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #2f323d;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recipes-head {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin-bottom: 2px;
+}
+
+/* The name is the thing you scan for, so it gets its own column rather than
+   running into the method. A fixed column keeps the arrows aligned down the
+   list, which is what makes six recipes readable as a table. */
+.recipes-row {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.recipes-row b {
+  font-weight: 700;
+}
+
+.recipes-row span {
+  opacity: 0.62;
+  line-height: 1.45;
+}
+
 /* --- controls, shown only inside the pause menu ---------------------------- */
 
 .controls {
