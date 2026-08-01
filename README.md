@@ -116,8 +116,9 @@ The white square in front of your chef is what you'll interact with.
    going, so let go when the dial flashes.
 3. Pick it back up and combine it with something else by placing it on top.
 4. Cook where needed (fryer/oven run on their own — and **will burn**). A
-   working fryer bubbles and an oven's window glows, so you can read the state
-   of the kitchen from across it. A new kitchen has neither: heat arrives with
+   working fryer bubbles and steams and an oven's window glows, so you can read
+   the state of the kitchen from across it — and anything left on the heat too
+   long sends up **smoke**, which you can read from further away still. A new kitchen has neither: heat arrives with
    the recipe that calls for it (step 11).
 5. Plate it: carry a plate onto the food, or the food onto a plate — either way
    round works, and you can **assemble on the plate**: drop chopped tomato onto

@@ -93,12 +93,19 @@ Near term:
 - **More content** — soups (pots + liquids), drinks, sides.
 - **Juice.** The [sounds are in](sound.md) — pickup, serve, tip, burn, door
   chime, the day opening and closing, synthesised rather than sampled. What is
-  left is the *visual* half: steam and sizzle particles, and screen shake on a
-  burn. The particle system is still the missing piece, and
-  [rain](weather.md) did not turn out to be it — a downpour is a `fract()` with
-  no lifetimes in it, and steam is a pool of things that are born, rise and go.
-  The shape to copy is `render/popups.ts`, which is already a pool of billboards
-  with lives; what it lacks is instancing and any notion of a burst.
+  left of it was the *visual* half, and **most of that is in**: a working fryer
+  or oven steams, and anything burning smokes — which is the half that was
+  actually about the game rather than about the polish, because burning is the
+  failure state and the dial was the only thing saying so. See [art
+  direction](art-direction.md#steam-and-smoke).
+
+  [Rain](weather.md) turned out not to need the same machinery at all: a
+  downpour is a `fract()` with no lifetimes in it, and a puff is a pool of
+  things that are born, rise and go. What is left is **screen shake** on a burn,
+  which is a change to the camera rather than to the kitchen and is still not
+  obviously worth it now that smoke does the same job without touching the
+  frame; and **chop bits**, which are decoration on an action you are already
+  looking at.
 - **Chef–customer soft collision** — a gentle "excuse me" nudge, if the dining
   room ever feels too empty with everyone walking through each other.
 - **Rendered icons** — render each ingredient once to a texture with an

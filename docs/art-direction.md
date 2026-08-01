@@ -536,8 +536,47 @@ That buys three things:
   invisible there. On the chef, the reward is tied to the action *and* to the
   player who earned it — which matters in co-op.
 - **The bin lid flips open** when something goes in.
-- Anywhere else a one-shot cue is needed later (sizzles, chop bits, customer
-  reactions) already has a home.
+- Anywhere else a one-shot cue is needed later (chop bits, customer reactions)
+  already has a home.
+
+### Steam, and smoke
+
+The one thing an appliance puts into the air, and it is deliberately **not** an
+effect cue. `world.effects` carries things that *happened once*; a fryer being
+busy and a pizza being ruined are states the kitchen is *in*, so `render/particles.ts`
+is fed by reading `progress` and `overcook` in the per-frame appliance walk.
+That difference is load-bearing online: somebody who joined ten seconds ago sees
+the smoke that was already there, which a replayed cue could never give them.
+
+**Smoke is the one that matters.** Burning is the game's failure state, and until
+now the only thing that said so was the dial — small, local, and competing with
+every other dial in the kitchen. A plume rising off an oven reads from across the
+room, which is the same argument that made the dial *pulse* rather than merely
+change colour: in peripheral vision, movement carries where colour does not.
+
+**Steam is what makes smoke legible.** A kitchen where the only thing in the air
+is a disaster teaches nothing until the disaster happens. A fryer that steams
+while it works means the eye already knows what "this appliance is doing
+something" looks like — so the day it goes dark, slow and thick, that reads as
+*wrong* rather than as new.
+
+Which is why the two differ in **shape** rather than in colour. Smoke is bigger,
+darker, slower, longer-lived and more frequent than steam, every one of those on
+purpose: the question being asked at a glance is "busy or ruined", and the answer
+has to survive being seen out of the corner of an eye. A test holds them apart,
+because a later tuning pass is exactly how two things like that quietly converge.
+
+Only **heat** steams. A chopping board does not, and the sink deliberately does
+not either: it is the one place in the kitchen where nothing can go wrong, and
+giving it a plume would put it in the same visual language as the things that
+can.
+
+The [rain](weather.md) is not built on any of this, and the split is worth
+keeping straight. A puff is born, rises, spreads, fades and is gone — every one
+at a different age, which is what a pool and a CPU update are for. A raindrop has
+no age at all: its height is a `fract()` of the clock and it is the same drop for
+ever, so the whole downpour is one instanced mesh and a vertex shader. They look
+alike and they are opposite problems.
 
 ### The work dial
 

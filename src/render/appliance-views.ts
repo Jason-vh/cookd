@@ -22,6 +22,7 @@ import {
 } from "./appliance-meshes";
 import { buildHighlight } from "./overlay-meshes";
 import { PALETTE } from "./palette";
+import { PUFFS, type Particles, type PuffKind } from "./particles";
 import { makeLabel, makeRecipeCard } from "./sprites";
 
 /**
@@ -65,6 +66,14 @@ type Visual = ApplianceParts & {
   signPop: number;
   /** A refused purchase, flashing the price red. 1..0. */
   refused: number;
+  /**
+   * Seconds until this appliance lets go of its next puff.
+   *
+   * Per appliance rather than per frame, because a plume is *steady* and a
+   * frame is not: emitting one puff per frame would tie how much steam a fryer
+   * makes to how fast the machine drawing it happens to be running.
+   */
+  puff: number;
   /** Ring shown when nobody can walk to this. Built the first time it is needed. */
   warning?: THREE.Mesh;
   /** The fitting drawn on this one's worktop, and which kind it is. */
@@ -84,6 +93,7 @@ export class ApplianceViews {
   constructor(
     private readonly scene: THREE.Scene,
     private readonly camera: THREE.Camera,
+    private readonly particles: Particles,
   ) {}
 
   /** The object an appliance is drawn as, for things that hang off it. */
@@ -158,6 +168,7 @@ export class ApplianceViews {
       const phase = workPhase(appliance.motion, appliance.id, time);
       this.animateParts(appliance, visual, phase, dt);
       this.syncDial(appliance, visual, dt, time);
+      this.syncPlume(appliance, visual, dt);
       if (appliance.kind === "stall") this.syncStall(world, appliance, visual, dt);
       if (appliance.kind === "sign") this.syncSign(world, appliance, visual, dt);
     }
@@ -340,6 +351,7 @@ export class ApplianceViews {
       needs: "",
       topper: null,
       refused: 0,
+      puff: 0,
       signFace,
       signPop: 0,
       ghost: { alpha: 0, x: 0, z: 0, pop: 0, held: false },
@@ -645,6 +657,58 @@ export class ApplianceViews {
       scale: pulse * (1 + visual.dialFlash * 0.28),
     });
   }
+
+  /**
+   * Steam off a working appliance, smoke off a burning one.
+   *
+   * Emitted from here rather than from an effect cue because neither is a
+   * *moment*: `world.effects` carries things that happened once, and a fryer
+   * being busy or a pizza being ruined are states the kitchen is *in*. Reading
+   * the state means somebody who joined ten seconds ago sees the smoke that was
+   * already there, which a replayed cue could never give them.
+   *
+   * A **held** appliance makes nothing. It is in somebody's hands during the
+   * build phase, its contents were cleared at closing time, and a plume
+   * following a chef across the patio would be the funniest bug in the game.
+   */
+  private syncPlume(appliance: Appliance, visual: Visual, dt: number): void {
+    const kind = plumeOf(appliance);
+    if (!kind) {
+      // Reset rather than left to run down, so the next thing this appliance
+      // cooks steams at once instead of after the remainder of an interval it
+      // was part-way through when the last day ended.
+      visual.puff = 0;
+      return;
+    }
+    visual.puff -= dt;
+    if (visual.puff > 0) return;
+    visual.puff = PUFFS[kind].every;
+    this.particles.emit(
+      kind,
+      appliance.tile.x + 0.5,
+      applianceDef(appliance.kind).height + 0.1,
+      appliance.tile.y + 0.5,
+    );
+  }
+}
+
+/**
+ * What this appliance is putting into the air, if anything.
+ *
+ * Burning wins outright: an oven that is both cooking and ruining what is in it
+ * is ruining it, and a plume that mixed the two would be the game hedging about
+ * the one state that needs you to move.
+ *
+ * Steam is only for **heat**. A chopping board does not steam, and a sink
+ * deliberately does not either — it is the one place in the kitchen where
+ * nothing can go wrong (see `ESSENTIAL` in `data/appliances.ts`), and giving it
+ * a plume would put it in the same visual language as the things that can.
+ */
+function plumeOf(appliance: Appliance): PuffKind | null {
+  if (appliance.heldBy !== null) return null;
+  if (appliance.overcook > 0) return "smoke";
+  if (appliance.progress <= 0.001) return null;
+  return appliance.motion === "fry" || appliance.motion === "bake" ? "steam" : null;
 }
 
 /** What a slot is showing, as one string. Changes exactly when the goods do. */

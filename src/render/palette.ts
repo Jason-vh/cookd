@@ -212,6 +212,19 @@ export const PALETTE = {
    * off-white the amber end of the day still gets a say in.
    */
   rain: 0xd8e2ea,
+
+  // --- what comes off an appliance ---
+  /** Working heat. Warm rather than white, because it is lit by the thing under it. */
+  steam: 0xf0ece4,
+  /**
+   * Something is burning.
+   *
+   * Dark enough to be unmistakable against every sky in the game — the
+   * roadside's evening is the hard case, and a mid grey disappeared into it.
+   * Never black: the grade lifts the blacks on purpose, so a plume that started
+   * there would come out flat and sit oddly against everything else.
+   */
+  smoke: 0x4a4640,
 } as const;
 
 /**

@@ -22,9 +22,11 @@ bun test         # just the tests
 | `src/save.test.ts` | The save format: round trips, migration from older schemas, that a save written before the sink existed is given one rather than restoring an unplayable kitchen, that a save for a level that no longer exists is refused by name, and every way a file can be wrong. |
 | `src/render/anim.test.ts` | The animation maths, which is why it lives in a file with no three.js in it. The chop cycle's three segments, and that easing is frame-rate independent. |
 | `src/render/camera.test.ts` | Framing: following the local chefs, staying inside the kitchen, any aspect ratio. |
+| `src/render/particles.test.ts` | The curves a puff lives on: that it arrives and leaves at nothing, that it fades in far faster than it fades out, that it only ever spreads, and that steam and smoke differ in *shape* rather than only in colour — which is the assertion that stops a later tuning pass quietly converging the two things a player reads against each other in peripheral vision. |
 | `src/input/input.test.ts` | Gamepad seating, including that a pad which is merely plugged in takes no seat. |
 | `src/audio/cues.test.ts` | What the kitchen sounds like, with no browser near it — which is the whole reason [the decision half of the audio layer is pure](sound.md). That a burn is one sound rather than one a frame, that a rush is one door chime rather than three, that your own hands click and the chef beside you does not, and that a world whose ids start over is not silenced forever. |
-| `src/data/validate.test.ts` | That the content the game ships is coherent. |
+| `src/data/validate.test.ts` | That the content the game ships is coherent, levels included — that every kitchen it ships opens with nothing wrong with it, and that a deliberately broken one is caught by name. |
+| `src/sim/weather.test.ts` | The weather, and the terrace it opens and shuts: that two rooms on one seed get the same sky and the first day is always fair, that closing a day rolls tomorrow's and a save comes back into the one it went to bed under, that it rides the layout even though nothing moved — and that a table on the terrace is walked to on a fair day, ignored in the rain, and that the tables indoors never care either way. |
 | `docs/docs.test.ts` | That these documents still describe this codebase. |
 
 They double as executable documentation.

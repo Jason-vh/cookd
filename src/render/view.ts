@@ -25,6 +25,7 @@ import { PeopleViews } from "./people-views";
 import { Popups } from "./popups";
 import { Rain } from "./rain";
 import { OrderViews } from "./order-views";
+import { Particles } from "./particles";
 import { timed } from "./profile";
 import { TableViews } from "./table-views";
 import { createPost, postEnabled, type Post } from "./post";
@@ -482,9 +483,19 @@ class Entities {
   private readonly items: ItemViews;
   private readonly highlights: HighlightViews;
   readonly popups: Popups;
+  /**
+   * Steam and smoke.
+   *
+   * The kitchen's rather than the renderer's, though it holds nothing keyed by
+   * a simulation id: a puff is a world position with a life left on it, and
+   * carrying half a plume across a kitchen swap would leave smoke hanging over
+   * a building that is not there any more.
+   */
+  private readonly particles: Particles;
 
   constructor(scene: THREE.Scene, camera: THREE.Camera) {
-    this.appliances = new ApplianceViews(scene, camera);
+    this.particles = new Particles(scene);
+    this.appliances = new ApplianceViews(scene, camera, this.particles);
     this.people = new PeopleViews(scene);
     this.cars = new CarViews(scene);
     this.tables = new TableViews(this.appliances);
@@ -512,6 +523,9 @@ class Entities {
     this.items.sync(world, time);
     this.highlights.sync(world);
     this.popups.update(dt);
+    // After the appliances, which are what emit into it: a puff spawned this
+    // frame should move this frame rather than sit still for one.
+    this.particles.update(dt);
   }
 
   dispose(): void {
@@ -523,6 +537,7 @@ class Entities {
     this.items.dispose();
     this.highlights.dispose();
     this.popups.dispose();
+    this.particles.dispose();
   }
 }
 
