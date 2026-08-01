@@ -108,6 +108,7 @@ src/
     dispose.ts            giving GPU memory back, without freeing shared caches
     nodes.ts              typed narrowing for scene-graph nodes
     merge.ts              batching the static scenery into few draw calls
+    profile.ts            dev-only stopwatch for the work that is allowed to block
     layers.ts             which objects post-processing is allowed to see
     grade.ts              the colour grade, vignette and output shader
     post.ts               post-processing chain (AO, bloom, vignette, AA)

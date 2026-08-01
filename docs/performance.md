@@ -38,8 +38,8 @@ twice as often as anything could show.
 
 What changed:
 
-- **static scenery is baked into one mesh per material** at startup
-  (`render/merge.ts`). Authoring still builds loose parts — a tree is a trunk
+- **static scenery is baked into one mesh per material** when the kitchen is
+  built (`render/merge.ts`). Authoring still builds loose parts — a tree is a trunk
   and four blobs — and only what reaches the scene changes. The trade is
   per-object frustum culling, which was worth nothing when the camera framed the
   whole diorama, and is worth little now it follows: the park is a handful of
@@ -71,6 +71,39 @@ shadows are the whole point of having AO here).
 
 If appliance counts grow a lot, instanced meshes per appliance kind is still the
 next step — not a different language.
+
+## Building a kitchen
+
+The one place in the renderer that is allowed to block. `render/profile.ts`
+times it, and the numbers print to the console in development.
+
+Swapping kitchens — picking "surprise me", or being told the room you joined
+stands somewhere else — used to be `view.dispose()` and `new View`, and the cost
+of that was almost entirely invisible. `WebGLRenderer.dispose` empties three's
+program cache and its record of what has been uploaded, but it neither deletes
+the GL objects nor drops the context, and a second renderer built on the same
+canvas is handed that same context straight back. So a kitchen swap recompiled
+every shader in the game, re-uploaded every shared geometry and texture, threw
+away the eight dish photographs, rebuilt the whole post chain, and leaked the
+previous copy of all of it into a context that never went away — worse each
+time.
+
+So `View` now owns two lifetimes. The **renderer's**: the context, the post
+chain, the shader cache, the photo studio, the PMREM probe, the camera rig and
+the daylight. And the **kitchen's**: the baked shell and scenery, the camera's
+bounds, the biome's sky, and every view keyed by a simulation id. `setLevel`
+replaces the second and keeps the first.
+
+The id-keyed views have to be replaced wholesale rather than left to prune
+themselves. Each drops meshes for ids that have *gone*, which is the right
+answer for a reset and the wrong one for a different building: ids are reused
+between worlds, so appliance 3 would go on being drawn as the park's counter in
+a beach kitchen whose appliance 3 is a fryer.
+
+Shaders are compiled with `compileAsync` as soon as the scene is built, rather
+than by the first frame that happens to need them. Linking is what costs, the
+driver does it off-thread, and on a kitchen swap it is now free — the cache
+those programs live in is no longer thrown away with the renderer.
 
 ## Post-processing
 

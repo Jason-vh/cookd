@@ -90,7 +90,7 @@ export type FollowTarget = { x: number; z: number };
 export class KitchenCamera {
   readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 120);
 
-  private readonly bounds: THREE.Box3;
+  private readonly bounds = new THREE.Box3();
   private readonly pivot = new THREE.Vector3();
   /** World -> camera space. Rebuilt only when the camera itself moves. */
   private readonly toCamera = new THREE.Matrix4();
@@ -123,15 +123,27 @@ export class KitchenCamera {
 
   /** @param bounds world-space box the camera must never show past. */
   constructor(bounds: THREE.Box3) {
-    this.bounds = bounds;
+    // The main camera sees everything; only the ambient-occlusion pass gets a
+    // restricted view (see render/post.ts).
+    this.camera.layers.enable(LAYER.UI);
+    this.setBounds(bounds);
+  }
+
+  /**
+   * Stand this camera over a different kitchen.
+   *
+   * The smoothed frustum is dropped rather than carried: easing from where the
+   * last room was framed would open a new kitchen mid-pan across a building
+   * that is not there any more.
+   */
+  setBounds(bounds: THREE.Box3): void {
+    this.bounds.copy(bounds);
     this.pivot.set(
       (bounds.min.x + bounds.max.x) / 2,
       ORBIT.pivotY,
       (bounds.min.z + bounds.max.z) / 2,
     );
-    // The main camera sees everything; only the ambient-occlusion pass gets a
-    // restricted view (see render/post.ts).
-    this.camera.layers.enable(LAYER.UI);
+    this.view = null;
     this.place();
   }
 

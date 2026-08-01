@@ -104,7 +104,7 @@ export class Daylight {
   /** The light right now. Sampled in place, so it is never reallocated. */
   readonly state: SkyState = blankSky();
 
-  private readonly keys: readonly DaylightKey[];
+  private keys: readonly DaylightKey[] = [];
   private readonly sun = new THREE.DirectionalLight();
   private readonly fill = new THREE.DirectionalLight();
   private readonly hemisphere = new THREE.HemisphereLight();
@@ -133,8 +133,6 @@ export class Daylight {
     bounds: DaylightBounds,
     options: DaylightOptions = {},
   ) {
-    this.keys = biome.daylight;
-
     this.skyCanvas = document.createElement("canvas");
     this.skyCanvas.width = 4;
     this.skyCanvas.height = 256;
@@ -151,18 +149,11 @@ export class Daylight {
     this.sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.02;
-    this.sun.target.position.set(bounds.cx, 0, bounds.cz);
 
     const shadowCam = this.sun.shadow.camera;
     shadowCam.near = SUN_DISTANCE - SHADOW_DEPTH;
     shadowCam.far = SUN_DISTANCE + SHADOW_DEPTH;
 
-    // Until somebody says otherwise, cover the whole kitchen: that is what the
-    // gallery wants, and it is what the game gets on the frame before its
-    // camera has decided where it is looking.
-    this.fitShadows(Math.max(bounds.width, bounds.height) * 0.72 + SHADOW_MARGIN);
-
-    this.fill.position.set(bounds.cx - 10, 7, bounds.cz - 8);
     scene.add(this.sun, this.sun.target, this.fill, this.hemisphere);
 
     if (options.atmosphere !== false) {
@@ -170,6 +161,29 @@ export class Daylight {
       scene.fog = new THREE.Fog(0xffffff, 1, 2);
     }
 
+    this.setBiome(biome, bounds);
+  }
+
+  /**
+   * Put this sky over a different kitchen, at opening time.
+   *
+   * Everything expensive here — the canvas, the PMREM generator, the probe
+   * scene — belongs to the renderer rather than to the place, so swapping
+   * biomes is re-aiming three lights and redrawing a four-pixel gradient.
+   */
+  setBiome(biome: Biome, bounds: DaylightBounds): void {
+    this.keys = biome.daylight;
+    this.sun.target.position.set(bounds.cx, 0, bounds.cz);
+    this.fill.position.set(bounds.cx - 10, 7, bounds.cz - 8);
+
+    // Until somebody says otherwise, cover the whole kitchen: that is what the
+    // gallery wants, and it is what the game gets on the frame before its
+    // camera has decided where it is looking.
+    this.fitShadows(Math.max(bounds.width, bounds.height) * 0.72 + SHADOW_MARGIN);
+
+    // A new biome at the same hour is a different sky, so the bucket the last
+    // one was drawn in says nothing about this one.
+    this.step = -1;
     this.set(0);
   }
 

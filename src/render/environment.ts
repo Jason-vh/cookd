@@ -51,11 +51,8 @@ export type EnvironmentBounds = {
   lane?: { entry: Vec2; exit: Vec2 } | null;
 };
 
-export function createEnvironment(
-  scene: THREE.Scene,
-  biome: Biome,
-  bounds: EnvironmentBounds,
-): void {
+/** The scenery, baked. The caller owns the batches, and so has to dispose them. */
+export function createEnvironment(biome: Biome, bounds: EnvironmentBounds): THREE.Mesh[] {
   const cx = bounds.width / 2;
   const cz = bounds.height / 2;
   const groundY = -biome.patio.lift;
@@ -68,7 +65,7 @@ export function createEnvironment(
   if (biome.path) addPath(scenery, biome, bounds, groundY);
   if (bounds.lane) addLane(scenery, bounds.lane);
   addScatter(scenery, biome, bounds, groundY);
-  scene.add(...mergeStatic(scenery));
+  return mergeStatic(scenery);
 }
 
 // --- ground and patio --------------------------------------------------------

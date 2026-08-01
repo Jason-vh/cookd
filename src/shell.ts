@@ -2,6 +2,7 @@ import { LEVEL, RANDOM_LEVEL_ID, levelById, type LevelDef } from "./data/level";
 import { generateLevel, seedFromCode } from "./data/generate";
 import { InputManager } from "./input";
 import { KitchenAudio } from "./audio";
+import { timed } from "./render/profile";
 import { View } from "./render/view";
 import { Hud } from "./ui/hud";
 import { PauseMenu } from "./ui/menu";
@@ -58,7 +59,7 @@ const roomFromUrl = location.hash
 const forceLocal = params.has("local");
 
 let game: Game = new LocalGame(null, 1);
-let view = new View(canvas, game.world, LEVEL.biome);
+const view = timed("view", () => new View(canvas, game.world, LEVEL.biome));
 /** Where a *new* kitchen would be built. An existing room keeps its own. */
 /**
  * What the picker last said, which is not the same as which kitchen that is.
@@ -102,9 +103,9 @@ function socketUrl(): string {
  * for resets and for people leaving).
  *
  * A *different* level is the exception, because `View` bakes the walls and the
- * floor into one static batch when it is built. That used to be unrepresentable
- * — there was one level, and nothing in the render layer could be freed — so
- * this is the one place the disposal work actually pays for itself.
+ * floor into one static batch. That is `setLevel`'s job, and it is deliberately
+ * not `new View`: the renderer, its shader cache and the dish photographs are
+ * expensive and have nothing to do with which kitchen this is.
  */
 function useGame(next: Game): void {
   const changed = next.level.id !== game.level.id;
@@ -112,10 +113,7 @@ function useGame(next: Game): void {
   game = next;
   // A different world: what the last one was in the middle of is not news.
   audio.reset();
-  if (changed) {
-    view.dispose();
-    view = new View(canvas, game.world, game.level.biome);
-  }
+  if (changed) view.setLevel(game.world, game.level.biome);
 }
 
 let onlineSince = 0;
