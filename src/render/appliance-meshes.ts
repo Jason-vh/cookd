@@ -20,6 +20,7 @@ import {
   TOE_KICK,
 } from "./parts";
 import {
+  box,
   cylinder,
   extruded,
   lathe,
@@ -101,6 +102,8 @@ export type ApplianceParts = {
   glass?: THREE.MeshStandardMaterial[];
   /** Bin: flips open when something goes in. */
   lid?: THREE.Object3D;
+  /** Conveyor: the slats across the band, which scroll and wrap. */
+  slats?: THREE.Object3D;
   /** Shop square: the pallet and everything on it, so the delivery can arrive. */
   pitch?: THREE.Object3D;
   /** Shop square: the pallet's planks alone, hidden for a delivery that stands up. */
@@ -133,12 +136,16 @@ export function buildAppliance(appliance: Appliance): ApplianceParts {
   // silhouette instead — see buildBin.
   if (appliance.kind === "bin") {
     root.add(buildBin(parts, h));
+  } else if (appliance.kind === "belt") {
+    buildBelt(parts, h);
   } else if (appliance.kind === "stall") {
     buildPitch(parts, nudge);
   } else if (appliance.kind === "cards") {
     buildCard(parts, h, appliance.card);
   } else if (appliance.kind === "sign") {
     buildSign(parts, h);
+  } else if (appliance.kind === "hopper") {
+    buildHopper(parts, h);
   } else if (appliance.kind === "crate") {
     buildCrate(parts, h, nudge);
   } else if (appliance.kind === "table") {
@@ -623,6 +630,9 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   // what it is has failed at the only job it has.
   sign: { body: [PALETTE.woodDark, "wood"] },
   counter: { body: [PALETTE.wood, "wood"], top: [PALETTE.woodTop, "wood"], cabinet: true },
+  // Built by `buildBelt`: a frame you can see under, not a cabinet. Labelled,
+  // because unlike a counter it has a rule a chef has to learn.
+  belt: { body: [PALETTE.beltBand, "enamel"], label: "Conveyor" },
   // Worktop like the counter's, with a block let into it — see `addDetails`.
   // A chopping station is a counter you have put a board on, and a whole top in
   // board colours is a claim that the counter *is* the board.
@@ -652,6 +662,9 @@ const APPLIANCE_LOOK: Record<Appliance["kind"], Look> = {
   },
   // Built by `buildCrate`, which is slats and gaps rather than a box with a top.
   crate: { body: [PALETTE.wood, "wood"] },
+  // Built by `buildHopper`: a funnel on legs with a chute out over the tile in
+  // front. Like a crate, its contextual label is overridden by what it holds.
+  hopper: { body: [PALETTE.ovenBody, "enamel"] },
   // No top slab and no decorative crockery: what the stack is holding is drawn
   // by `item-views.ts`, because it is now a real, countable pile. An empty
   // plate stack has to *look* empty — that is the moment the whole feature
@@ -929,6 +942,128 @@ function buildCrate(parts: ApplianceParts, h: number, nudge: Jitter): void {
   stock.position.y = bedY;
   group.add(stock);
   parts.produce = stock;
+}
+
+/**
+ * A hopper: a funnel on legs, with a chute out over the tile it faces.
+ *
+ * The **chute** is the whole of the design. A funnel on its own is a container,
+ * and this is not a container — it is a crate that points somewhere, and where
+ * it points is the thing a player has to be able to read from across the
+ * kitchen. It overhangs the tile edge deliberately: the food it drops has to
+ * look like it came out of something rather than appearing on the belt.
+ *
+ * Built pointing along local **+z**, like the conveyor, and turned to its `dir`
+ * by `appliance-views.ts`.
+ */
+function buildHopper(parts: ApplianceParts, h: number): void {
+  const group = parts.root;
+  const standH = h * 0.44;
+
+  for (const [x, z] of CORNERS) {
+    const leg = mesh(roundedCylinder(0.032, standH, 0.012, 10), PALETTE.steelDark, "metal");
+    leg.position.set(x * 0.3, 0, z * 0.3);
+    group.add(leg);
+  }
+
+  // The funnel: wide at the mouth, narrow where it meets the chute. A cone is
+  // the one silhouette that says "this empties downward" without a label.
+  const bodyH = h - standH;
+  const funnel = mesh(cylinder(0.4, 0.15, bodyH, 20), PALETTE.ovenBody, "enamel");
+  funnel.position.y = standH + bodyH / 2;
+  group.add(funnel);
+
+  const lip = rim(0.4, 0.03, PALETTE.steel);
+  lip.position.y = h;
+  group.add(lip);
+
+  // A band round the waist, where the taper is steepest: without it the cone
+  // reads as a paper cup.
+  const band = mesh(cylinder(0.29, 0.29, 0.04, 20), PALETTE.brass, "metal");
+  band.position.y = standH + bodyH * 0.45;
+  group.add(band);
+
+  const chute = mesh(roundedBox(0.3, 0.05, 0.44, 0.02), PALETTE.steel, "metal");
+  chute.position.set(0, standH + 0.04, 0.32);
+  // Positive tilts the far end down, which is the end the food leaves by.
+  chute.rotation.x = 0.38;
+  group.add(chute);
+
+  // Where the stock heaps up, filled in by `buildAppliance` once it knows what
+  // this hopper holds — the same group a crate uses, so both are dressed by one
+  // rule and a hopper of tomatoes looks like the crate it replaced.
+  const stock = new THREE.Group();
+  stock.position.y = h - 0.14;
+  group.add(stock);
+  parts.produce = stock;
+}
+
+/**
+ * A conveyor: a band between two rollers, on legs.
+ *
+ * **On legs, and open underneath.** Everything else in this kitchen is a solid
+ * body standing on the floor, so daylight under the frame is most of what says
+ * this is a machine rather than another worktop — the silhouette does the work
+ * before the colour gets a chance to.
+ *
+ * The **rollers** are the other half of that, and they are what tell you which
+ * way it goes when it is standing empty and the slats are not moving: a belt
+ * with its ends showing has an axis, and an axis is a direction.
+ *
+ * Built running along local **+z**, which `appliance-views.ts` turns to the
+ * belt's own direction — the same trick the sign uses to face into the room.
+ */
+function buildBelt(parts: ApplianceParts, h: number): void {
+  const group = parts.root;
+  const deckY = h - 0.06;
+
+  for (const [x, z] of CORNERS) {
+    const leg = mesh(roundedCylinder(0.03, deckY - 0.05, 0.012, 10), PALETTE.steelDark, "metal");
+    leg.position.set(x * 0.34, 0, z * 0.32);
+    group.add(leg);
+  }
+
+  // Side rails, running the length of it: the band is held between them, and
+  // they are what stops a tomato rolling off sideways.
+  for (const x of [-1, 1]) {
+    const rail = mesh(roundedBox(0.07, 0.1, 0.98, 0.025), PALETTE.steel, "metal");
+    rail.position.set(x * 0.42, deckY, 0);
+    group.add(rail);
+  }
+
+  const band = mesh(roundedBox(0.76, 0.08, 0.92, 0.025), PALETTE.beltBand, "enamel");
+  band.position.y = deckY;
+  group.add(band);
+
+  for (const z of [-1, 1]) {
+    const roller = mesh(cylinder(0.056, 0.056, 0.78, 14), PALETTE.steel, "metal");
+    roller.rotation.z = Math.PI / 2;
+    roller.position.set(0, deckY, z * 0.46);
+    group.add(roller);
+  }
+
+  // The slats, which are the whole of the motion: a moving belt with a plain
+  // surface is a still belt, whatever the simulation thinks. Plain boxes rather
+  // than bevelled ones — at 12mm thick a fillet costs 588 triangles to render
+  // nothing. See `box`.
+  const slats = new THREE.Group();
+  slats.position.y = deckY + 0.045;
+  group.add(slats);
+  parts.slats = slats;
+  for (let i = 0; i < BELT_SLATS; i++) {
+    const slat = mesh(box(0.72, 0.014, 0.05), shade(PALETTE.beltBand, 1.7), "enamel");
+    slat.position.z = beltSlatZ(i);
+    slats.add(slat);
+  }
+}
+
+/** How many slats there are, and the length of band they are spread over. */
+export const BELT_SLATS = 6;
+export const BELT_RUN = 0.9;
+
+/** Where slat `i` sits along the band, before it is scrolled. */
+export function beltSlatZ(i: number): number {
+  return -BELT_RUN / 2 + (i / BELT_SLATS) * BELT_RUN;
 }
 
 /**

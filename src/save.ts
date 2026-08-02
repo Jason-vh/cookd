@@ -1,4 +1,4 @@
-import { APPLIANCES, ESSENTIAL, applianceDef } from "./data/appliances";
+import { APPLIANCES, ESSENTIAL, applianceDef, pushes } from "./data/appliances";
 import { LEVEL, type LevelDef, levelById, parseLevelDef } from "./data/level";
 import { BACKFILL_RECIPES, cardFee } from "./data/progression";
 import { RECIPE_BY_ID } from "./data/recipes";
@@ -38,6 +38,18 @@ export type SavedAppliance = {
   kind: ApplianceKind;
   x: number;
   y: number;
+  /**
+   * Which way a conveyor carries, or a hopper faces. Absent for the appliances
+   * that push nothing anywhere and therefore have no direction to lose.
+   *
+   * Written conditionally rather than for every appliance, for the reason
+   * `source` is: a field that means nothing on an oven is a field somebody will
+   * one day read off one. No schema bump came with it, deliberately — a save
+   * that does not mention a direction is a save from a kitchen with no belt in
+   * it, so there is nothing to migrate and a no-op migration is a lie about
+   * having done something.
+   */
+  dir?: Vec2;
   source?: ItemSpec;
   /**
    * The fitting on this one's worktop — a chopping board.
@@ -137,7 +149,11 @@ export function saveSignature(world: World): string {
   let layout = "";
   for (const appliance of world.appliances.values()) {
     const fitted = appliance.topper ?? "";
-    layout += `${appliance.id}:${appliance.kind}${fitted && `+${fitted}`}:${appliance.tile.x},${appliance.tile.y};`;
+    // The direction is in the signature because turning a belt round changes
+    // nothing else about the kitchen: same kind, same tile, and a run that now
+    // carries the other way. Without it, rotating one would never be written.
+    const dir = `${appliance.dir.x},${appliance.dir.y}`;
+    layout += `${appliance.id}:${appliance.kind}${fitted && `+${fitted}`}:${appliance.tile.x},${appliance.tile.y}>${dir};`;
   }
   const stall = takenSlots(world).join(",");
   const menu = world.unlocked.join(",");
@@ -185,6 +201,7 @@ export function snapshot(world: World, level: LevelDef = LEVEL): Save {
       kind: appliance.kind,
       x: appliance.tile.x,
       y: appliance.tile.y,
+      ...(pushes(appliance.kind) ? { dir: appliance.dir } : {}),
       ...(appliance.source ? { source: appliance.source } : {}),
       ...(appliance.topper ? { topper: appliance.topper } : {}),
     });
@@ -349,6 +366,8 @@ export function parseSave(value: unknown): Save | null {
 
     const source = parseSpec(entry.source);
     if (source === undefined) return null;
+    const dir = parseDir(entry.dir);
+    if (dir === undefined) return null;
     // Absent before schema 7. Checked for membership *and* for being a fitting,
     // because a counter claiming an oven on its worktop would be a kitchen
     // baking on a countertop with nothing drawn to say so.
@@ -363,6 +382,7 @@ export function parseSave(value: unknown): Save | null {
       kind: entry.kind,
       x,
       y,
+      ...(dir ? { dir } : {}),
       ...(source ? { source } : {}),
       ...(topper ? { topper } : {}),
     });
@@ -381,6 +401,23 @@ export function parseSave(value: unknown): Save | null {
     unlockedDay: Math.floor(unlockedDay),
     evicted,
   };
+}
+
+/**
+ * A conveyor's direction: one of the four compass points and nothing else.
+ *
+ * `null` for absent, `undefined` for "present but malformed". Checked rather
+ * than merely read as two numbers, because a hand-edited `{x: 3, y: 7}` is a
+ * belt that hands its item to a tile seven squares away — through the wall, and
+ * to whatever happens to be standing there.
+ */
+function parseDir(value: unknown): Vec2 | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) return undefined;
+  const x = finite(value.x);
+  const y = finite(value.y);
+  if (x === null || y === null) return undefined;
+  return Math.abs(x) + Math.abs(y) === 1 ? { x, y } : undefined;
 }
 
 /** `null` for absent, `undefined` for "present but malformed". */
@@ -549,6 +586,7 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
       { x: saved.x, y: saved.y },
       saved.source ?? null,
     );
+    if (saved.dir) appliance.dir = { x: saved.dir.x, y: saved.dir.y };
     // Only onto something that can actually take one: a file naming a fitting
     // on a fryer is a file describing a kitchen this game cannot build.
     if (saved.topper && applianceDef(saved.kind).worktop) appliance.topper = saved.topper;

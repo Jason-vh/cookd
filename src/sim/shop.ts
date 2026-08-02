@@ -89,7 +89,12 @@ export function sellPrice(kind: ApplianceKind): number {
 export function offerLabel(offer: Offer): string {
   const recipe = offer.recipe === undefined ? null : RECIPE_BY_ID.get(offer.recipe);
   if (recipe) return recipe.name;
-  if (offer.source) return `${ingredient(offer.source.base).name} crate`;
+  // "Tomato crate", "Tomato hopper": the ingredient names the offer and the
+  // appliance says what it is. The second half used to be the word "crate",
+  // which was true for exactly as long as one kind held a source.
+  if (offer.source) {
+    return `${ingredient(offer.source.base).name} ${applianceDef(offer.kind).label.toLowerCase()}`;
+  }
   return applianceDef(offer.kind).label;
 }
 
@@ -414,9 +419,14 @@ function rollFrom(pool: ApplianceKind[], random: () => number, sources: string[]
  * offer. Rolled from the ingredients **this room's** recipes start from, so a
  * kitchen can never be sold a crate of something its menu has no use for — no
  * cheese until a dish takes cheese, and tomatoes from the first morning.
+ *
+ * Asked of the `dispenses` column rather than of the kind by name. The name was
+ * right until the hopper, which is also sold holding an ingredient — and a
+ * hopper that arrived empty would be a $75 machine that hands out nothing, with
+ * nowhere in the game to put an ingredient into it.
  */
 function withSource(kind: ApplianceKind, random: () => number, sources: string[]): Offer {
-  if (kind !== "crate") return { kind, source: null };
+  if (!applianceDef(kind).dispenses) return { kind, source: null };
   const base = sources[Math.floor(random() * sources.length)] ?? "tomato";
   return { kind, source: { base, processes: [] } };
 }

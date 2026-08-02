@@ -33,12 +33,18 @@ export class ItemViews {
 
     for (const appliance of world.appliances.values()) {
       if (!appliance.item || appliance.heldBy !== null) continue;
-      const height = applianceDef(appliance.kind).height;
+      const def = applianceDef(appliance.kind);
+      // On a conveyor, `progress` is how far along the band it has got — so the
+      // food slides across the tile instead of sitting in the middle of it.
+      // This is the *only* thing drawing a belt's progress, which is why it has
+      // no dial: the item is the gauge. Sitting at the far edge is a belt that
+      // has nowhere to hand on to.
+      const slide = def.travel > 0 ? (appliance.progress - 0.5) * BELT_SPAN : 0;
       const object = this.place(
         appliance.item,
-        appliance.tile.x + 0.5,
-        height + 0.06,
-        appliance.tile.y + 0.5,
+        appliance.tile.x + 0.5 + appliance.dir.x * slide,
+        def.height + 0.06,
+        appliance.tile.y + 0.5 + appliance.dir.y * slide,
       );
       // Food squashes on the beat, so the work reads even when the chef is
       // hidden behind the counter they're working at.
@@ -115,6 +121,15 @@ export class ItemViews {
     this.objects.clear();
   }
 }
+
+/**
+ * How much of a tile an item actually travels across a conveyor.
+ *
+ * Short of a full tile on purpose. At 1 the handover happens with the item
+ * standing exactly on the seam between two belts, which reads as a stutter
+ * rather than a pass; a shade under, and it is clear of the join at both ends.
+ */
+const BELT_SPAN = 0.86;
 
 /**
  * Shrink the food on a plate without shrinking the plate.

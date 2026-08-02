@@ -69,8 +69,21 @@ import type {
  * server sending none at all means every client believes the terrace is open
  * while the server has shut it, so the tables outside are chairs one end of the
  * link can see people being seated at and the other cannot.
+ *
+ * v8 pointed the conveyors. A missing `dir` is survivable on its own — it reads
+ * as a belt running north, which is wrong rather than unparseable — but the
+ * `belt` *kind* is not: a v7 client rejects an appliance kind it has never
+ * heard of, which throws away the whole layout and every frame after it, and
+ * the room sits at "connecting" with nothing logged. See the note on
+ * `APPLIANCE_KINDS` in `wire.ts`.
+ *
+ * v9 added the hopper, and breaks for exactly the reason v8 did: a new
+ * appliance kind is the one content change a client cannot shrug off, because
+ * an unknown kind fails the whole layout rather than one appliance in it. It
+ * needed no new field — a hopper is a `dir` and a `source`, and the wire has
+ * carried both since v8 and since there were crates.
  */
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 9;
 
 /**
  * Ticks between broadcasts: a 60Hz simulation goes out at 20Hz.
@@ -90,6 +103,16 @@ export type LayoutAppliance = {
   x: number;
   y: number;
   source: Appliance["source"];
+  /**
+   * Which way a conveyor carries, or a hopper faces.
+   *
+   * In the layout rather than the frame because it is exactly what the layout
+   * is for: it is decided when somebody sets the machine down and never changes
+   * again during service. It is also load-bearing rather than decorative — a
+   * client with it wrong draws a run of belts feeding the wrong way and then
+   * watches items travel against them.
+   */
+  dir: Appliance["dir"];
   /**
    * What a stall slot is holding, and whether it has already been emptied.
    *
@@ -369,6 +392,7 @@ export function encodeLayout(world: World): Layout {
       kind: appliance.kind,
       x: appliance.tile.x,
       y: appliance.tile.y,
+      dir: appliance.dir,
       source: appliance.source,
       offer: appliance.offer,
       taken: appliance.taken,
@@ -503,6 +527,7 @@ export function applyLayout(world: World, layout: Layout): void {
       justFinished: false,
       motion: null,
       heldBy: null,
+      dir: { x: saved.dir.x, y: saved.dir.y },
       source: saved.source,
       offer: saved.offer,
       taken: saved.taken,

@@ -1,11 +1,15 @@
+import { applianceDef } from "../../data/appliances";
 import { BURNT } from "../../data/ingredients";
 import { BURN_INDEX, TRANSFORM_INDEX } from "../../data/recipes";
-import { specKey } from "../items";
+import { makeItem, specKey } from "../items";
 import type { Appliance, Item, Transform, World } from "../types";
-import { fittedDef } from "../world";
+import { wallBetween } from "../walls";
+import { applianceAtTile, fittedDef } from "../world";
 
 /**
  * Advances every loaded appliance:
+ *   - a hopper hands out what it holds — see `dispense`;
+ *   - a conveyor carries what is on it and hands it on — see `carry`;
  *   - "hold" transforms only progress while a player is holding USE at them;
  *   - "auto" transforms run on their own;
  *   - finished items sitting on a hot appliance eventually burn.
@@ -26,10 +30,27 @@ export function applianceSystem(world: World, dt: number): void {
   for (const appliance of world.appliances.values()) {
     appliance.justFinished = false;
     appliance.motion = null;
+
+    // Before the empty check, not after it: a hopper holds nothing and is the
+    // one appliance whose `progress` means something while its hands are empty.
+    if (applianceDef(appliance.kind).feeds > 0) {
+      dispense(world, appliance, dt);
+      continue;
+    }
+
     const item = appliance.item;
     if (!item) {
       appliance.progress = 0;
       appliance.overcook = 0;
+      continue;
+    }
+
+    // Before the transform search, because a belt's `progress` means something
+    // else entirely and the search would zero it every tick on its way to
+    // deciding a conveyor cannot cook. Asked of the kind rather than through
+    // `fittedDef`: a belt is not a worktop, so nothing is ever fitted to one.
+    if (applianceDef(appliance.kind).travel > 0) {
+      carry(world, appliance, item, dt);
       continue;
     }
 
@@ -73,6 +94,98 @@ export function applianceSystem(world: World, dt: number): void {
       appliance.progress = 0;
     }
   }
+}
+
+/**
+ * Where an appliance that pushes may put its load, or null for nowhere.
+ *
+ * The one rule a belt and a hopper share, and the reason they share it is that
+ * there is only one honest answer to "may this machine put something here": the
+ * **plain** put-it-down. The next appliance takes it if it accepts items and is
+ * empty. Neither machine performs a chef's special verbs — neither scrapes into
+ * a bin, takes a plate off a stack, or combines what it is holding with what it
+ * meets. Those are things a pair of hands does, and a machine that quietly did
+ * them would be a second, invisible set of rules about what goes with what.
+ *
+ * What it *can* reach is anything a hand could put something on, including a
+ * table and a hatch. Food landing in front of somebody who ordered it is the
+ * dining room's rule and the drive-through's rule, and it stays theirs: a belt
+ * pointed at a hatch is a long arm, not a new kind of service.
+ *
+ * Returning the appliance rather than taking the item is what lets a hopper ask
+ * **before** it mints anything. A blocked hopper that made a tomato and threw
+ * it away would burn an id sixty times a second, and ids are what every client
+ * agrees about things by.
+ */
+function outlet(world: World, from: Appliance): Appliance | null {
+  const ahead = { x: from.tile.x + from.dir.x, y: from.tile.y + from.dir.y };
+  // Neither machine passes through the shell, nor feeds the room next door
+  // through a dividing wall. A hatch is reachable because a hatch stands in a
+  // hole somebody already punched.
+  if (wallBetween(world, from.tile, ahead)) return null;
+  const next = applianceAtTile(world, ahead.x, ahead.y);
+  if (!next || next.heldBy !== null || next.item !== null) return null;
+  return applianceDef(next.kind).acceptsItems ? next : null;
+}
+
+/** Set an item down on an appliance that has just been found empty. */
+function load(next: Appliance, item: Item): void {
+  next.item = item;
+  next.progress = 0;
+  next.overcook = 0;
+}
+
+/**
+ * Carry an item along a conveyor, and hand it over at the far end.
+ *
+ * Blocked — nothing there, something already there, a wall in the way, or the
+ * end of the line — the item simply sits at the far end with `progress` at 1.
+ * Backpressure and "this belt goes nowhere" are the same state on purpose:
+ * a run that has backed up is a run whose last belt is full, which is the one
+ * thing about a jam a player needs to be able to see.
+ */
+function carry(world: World, belt: Appliance, item: Item, dt: number): void {
+  belt.overcook = 0;
+  belt.progress = Math.min(1, belt.progress + dt / applianceDef(belt.kind).travel);
+  if (belt.progress < 1) return;
+
+  const next = outlet(world, belt);
+  if (!next) return;
+  load(next, item);
+  belt.item = null;
+  belt.progress = 0;
+}
+
+/**
+ * A hopper: hand a fresh copy of what this holds to the tile it faces.
+ *
+ * The other end of a conveyor, and the reason one is worth owning — a belt that
+ * can only be loaded by hand saves the carry rather than the trip. What it
+ * pushes is minted from its `source`, exactly as a chef taking one out of a
+ * crate would, so ingredients stay infinite and nothing here can create a plate.
+ *
+ * **It is off while the restaurant is shut.** Not tidiness: the appliance system
+ * runs in the morning too, so without this a room spent rearranging its kitchen
+ * would open the day with a tomato on every surface a hopper happened to face.
+ * The machine being switched off with the sign is also simply what a kitchen
+ * looks like.
+ *
+ * Blocked, it holds at `progress` 1 like a full belt — same rule, same reading,
+ * and it is what stops an infinite crate flooding a room.
+ */
+function dispense(world: World, hopper: Appliance, dt: number): void {
+  const source = hopper.source;
+  if (world.phase !== "service" || !source) {
+    hopper.progress = 0;
+    return;
+  }
+  hopper.progress = Math.min(1, hopper.progress + dt / applianceDef(hopper.kind).feeds);
+  if (hopper.progress < 1) return;
+
+  const next = outlet(world, hopper);
+  if (!next) return;
+  load(next, makeItem(world, source));
+  hopper.progress = 0;
 }
 
 /**

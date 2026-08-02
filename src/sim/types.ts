@@ -73,7 +73,15 @@ export type Appliance = {
   tile: Vec2;
   /** Item currently resting on / inside this appliance. */
   item: Item | null;
-  /** 0..1 progress of the active transform. */
+  /**
+   * 0..1 progress of whatever this appliance is doing.
+   *
+   * A transform, everywhere but on a conveyor, where it is how far along the
+   * belt the item has travelled. Deliberately the same field: a belt has no
+   * station, so nothing else was ever going to write to it, and reusing it is
+   * what keeps the wire, the save and the render layer from each growing a
+   * second number that means the same thing.
+   */
   progress: number;
   /** Seconds spent sitting on a hot appliance after its transform completed. */
   overcook: number;
@@ -95,6 +103,18 @@ export type Appliance = {
    * `fittedDef`.
    */
   topper: ApplianceKind | null;
+  /**
+   * Which way a conveyor runs: a cardinal unit vector, and meaningless on
+   * anything that does not travel.
+   *
+   * The first thing in this game an appliance has an *orientation* for, and it
+   * is set the way a belt should be laid: from the facing of whoever put it
+   * down, so a chef walking a route dropping belts leaves one pointing along
+   * it. Rotating one is picking it up and setting it down again — no second
+   * verb, and no button that does nothing for every other appliance in the
+   * kitchen.
+   */
+  dir: Vec2;
   /** For crates: the item this appliance dispenses. */
   source: ItemSpec | null;
   /**

@@ -61,6 +61,15 @@ export const PALETTE = {
   boardTop: 0xdcc59d,
   steel: 0xb8b2a6,
   steelDark: 0x6f6a61,
+  /**
+   * Conveyor rubber: the darkest surface in the kitchen after the bin.
+   *
+   * Dark on purpose, and it is the one thing keeping a belt from reading as a
+   * counter with a stripe on it. What travels along it is food, which is the
+   * most saturated thing on screen — so the surface carrying it should be the
+   * least.
+   */
+  beltBand: 0x3a3833,
   ovenGlass: 0x33302b,
   oil: 0xd8b167,
   ember: 0xff7a2e,

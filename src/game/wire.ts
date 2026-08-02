@@ -326,6 +326,8 @@ function parseLayout(value: unknown): Layout | null {
     // here we only insist they are integers a grid could contain at all.
     if (x < 0 || y < 0) return null;
     if (!isApplianceKind(kind)) return null;
+    const dir = parseDir(entry.dir);
+    if (dir === undefined) return null;
     const source =
       entry.source === null || entry.source === undefined ? null : parseSpec(entry.source);
     if (source === undefined) return null;
@@ -339,7 +341,7 @@ function parseLayout(value: unknown): Layout | null {
     // Checked for membership, unlike a card: a topper is looked up in the
     // appliance table on every tick that anybody works at this counter.
     if (topper === undefined || (topper !== null && !isApplianceKind(topper))) return null;
-    return { id, kind, x, y, source, offer, taken, topper, card };
+    return { id, kind, x, y, dir, source, offer, taken, topper, card };
   });
   return appliances === null ? null : { appliances, unlocked, unlockedDay, weather };
 }
@@ -363,6 +365,8 @@ const APPLIANCE_KINDS: Record<ApplianceKind, true> = {
   cards: true,
   sign: true,
   counter: true,
+  belt: true,
+  hopper: true,
   board: true,
   steel_board: true,
   fryer: true,
@@ -381,6 +385,25 @@ function isApplianceKind(value: string): value is ApplianceKind {
 }
 
 type Spec = NonNullable<Layout["appliances"][number]["source"]>;
+
+/**
+ * Which way a conveyor runs: one of the four compass points, and nothing else.
+ *
+ * Absent means "no opinion", which is what a server one deploy behind has — and
+ * it can only be describing a kitchen with no belts in it, since a server that
+ * has none does not have the kind either. Anything else present is rejected
+ * rather than clamped: the direction decides which tile a belt hands its item
+ * to, and `{x: 9, y: 0}` would be a machine reaching nine squares across the
+ * kitchen to put a pizza in somebody's oven.
+ */
+function parseDir(value: unknown): { x: number; y: number } | undefined {
+  if (value === null || value === undefined) return { x: 0, y: 1 };
+  if (!isRecord(value)) return undefined;
+  const x = int(value.x);
+  const y = int(value.y);
+  if (x === null || y === null) return undefined;
+  return Math.abs(x) + Math.abs(y) === 1 ? { x, y } : undefined;
+}
 
 /**
  * What a stall slot is selling. `undefined` for "present but malformed".

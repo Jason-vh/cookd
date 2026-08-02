@@ -29,6 +29,38 @@ export type ApplianceDef = {
   /** Work-rate multiplier. A dedicated station beats improvising on a counter. */
   speed: number;
   /**
+   * Seconds to carry an item one tile, or 0 for an appliance that holds still.
+   *
+   * The whole of what makes a conveyor a conveyor, and it is a **column**
+   * rather than a kind so that a faster belt stays one row — the same bargain
+   * `speed` and `patience` struck for the upgrades. Which way it carries is not
+   * here: that is `Appliance.dir`, because it is a fact about the one somebody
+   * put down rather than about belts.
+   */
+  travel: number;
+  /**
+   * Seconds between items pushed onto the tile it faces, or 0 for an appliance
+   * that hands nothing on by itself.
+   *
+   * `travel`'s twin, and the other half of automation: one moves what it is
+   * given, this one produces. Only meaningful with `dispenses`, since what a
+   * hopper pushes out is a fresh copy of its source — an appliance that fed
+   * from its `item` would be an oven that empties itself, which is a much
+   * larger decision about burning than a column.
+   */
+  feeds: number;
+  /**
+   * Is this sold with an ingredient in it, and does it hand that ingredient out?
+   *
+   * A crate and a hopper. It exists because the shop used to ask `kind !==
+   * "crate"` — one hardcoded name deciding what arrives holding a tomato — and
+   * the second appliance to hold a source is the moment that stops being a
+   * question about crates. `validate.ts` also reads it: two appliances that
+   * both dispense do the same job, which is what makes a hopper a legitimate
+   * upgrade of a crate when neither offers a station to compare.
+   */
+  dispenses: boolean;
+  /**
    * How long finished food survives on it, as a multiple of the dish's burn
    * time. 1 everywhere except on an upgrade bought to buy time.
    */
@@ -86,6 +118,9 @@ export type ApplianceDef = {
  * have to write down.
  */
 const PLAIN = {
+  travel: 0,
+  feeds: 0,
+  dispenses: false,
   patience: 1,
   upgrades: null,
   mounted: false,
@@ -115,6 +150,13 @@ const DEFS = {
   // in the room behind it — see `sim/systems/sign.ts`.
   sign: { ...PLAIN, stations: [], speed: 1, label: "Sign", color: 0x7d5b3a, height: 1.15, acceptsItems: false, movable: false, mounted: true, price: 0 },
   counter: { ...PLAIN, stations: ["prep"], speed: 1, label: "Counter", color: 0x9a7b58, height: 0.62, acceptsItems: true, movable: true, worktop: true, price: 20 },
+  // The first appliance that does a job with nobody standing at it: a belt
+  // carries what is put on it one tile and hands it to whatever is at the far
+  // end. No station, so nothing cooks on it and nothing burns on it — moving
+  // things *is* the job, and a belt is somewhere food is safe while it waits.
+  // Priced under a table: one belt is not automation, and the thing being sold
+  // is a run of them.
+  belt: { ...PLAIN, stations: [], speed: 1, travel: 1.2, label: "Conveyor", color: 0x5c5952, height: 0.58, acceptsItems: true, movable: true, price: 30 },
   // A board is a **fitting**: it is set on a counter's worktop and the counter
   // chops at the board's speed for as long as it is there. It owns no tile, so
   // it is priced as the block it is rather than as the counter it used to come
@@ -130,7 +172,15 @@ const DEFS = {
   // as long before it burns. Heat is the one appliance a chef has to come back
   // to at a particular moment, so the thing worth selling is a later moment.
   bell_oven: { ...PLAIN, stations: ["bake"], speed: 1.15, patience: 3, label: "Bell oven", color: 0x585b66, height: 0.9, acceptsItems: true, movable: true, price: 320, upgrades: "oven" },
-  crate: { ...PLAIN, stations: [], speed: 1, label: "Crate", color: 0x7a5c3c, height: 0.7, acceptsItems: false, movable: true, price: 15 },
+  crate: { ...PLAIN, stations: [], speed: 1, dispenses: true, label: "Crate", color: 0x7a5c3c, height: 0.7, acceptsItems: false, movable: true, price: 15 },
+  // A crate that empties itself onto the tile it faces: the thing that lets a
+  // conveyor begin somewhere other than in a chef's hands. An **upgrade** of a
+  // crate rather than a new kind, which is what keeps it out of the shop's
+  // scarcity guarantee — a kitchen owning no hoppers is missing nothing.
+  //
+  // It feeds *slower* than a belt carries, on purpose: a line with gaps in it
+  // reads as flowing, and a line packed solid reads as jammed.
+  hopper: { ...PLAIN, stations: [], speed: 1, feeds: 2.5, dispenses: true, label: "Hopper", color: 0xdfd4c0, height: 0.85, acceptsItems: false, movable: true, price: 75, upgrades: "crate" },
   // Sold **with its plates on it** — see `STACK_PLATES`. Single plates used to
   // be for sale beside the appliances, and they were the one purchase that put
   // a loose *item* in your hands during a phase that only understands
@@ -177,6 +227,21 @@ export function applianceDef(kind: ApplianceKind): ApplianceDef {
 
 export function isApplianceKind(value: string): value is ApplianceKind {
   return Object.hasOwn(APPLIANCES, value);
+}
+
+/**
+ * Does this appliance push things at the tile in front of it?
+ *
+ * True of a conveyor and a hopper, and it answers **three** questions that
+ * coincide by construction rather than by luck: these are the appliances that
+ * have a direction (they push somewhere, so there is a somewhere), the ones
+ * whose `dir` is worth saving and sending, and the ones whose `progress` is a
+ * countdown rather than a transform — so they are also the ones that must not
+ * be given a work dial. One cause, three consequences, one predicate.
+ */
+export function pushes(kind: ApplianceKind): boolean {
+  const def = applianceDef(kind);
+  return def.travel > 0 || def.feeds > 0;
 }
 
 /**

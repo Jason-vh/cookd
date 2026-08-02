@@ -67,6 +67,7 @@ function sampleAppliance(kind: ApplianceKind, source: ItemSpec | null): Applianc
     justFinished: false,
     motion: null,
     topper: null,
+    dir: { x: 0, y: 1 },
     source,
     offer: null,
     taken: null,

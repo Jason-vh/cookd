@@ -135,6 +135,21 @@ export function isFitting(kind: ApplianceKind): boolean {
 }
 
 /**
+ * The compass point a direction is nearest to.
+ *
+ * A chef's facing is a stick or a pair of keys, so it is diagonal about as
+ * often as not; a conveyor runs one of four ways. Snapping here rather than
+ * refusing a diagonal means every placement lays a belt, and the one it lays is
+ * the one the ghost was already drawing.
+ */
+export function cardinal(dir: Vec2): Vec2 {
+  if (Math.abs(dir.x) > Math.abs(dir.y)) return { x: Math.sign(dir.x), y: 0 };
+  // Ties and a dead stick both go north-south, which is where a chef starts
+  // facing: a belt must never come out of this with no direction at all.
+  return { x: 0, y: dir.y < 0 ? -1 : 1 };
+}
+
+/**
  * Record that the appliance layout changed.
  *
  * Called by everything that moves an appliance on or off the grid. The server
@@ -361,6 +376,9 @@ export function spawnAppliance(
     justFinished: false,
     motion: null,
     topper: null,
+    // Whichever way the level is drawn. Only a conveyor reads it, and one is
+    // only ever born held — it is pointed when it is put down.
+    dir: { x: 0, y: 1 },
     source,
     offer: null,
     taken: null,

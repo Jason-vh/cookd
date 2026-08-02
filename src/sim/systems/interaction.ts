@@ -19,6 +19,7 @@ import type { Appliance, Inputs, Item, Offer, Player, Vec2, World } from "../typ
 import {
   PLAYER_RADIUS,
   applianceAtTile,
+  cardinal,
   effect,
   inBounds,
   log,
@@ -487,6 +488,12 @@ function buildGrab(world: World, player: Player): void {
     }
 
     appliance.tile = { x: tile.x, y: tile.y };
+    // Pointed the way the chef is looking, which for the one appliance that
+    // cares is the way they are walking: laying a run of belt is walking the
+    // route dropping them. Written for every kind because a rule with an `if`
+    // in it is a rule the next appliance with an orientation would have to
+    // remember to join — see `Appliance.dir`.
+    appliance.dir = cardinal(player.facing);
     appliance.heldBy = null;
     world.applianceAt[idx] = appliance.id;
     touchLayout(world);

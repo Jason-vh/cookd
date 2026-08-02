@@ -1,10 +1,11 @@
 import * as THREE from "three";
-import { applianceDef } from "../data/appliances";
+import { applianceDef, pushes } from "../data/appliances";
 import { RECIPE_BY_ID } from "../data/recipes";
 import type { Appliance, Offer, World } from "../sim/types";
-import { playerById } from "../sim/world";
+import { cardinal, playerById } from "../sim/world";
 import { inward } from "../sim/walls";
 import { deliveryLabel, missingFor } from "../sim/cards";
+import { isBurnt } from "../sim/items";
 import { canPlace, reachedTile, targetTile, unreachableTables } from "../sim/queries";
 import { hasDelivery, offerLabel, offerPrice } from "../sim/shop";
 import { chopLift, ease, workPhase } from "./anim";
@@ -13,6 +14,8 @@ import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";
 import { setGhost, setGhostOpacity } from "./ghost";
 import {
+  BELT_RUN,
+  beltSlatZ,
   buildAppliance,
   buildFitting,
   paintSign,
@@ -166,7 +169,7 @@ export class ApplianceViews {
 
       this.syncTopper(appliance, visual);
       const phase = workPhase(appliance.motion, appliance.id, time);
-      this.animateParts(appliance, visual, phase, dt);
+      this.animateParts(appliance, visual, phase, dt, time);
       this.syncDial(appliance, visual, dt, time);
       this.syncPlume(appliance, visual, dt);
       if (appliance.kind === "stall") this.syncStall(world, appliance, visual, dt);
@@ -505,8 +508,28 @@ export class ApplianceViews {
    * Fryers and ovens work unattended, so they have to advertise it themselves —
    * the dial only shows when you are stood there.
    */
-  private animateParts(appliance: Appliance, visual: Visual, phase: number, dt: number): void {
+  private animateParts(
+    appliance: Appliance,
+    visual: Visual,
+    phase: number,
+    dt: number,
+    time: number,
+  ): void {
     const height = applianceDef(appliance.kind).height;
+
+    if (visual.slats) {
+      // A belt runs whether or not there is anything on it, because a belt is
+      // *switched on* — and a machine that only moves when it is loaded looks
+      // like a machine that is broken the rest of the time. Driven off the
+      // clock rather than off `progress` for the same reason: the item's own
+      // travel already says how far along it is, and this says the thing is
+      // live.
+      const pitch = BELT_RUN / visual.slats.children.length;
+      const scroll = (time * BELT_SCROLL) % pitch;
+      for (const [i, slat] of visual.slats.children.entries()) {
+        slat.position.z = beltSlatZ(i) + scroll;
+      }
+    }
 
     if (visual.knife) {
       // The knife swings with the chop, on the same phase as the chef's arms.
@@ -602,6 +625,11 @@ export class ApplianceViews {
       state.x += (targetX - state.x) * chase;
       state.z += (targetZ - state.z) * chase;
       state.alpha = Math.min(1, state.alpha + dt * 6);
+      // A held belt points wherever the chef is looking, so the ghost answers
+      // "which way would this run" at the same time as it answers "where would
+      // it go". Turning it after it is put down would be the one thing about a
+      // placement you could not see before making it.
+      this.aim(appliance, visual, cardinal(held.facing));
 
       const settle = state.alpha * state.alpha;
       // Valid: sinks onto the tile. Invalid: hangs above it with a slow bob,
@@ -622,8 +650,22 @@ export class ApplianceViews {
     }
     state.pop = Math.max(0, state.pop - dt * 4);
     const pop = state.pop * state.pop;
+    this.aim(appliance, visual, appliance.dir);
     visual.root.position.set(appliance.tile.x + 0.5, 0, appliance.tile.y + 0.5);
     visual.root.scale.set(1 + 0.13 * pop, 1 - 0.18 * pop, 1 + 0.13 * pop);
+  }
+
+  /**
+   * Turn an appliance that has a direction to face it.
+   *
+   * Only the ones that push something somewhere: everything else is drawn
+   * square to the room, and a sign turns itself to face inward a moment later
+   * (`syncSign`). Both are built pointing along local +z, so this is the same
+   * `atan2` the sign uses.
+   */
+  private aim(appliance: Appliance, visual: Visual, dir: { x: number; y: number }): void {
+    if (!pushes(appliance.kind)) return;
+    visual.root.rotation.y = Math.atan2(dir.x, dir.y);
   }
 
   /**
@@ -639,7 +681,11 @@ export class ApplianceViews {
    */
   private syncDial(appliance: Appliance, visual: Visual, dt: number, time: number): void {
     const burning = appliance.overcook > 0;
-    const active = appliance.progress > 0.001;
+    // A machine that pushes spends `progress` on doing so — how far along the
+    // band an item has got, or how long until the next one drops — and a work
+    // gauge counting that down would be measuring the wrong thing entirely.
+    // See `Appliance.progress` and `pushes`.
+    const active = appliance.progress > 0.001 && !pushes(appliance.kind);
 
     // Ease in fast, out slow: appearing should feel instant, leaving should not
     // snatch the last frame of information away.
@@ -699,6 +745,22 @@ export class ApplianceViews {
  * is ruining it, and a plume that mixed the two would be the game hedging about
  * the one state that needs you to move.
  *
+ * **Something already ruined keeps saying so.** `overcook` counts up to the
+ * moment food burns and is then reset, so for the whole life of the burnt thing
+ * afterwards — which is until somebody walks over and bins it — the appliance
+ * holding it looked exactly like an idle one. The dish is drawn black, and that
+ * is the only thing that was saying it, from whatever angle the camera happened
+ * to be at.
+ *
+ * It is worth more now than it was. A chef who ruins a pizza was standing at the
+ * oven and knows; the failure this misses is the one at the far end of a
+ * [conveyor](../../docs/automation.md) — a burnt item stops the appliance
+ * holding it from taking anything else, which backs the belt up behind it and
+ * stops the hopper feeding it, and the whole line goes quiet with nothing
+ * anywhere saying why. A wisp of smoke over the thing that stopped is the
+ * difference between a jam you can find and a machine that has silently
+ * stopped paying.
+ *
  * Steam is only for **heat**. A chopping board does not steam, and a sink
  * deliberately does not either — it is the one place in the kitchen where
  * nothing can go wrong (see `ESSENTIAL` in `data/appliances.ts`), and giving it
@@ -707,6 +769,7 @@ export class ApplianceViews {
 function plumeOf(appliance: Appliance): PuffKind | null {
   if (appliance.heldBy !== null) return null;
   if (appliance.overcook > 0) return "smoke";
+  if (appliance.item && isBurnt(appliance.item)) return "smoke";
   if (appliance.progress <= 0.001) return null;
   return appliance.motion === "fry" || appliance.motion === "bake" ? "steam" : null;
 }
@@ -754,6 +817,9 @@ function goodsModel(offer: Offer): THREE.Object3D {
     justFinished: false,
     motion: null,
     topper: null,
+    // Square to the pallet: a belt in the delivery is a belt nobody has decided
+    // the direction of yet.
+    dir: { x: 0, y: 1 },
     source: offer.source,
     offer: null,
     taken: null,
@@ -777,6 +843,16 @@ function goodsModel(offer: Offer): THREE.Object3D {
  * off leaves the silhouette unmistakable and the timber visible underneath.
  */
 const GOODS_SCALE = 0.8;
+
+/**
+ * How fast a conveyor's slats travel, in tiles per second.
+ *
+ * Faster than the belt actually carries (`travel`), and deliberately: a band
+ * moving at exactly the speed of the thing on it reads as a stuck item being
+ * dragged. Belts in real kitchens run visibly faster than the queue on them
+ * looks like it is going, because the load slips.
+ */
+const BELT_SCROLL = 0.55;
 
 /** How high the top of the goods is, pallet included, so the price sits over it. */
 function offerHeight(offer: Offer): number {

@@ -185,10 +185,16 @@ export function validateContent(): string[] {
   }
 
   // --- the shop ---
-  // A crate is sold with an ingredient in it, drawn from what the recipes
-  // actually start from. An empty pool would mean a crate of nothing.
-  if (STOCK_WEIGHT.crate > 0 && RAW_INGREDIENTS.length === 0) {
-    problems.push("the stall sells crates, but no recipe starts from a raw ingredient");
+  // Anything that dispenses is sold with an ingredient in it, drawn from what
+  // the recipes actually start from. An empty pool would mean a crate of
+  // nothing. Asked of the column rather than of the crate by name, because the
+  // hopper is the second appliance to arrive holding something.
+  if (RAW_INGREDIENTS.length === 0) {
+    for (const kind of APPLIANCE_KINDS) {
+      if (STOCK_WEIGHT[kind] > 0 && APPLIANCES[kind].dispenses) {
+        problems.push(`stall: "${kind}" is sold with an ingredient, and no recipe starts from one`);
+      }
+    }
   }
   for (const kind of APPLIANCE_KINDS) {
     // A sale hands over a *held* appliance, so anything immovable is unsellable
@@ -225,7 +231,13 @@ export function validateContent(): string[] {
       problems.push(`appliance "${kind}": upgrades unknown kind "${def.upgrades}"`);
       continue;
     }
-    if (!base.stations.some((station) => def.stations.includes(station))) {
+    // "The same job" is sharing a station — or, where neither offers one,
+    // dispensing. A hopper is a better crate and there is no station on either
+    // of them to say so; without this the only way to express it would be to
+    // stop calling it an upgrade, which would put it back in the shop's
+    // scarcity guarantee as a gap every lean kitchen is missing.
+    const sameStation = base.stations.some((station) => def.stations.includes(station));
+    if (!sameStation && !(base.dispenses && def.dispenses)) {
       problems.push(`appliance "${kind}": upgrades "${def.upgrades}", which does another job`);
     }
     if (def.price <= base.price) {

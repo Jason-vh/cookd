@@ -258,6 +258,7 @@ noticing. [A test](docs/docs.test.ts) now catches that much.
 | [The weather](docs/weather.md) | What sort of day it is, and the terrace it opens and shuts. |
 | [The drive-through](docs/drive-through.md) | The kitchen with no dining room: a hatch, a lane of cars, and why it is a level rather than a window. |
 | [The shop](docs/the-shop.md) | The morning, the market stall, and the patio they stand on. |
+| [Automation](docs/automation.md) | The conveyor: work the kitchen does with nobody standing at it. |
 | [The menu](docs/the-menu.md) | Recipe cards: how a kitchen chooses what it cooks, and the equipment that comes with it. |
 | [Art direction](docs/art-direction.md) | The look, the biomes, and the rendering gotchas behind both. |
 | [Sound](docs/sound.md) | What the kitchen sounds like, and why there are no audio files. |

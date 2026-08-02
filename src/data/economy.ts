@@ -97,7 +97,11 @@ export const STOCK_WEIGHT: Record<ApplianceKind, number> = {
   crate: 5,
   table: 5,
 
-  // The middle band.
+  // The middle band. A conveyor sits here rather than with the staples on
+  // price alone: it is cheap, and it is bought several at a time, so a morning
+  // that offered one as often as it offers a counter would be a shop selling
+  // half a machine.
+  belt: 3,
   board: 3,
   sink: 2,
   plates: 2,
@@ -112,6 +116,10 @@ export const STOCK_WEIGHT: Record<ApplianceKind, number> = {
   // which is the whole reason it is worth seeing before it is affordable.
   steel_board: 1,
   bell_oven: 1,
+  // The one upgrade that is not a faster version of something: it is a crate
+  // that works while nobody is there. Priced and weighted with the others
+  // anyway, because what it costs a kitchen is the same thing — a week.
+  hopper: 1,
 };
 
 /**

@@ -85,6 +85,38 @@ Near term:
   and somewhere to keep it. Right now a lost run leaves nothing behind but a
   fresh kitchen.
 
+- **Automation has started**, with a [conveyor](automation.md): a belt carries
+  what is put on it one tile and hands it to whatever is at the far end, which
+  makes it the first appliance in this kitchen that works with nobody standing
+  at it. It cost a `travel` column, an `Appliance.dir`, and a branch in the
+  appliance system — because a belt has no station, so `progress` was free to
+  mean something else and nothing on it can burn.
+
+  `dir` is the more interesting half: it is the first *orientation* anything
+  here has had, and it is set from the facing of whoever puts the belt down
+  rather than from a rotate button, so laying a run is walking the route.
+
+  The **hopper** followed immediately, and had to: a belt that can only be
+  loaded by hand saves the carry rather than the trip, so automation began in a
+  chef's hands and went nowhere. It is a crate that empties itself onto the tile
+  it faces — one row, an upgrade of the crate, and it reuses the belt's `dir`,
+  its `progress` and its backpressure rule outright. A hopper, two belts and an
+  oven now make a baked potato with everybody standing still.
+
+  What is left is in two piles, and they are not the same size. The small one is
+  **taking things out** of an appliance rather than putting them in, which is
+  one column and one large balance question: an oven that ejects onto a belt is
+  an oven that never burns anything, and it obsoletes the bell oven. The large
+  one is everything that decides **where things go** rather than moving them —
+  splitters, junctions, a belt that sorts — which is a much bigger feature
+  wearing this one's clothes and should not be smuggled in on the back of it.
+
+  The thing to watch is the **drive-through**: a belt to the hatch is the first
+  honest answer to what a lane's difficulty dial is, now that there are no
+  tables to buy. It is also the first thing in the game that can serve a
+  customer without a chef in the room, so it wants a day of play before anybody
+  builds more on top of it.
+
 - **A menu cap** — [recipe cards](the-menu.md) ship without one: nothing stops a
   room unlocking the whole library. Deferred on purpose until the library is
   bigger than about five dishes, because "which five do we keep" is only a

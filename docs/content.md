@@ -50,7 +50,21 @@ board:       { stations: ["prep"], speed: 1.75, fitting: true, ... }
 steel_board: { stations: ["prep"], speed: 2.75, fitting: true, upgrades: "board", ... }
 oven:        { stations: ["bake"], speed: 1,    ... }
 bell_oven:   { stations: ["bake"], speed: 1.15, patience: 3, upgrades: "oven", ... }
+belt:        { stations: [],       travel: 1.2, acceptsItems: true, ... }
+crate:       { stations: [],       dispenses: true, ... }
+hopper:      { stations: [],       dispenses: true, feeds: 2.5, upgrades: "crate", ... }
 ```
+
+`travel` is **seconds to carry an item one tile** and `feeds` is **seconds
+between items handed out**, both `0` for the appliances that move nothing. They
+are the whole of what makes a conveyor a conveyor and a hopper a hopper, so a
+faster one of either is a number rather than a new kind — see
+[automation](automation.md). A row with no station cooks nothing and burns
+nothing, which is why a belt is the one place a finished dish is safe.
+
+`dispenses` says a row is sold with an ingredient in it and hands that
+ingredient out. It is also how the upgrade check knows a hopper and a crate do
+the same job, since neither has a station to compare.
 
 A **fitting** is a row that describes something set on a worktop rather than
 standing on a tile: a chopping board, and nothing else so far. It has no tile of
