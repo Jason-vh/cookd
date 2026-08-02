@@ -112,10 +112,17 @@ Near term:
 
   The **hopper** followed immediately, and had to: a belt that can only be
   loaded by hand saves the carry rather than the trip, so automation began in a
-  chef's hands and went nowhere. It is a crate that empties itself onto the tile
-  it faces — one row, an upgrade of the crate, and it reuses the belt's `dir`,
-  its `progress` and its backpressure rule outright. A hopper, two belts and an
-  oven now make a baked potato with everybody standing still.
+  chef's hands and went nowhere. It draws from the crate standing behind it and
+  puts what it finds on the tile ahead — one row, and it reuses the belt's
+  `dir`, its `progress` and its backpressure rule outright, with `inlet` as
+  `outlet` written the other way round. A crate, a hopper, a belt and an oven
+  now make a baked potato with everybody standing still.
+
+  It was briefly a crate that emptied itself, sold with an ingredient in it, and
+  drawing from a real crate instead is the better version for a reason worth
+  keeping: what you buy is then an *arrangement* — four tiles in a row — rather
+  than a better crate, and floor space is the currency every other automation
+  cost is already paid in.
 
   What is left is in two piles, and they are not the same size. The small one is
   **taking things out** of an appliance rather than putting them in, which is

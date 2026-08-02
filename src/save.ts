@@ -641,7 +641,11 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
       world,
       saved.kind,
       { x: saved.x, y: saved.y },
-      saved.source ?? null,
+      // Only to something that hands one out. A hopper written while it still
+      // held its own ingredient names one, and it is a fact about a machine
+      // that now draws from the crate behind it — restoring it would put a
+      // tomato in a file for ever that nothing in the game ever reads.
+      applianceDef(saved.kind).dispenses ? (saved.source ?? null) : null,
     );
     if (saved.dir) appliance.dir = { x: saved.dir.x, y: saved.dir.y };
     // Only onto something that can actually take one: a file naming a fitting

@@ -39,25 +39,28 @@ export type ApplianceDef = {
    */
   travel: number;
   /**
-   * Seconds between items pushed onto the tile it faces, or 0 for an appliance
-   * that hands nothing on by itself.
+   * Seconds between items drawn from behind and pushed onto the tile ahead, or
+   * 0 for an appliance that moves nothing by itself.
    *
    * `travel`'s twin, and the other half of automation: one moves what it is
-   * given, this one produces. Only meaningful with `dispenses`, since what a
-   * hopper pushes out is a fresh copy of its source — an appliance that fed
-   * from its `item` would be an oven that empties itself, which is a much
+   * given, this one fetches. What comes out is minted from the *source it draws
+   * from* rather than from anything it holds — a machine that fed from its
+   * neighbour's `item` would be an oven that empties itself, which is a much
    * larger decision about burning than a column.
    */
   feeds: number;
   /**
    * Is this sold with an ingredient in it, and does it hand that ingredient out?
    *
-   * A crate and a hopper. It exists because the shop used to ask `kind !==
-   * "crate"` — one hardcoded name deciding what arrives holding a tomato — and
-   * the second appliance to hold a source is the moment that stops being a
-   * question about crates. `validate.ts` also reads it: two appliances that
-   * both dispense do the same job, which is what makes a hopper a legitimate
-   * upgrade of a crate when neither offers a station to compare.
+   * The crate, and today only the crate. It exists because the shop used to ask
+   * `kind !== "crate"` — one hardcoded name deciding what arrives holding a
+   * tomato — and it is kept now that the hopper has stopped being the second
+   * one, because asking the table what a row *is* will still be right the next
+   * time something arrives with an ingredient in it, and a name will not.
+   *
+   * It is load-bearing beyond the shop: it is what a hopper looks for behind
+   * itself, so "a machine may draw from this" and "this is sold full" are one
+   * fact rather than two lists that have to agree.
    */
   dispenses: boolean;
   /**
@@ -180,7 +183,10 @@ const DEFS = {
   //
   // It feeds *slower* than a belt carries, on purpose: a line with gaps in it
   // reads as flowing, and a line packed solid reads as jammed.
-  hopper: { ...PLAIN, stations: [], speed: 1, feeds: 2.5, dispenses: true, label: "Hopper", color: 0xdfd4c0, height: 0.85, acceptsItems: false, movable: true, price: 75, upgrades: "crate" },
+  // Not an upgrade of a crate: the other half of one. It holds nothing, draws
+  // from whatever dispenses behind it, and is priced so that a crate and a
+  // hopper together cost what the machine used to cost on its own.
+  hopper: { ...PLAIN, stations: [], speed: 1, feeds: 2.5, label: "Hopper", color: 0xdfd4c0, height: 0.85, acceptsItems: false, movable: true, price: 60 },
   // Sold **with its plates on it** — see `STACK_PLATES`. Single plates used to
   // be for sale beside the appliances, and they were the one purchase that put
   // a loose *item* in your hands during a phase that only understands

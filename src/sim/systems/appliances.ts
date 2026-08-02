@@ -8,7 +8,7 @@ import { applianceAtTile, fittedDef } from "../world";
 
 /**
  * Advances every loaded appliance:
- *   - a hopper hands out what it holds — see `dispense`;
+ *   - a hopper draws from the crate behind it and pushes — see `draw`;
  *   - a conveyor carries what is on it and hands it on — see `carry`;
  *   - "hold" transforms only progress while a player is holding USE at them;
  *   - "auto" transforms run on their own;
@@ -34,7 +34,7 @@ export function applianceSystem(world: World, dt: number): void {
     // Before the empty check, not after it: a hopper holds nothing and is the
     // one appliance whose `progress` means something while its hands are empty.
     if (applianceDef(appliance.kind).feeds > 0) {
-      dispense(world, appliance, dt);
+      draw(world, appliance, dt);
       continue;
     }
 
@@ -157,12 +157,40 @@ function carry(world: World, belt: Appliance, item: Item, dt: number): void {
 }
 
 /**
- * A hopper: hand a fresh copy of what this holds to the tile it faces.
+ * What an appliance that draws may take from, or null for nothing.
+ *
+ * `outlet`'s mirror image, one tile the other way, and the pair of them is what
+ * makes `dir` the flow *through* a machine rather than a property of its front:
+ * a crate behind, a belt ahead, and a hopper is something you stand a line up
+ * with rather than a box that happens to point somewhere.
+ *
+ * What qualifies is a **source** — a crate — and deliberately not "whatever is
+ * sitting on the thing behind it". A machine that empties appliances is a much
+ * larger feature wearing this one's clothes: an oven that ejects onto a belt is
+ * an oven that never burns anything, and it obsoletes the bell oven. That is a
+ * balance decision, and this is a function.
+ *
+ * Nothing is taken away from what it draws from. A crate is infinite by
+ * construction, so drawing from one is minting from its spec exactly as a
+ * chef's hands do — and because a plate stack does not dispense, no machine in
+ * this game can create a plate.
+ */
+function inlet(world: World, to: Appliance): Appliance | null {
+  const behind = { x: to.tile.x - to.dir.x, y: to.tile.y - to.dir.y };
+  if (wallBetween(world, to.tile, behind)) return null;
+  const from = applianceAtTile(world, behind.x, behind.y);
+  if (!from || from.heldBy !== null || !from.source) return null;
+  return applianceDef(from.kind).dispenses ? from : null;
+}
+
+/**
+ * A hopper: take from the crate behind, hand it to the tile ahead.
  *
  * The other end of a conveyor, and the reason one is worth owning — a belt that
- * can only be loaded by hand saves the carry rather than the trip. What it
- * pushes is minted from its `source`, exactly as a chef taking one out of a
- * crate would, so ingredients stay infinite and nothing here can create a plate.
+ * can only be loaded by hand saves the carry rather than the trip. It holds
+ * nothing itself: it is a chute between the crate somebody set behind it and
+ * whatever is in front, which is why buying one is buying half of an
+ * arrangement rather than a better crate.
  *
  * **It is off while the restaurant is shut.** Not tidiness: the appliance system
  * runs in the morning too, so without this a room spent rearranging its kitchen
@@ -170,21 +198,24 @@ function carry(world: World, belt: Appliance, item: Item, dt: number): void {
  * The machine being switched off with the sign is also simply what a kitchen
  * looks like.
  *
- * Blocked, it holds at `progress` 1 like a full belt — same rule, same reading,
- * and it is what stops an infinite crate flooding a room.
+ * Both ends are asked at the **top of the cycle**, never before it: a hopper
+ * with nothing behind it and one with nowhere to put anything are the same
+ * state, holding at `progress` 1 like a full belt. One reading for every way a
+ * machine can be doing nothing, and minting only once there is room is what
+ * stops a blocked hopper burning an item id sixty times a second.
  */
-function dispense(world: World, hopper: Appliance, dt: number): void {
-  const source = hopper.source;
-  if (world.phase !== "service" || !source) {
+function draw(world: World, hopper: Appliance, dt: number): void {
+  if (world.phase !== "service") {
     hopper.progress = 0;
     return;
   }
   hopper.progress = Math.min(1, hopper.progress + dt / applianceDef(hopper.kind).feeds);
   if (hopper.progress < 1) return;
 
+  const from = inlet(world, hopper);
   const next = outlet(world, hopper);
-  if (!next) return;
-  load(next, makeItem(world, source));
+  if (!from?.source || !next) return;
+  load(next, makeItem(world, from.source));
   hopper.progress = 0;
 }
 

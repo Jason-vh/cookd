@@ -948,10 +948,14 @@ function buildCrate(parts: ApplianceParts, h: number, nudge: Jitter): void {
  * A hopper: a funnel on legs, with a chute out over the tile it faces.
  *
  * The **chute** is the whole of the design. A funnel on its own is a container,
- * and this is not a container — it is a crate that points somewhere, and where
- * it points is the thing a player has to be able to read from across the
- * kitchen. It overhangs the tile edge deliberately: the food it drops has to
- * look like it came out of something rather than appearing on the belt.
+ * and this is not a container — it holds nothing at all. It is a mouth over one
+ * tile and a spout over the next, and which way it runs is the thing a player
+ * has to be able to read from across the kitchen. The chute overhangs the tile
+ * edge deliberately: the food it drops has to look like it came out of
+ * something rather than appearing on the belt.
+ *
+ * Nothing is drawn *in* it, and that is the model telling the truth: what comes
+ * out of a hopper belongs to the crate standing behind it.
  *
  * Built pointing along local **+z**, like the conveyor, and turned to its `dir`
  * by `appliance-views.ts`.
@@ -989,13 +993,13 @@ function buildHopper(parts: ApplianceParts, h: number): void {
   chute.rotation.x = 0.38;
   group.add(chute);
 
-  // Where the stock heaps up, filled in by `buildAppliance` once it knows what
-  // this hopper holds — the same group a crate uses, so both are dressed by one
-  // rule and a hopper of tomatoes looks like the crate it replaced.
-  const stock = new THREE.Group();
-  stock.position.y = h - 0.14;
-  group.add(stock);
-  parts.produce = stock;
+  // A mouth on the back, over the tile it draws from: the other end of the
+  // chute, and the half of the silhouette that says this machine has a behind
+  // as well as a front.
+  const mouth = mesh(roundedBox(0.3, 0.05, 0.34, 0.02), PALETTE.steel, "metal");
+  mouth.position.set(0, standH + bodyH * 0.62, -0.3);
+  mouth.rotation.x = -0.42;
+  group.add(mouth);
 }
 
 /**

@@ -116,9 +116,11 @@ export const STOCK_WEIGHT: Record<ApplianceKind, number> = {
   // which is the whole reason it is worth seeing before it is affordable.
   steel_board: 1,
   bell_oven: 1,
-  // The one upgrade that is not a faster version of something: it is a crate
-  // that works while nobody is there. Priced and weighted with the others
-  // anyway, because what it costs a kitchen is the same thing — a week.
+  // Not an upgrade, and weighted with them anyway: a hopper is the rarest thing
+  // in the table because it is the one purchase that is worth nothing on its
+  // own — it wants a crate behind it and something in front, so a shop offering
+  // one every other morning would be selling a room the middle of a line it has
+  // not started building.
   hopper: 1,
 };
 

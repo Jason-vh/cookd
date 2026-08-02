@@ -187,8 +187,9 @@ export function validateContent(): string[] {
   // --- the shop ---
   // Anything that dispenses is sold with an ingredient in it, drawn from what
   // the recipes actually start from. An empty pool would mean a crate of
-  // nothing. Asked of the column rather than of the crate by name, because the
-  // hopper is the second appliance to arrive holding something.
+  // nothing. Asked of the column rather than of the crate by name: what arrives
+  // holding something is a property of the row, and one day it will be true of
+  // a row nobody has written yet.
   if (RAW_INGREDIENTS.length === 0) {
     for (const kind of APPLIANCE_KINDS) {
       if (STOCK_WEIGHT[kind] > 0 && APPLIANCES[kind].dispenses) {
@@ -231,13 +232,13 @@ export function validateContent(): string[] {
       problems.push(`appliance "${kind}": upgrades unknown kind "${def.upgrades}"`);
       continue;
     }
-    // "The same job" is sharing a station — or, where neither offers one,
-    // dispensing. A hopper is a better crate and there is no station on either
-    // of them to say so; without this the only way to express it would be to
-    // stop calling it an upgrade, which would put it back in the shop's
-    // scarcity guarantee as a gap every lean kitchen is missing.
-    const sameStation = base.stations.some((station) => def.stations.includes(station));
-    if (!sameStation && !(base.dispenses && def.dispenses)) {
+    // "The same job" is sharing a station, and nothing else. It once had a
+    // second clause for the hopper, which was called an upgrade of a crate when
+    // it still held its own ingredient; a hopper draws from a crate now, so
+    // there is no pair left that does the same job without a station to say so
+    // — and a machine that needs the thing it claims to improve on was never an
+    // upgrade of it.
+    if (!base.stations.some((station) => def.stations.includes(station))) {
       problems.push(`appliance "${kind}": upgrades "${def.upgrades}", which does another job`);
     }
     if (def.price <= base.price) {

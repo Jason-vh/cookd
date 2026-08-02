@@ -81,8 +81,8 @@ import type {
  * v9 added the hopper, and breaks for exactly the reason v8 did: a new
  * appliance kind is the one content change a client cannot shrug off, because
  * an unknown kind fails the whole layout rather than one appliance in it. It
- * needed no new field — a hopper is a `dir` and a `source`, and the wire has
- * carried both since v8 and since there were crates.
+ * needed no new field — a hopper is a `dir` and nothing else, since what it
+ * hands out belongs to the crate standing behind it.
  */
 export const PROTOCOL_VERSION = 9;
 

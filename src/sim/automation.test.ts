@@ -13,10 +13,11 @@ import { applianceAtTile, createWorld, emptyInput, spawnAppliance, tileIndex } f
 /**
  * The machines: the appliances that do their job with nobody standing at them.
  *
- * A conveyor carries what it is given; a hopper produces. They are tested
+ * A conveyor carries what it is given; a hopper fetches. They are tested
  * together because they share the rule that matters — `outlet`, which decides
- * where a machine may put something — and most of what is worth pinning here is
- * that rule seen from both ends: hand over only into somewhere empty that
+ * where a machine may put something, and `inlet`, which is the same rule
+ * pointing the other way — and most of what is worth pinning here is that rule
+ * seen from both ends: hand over only into somewhere empty that
  * accepts items, never through a wall, never by performing a chef's special
  * verbs, and when blocked hold on rather than drop. Conservation is why the
  * last one matters — a plate that fell off the end of a belt would be a plate
@@ -66,11 +67,12 @@ function tomato(world: World): Item {
   return makeItem(world, { base: "tomato", processes: [] });
 }
 
-/** A hopper on `tile`, pointing `dir`, full of `base`. */
+/** A hopper on `tile` pointing `dir`, with a crate of `base` behind it. */
 function hopper(world: World, tile: Vec2, dir: Vec2, base = "tomato"): Appliance {
   const machine = put(world, "hopper", tile);
   machine.dir = { ...dir };
-  machine.source = { base, processes: [] };
+  const crate = put(world, "crate", { x: tile.x - dir.x, y: tile.y - dir.y });
+  crate.source = { base, processes: [] };
   return machine;
 }
 
@@ -241,6 +243,78 @@ describe("what a conveyor is not", () => {
 });
 
 describe("a hopper loads a belt", () => {
+  test("with what the crate behind it holds", () => {
+    // The whole of the change: a hopper owns nothing. It is a chute between the
+    // crate somebody stood behind it and whatever is in front.
+    const world = makeWorld();
+    const machine = hopper(world, ROW, EAST, "potato");
+    const belt = put(world, "belt", { x: ROW.x + 1, y: ROW.y });
+
+    expect(machine.source).toBeNull();
+    run(world, applianceDef("hopper").feeds + DT);
+    expect(specKey(belt.item!)).toBe("potato");
+  });
+
+  test("without ever emptying it", () => {
+    // A crate is infinite, so drawing from one is minting from its spec — the
+    // same thing a chef's hands do. Nothing is taken away from it.
+    const world = makeWorld();
+    hopper(world, ROW, EAST);
+    const crate = applianceAtTile(world, ROW.x - 1, ROW.y)!;
+    const counter = put(world, "counter", { x: ROW.x + 1, y: ROW.y });
+
+    run(world, applianceDef("hopper").feeds * 3);
+    expect(crate.source).toEqual({ base: "tomato", processes: [] });
+    expect(specKey(counter.item!)).toBe("tomato");
+  });
+
+  test("and does nothing at all with nothing behind it", () => {
+    const world = makeWorld();
+    const machine = put(world, "hopper", ROW);
+    machine.dir = { ...EAST };
+    clear(world, { x: ROW.x - 1, y: ROW.y });
+    const belt = put(world, "belt", { x: ROW.x + 1, y: ROW.y });
+    const before = world.nextId;
+
+    run(world, applianceDef("hopper").feeds * 3);
+    expect(belt.item).toBeNull();
+    // Nothing behind and nowhere to put it are the same state on purpose: held
+    // at the top of the cycle, having minted nothing.
+    expect(machine.progress).toBe(1);
+    expect(world.nextId).toBe(before);
+  });
+
+  test("and will not take food off the appliance behind it", () => {
+    // The boundary, and it is a design decision rather than an oversight: a
+    // machine that emptied appliances is an oven that never burns anything,
+    // which obsoletes the bell oven. A hopper draws from a *source*.
+    const world = makeWorld();
+    const machine = put(world, "hopper", ROW);
+    machine.dir = { ...EAST };
+    const counter = put(world, "counter", { x: ROW.x - 1, y: ROW.y });
+    const item = tomato(world);
+    counter.item = item;
+    const belt = put(world, "belt", { x: ROW.x + 1, y: ROW.y });
+
+    run(world, applianceDef("hopper").feeds * 3);
+    expect(counter.item).toBe(item);
+    expect(belt.item).toBeNull();
+  });
+
+  test("and cannot draw through a wall either", () => {
+    // `inlet` is `outlet` pointing the other way, wall rule included: a hopper
+    // inside the kitchen must not reach a crate standing in the next room.
+    const world = makeWorld();
+    const machine = put(world, "hopper", { x: 8, y: 2 });
+    machine.dir = { x: 1, y: 0 };
+    const crate = put(world, "crate", { x: 7, y: 2 });
+    crate.source = { base: "tomato", processes: [] };
+    const counter = put(world, "counter", { x: 9, y: 2 });
+
+    run(world, applianceDef("hopper").feeds * 3);
+    expect(counter.item).toBeNull();
+  });
+
   test("one item at a time, on its own, with nobody in the kitchen", () => {
     const world = makeWorld();
     hopper(world, ROW, EAST);
@@ -253,15 +327,16 @@ describe("a hopper loads a belt", () => {
     expect(specKey(belt.item!)).toBe("tomato");
   });
 
-  test("and the line runs itself: hopper, belt, oven, baked potato", () => {
+  test("and the line runs itself: crate, hopper, belt, oven, baked potato", () => {
     const world = makeWorld();
     hopper(world, ROW, EAST, "potato");
     const belt = put(world, "belt", { x: ROW.x + 1, y: ROW.y });
     belt.dir = { ...EAST };
     const oven = put(world, "oven", { x: ROW.x + 2, y: ROW.y });
 
-    // Nobody presses anything: the potato is minted, carried and baked while
-    // the one chef in the room stands still. This is the whole feature.
+    // Nobody presses anything: the potato is drawn out of the crate, carried
+    // and baked while the one chef in the room stands still. Four tiles in a
+    // row, which is what the line costs a kitchen in floor.
     run(world, applianceDef("hopper").feeds + applianceDef("belt").travel + 7.5);
     expect(specKey(oven.item!)).toBe("potato|baked");
   });
@@ -325,13 +400,19 @@ describe("a hopper loads a belt", () => {
 });
 
 describe("buying a hopper", () => {
-  test("it arrives holding an ingredient, and says which", () => {
-    // The shop used to ask `kind !== "crate"` to decide what came full. A
-    // hopper that arrived empty would be a $75 machine handing out nothing,
-    // with nowhere in the game to put an ingredient into it.
+  test("it arrives empty, because what it hands out is the crate's", () => {
+    // It used to be sold holding an ingredient, as the crate it was an upgrade
+    // of. It draws from one now, so a hopper is just a hopper — and a room
+    // buying one is buying half of an arrangement it has to finish itself.
     const source = { base: "tomato", processes: [] };
-    expect(offerLabel({ kind: "hopper", source })).toBe("Tomato hopper");
+    expect(offerLabel({ kind: "hopper", source: null })).toBe("Hopper");
     expect(offerLabel({ kind: "crate", source })).toBe("Tomato crate");
+  });
+
+  test("and a crate and a hopper together cost what the machine used to", () => {
+    // The price moved with the design: automating one feed is still $75, and it
+    // is now two purchases that can be made a week apart.
+    expect(applianceDef("crate").price + applianceDef("hopper").price).toBe(75);
   });
 });
 

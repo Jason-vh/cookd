@@ -8,11 +8,11 @@ but somebody has to be there before it burns. Two appliances now work with
 nobody present:
 
 - a **conveyor** carries what is put on it one tile and hands it on;
-- a **hopper** — a crate that empties itself — puts something on the front of
-  the line.
+- a **hopper** draws from the crate behind it and puts what it finds on the
+  front of the line.
 
-Together they are a kitchen that makes a baked potato with everybody standing
-still. Most of what follows is about the rules that decide *where* a machine
+A crate, a hopper, a belt and an oven in a row are a kitchen that makes a baked
+potato with everybody standing still. Most of what follows is about the rules that decide *where* a machine
 may put something, because each of them is a place one could quietly become a
 second, invisible set of kitchen rules.
 
@@ -96,40 +96,71 @@ the point:
 
 A belt that can only be loaded by hand saves the *carry*, not the *trip* — a
 chef still walks to the crate. The **hopper** is the other end of it: one row,
-two columns.
+one column.
 
 ```ts
 crate:  { dispenses: true, feeds: 0,   price: 15 }
-hopper: { dispenses: true, feeds: 2.5, price: 75, upgrades: "crate" }
+hopper: { dispenses: false, feeds: 2.5, price: 60 }
 ```
 
-`feeds` is **seconds between items pushed out**, and it is `travel`'s twin: one
-column for a machine that moves what it is given, one for a machine that
-produces. `dispenses` is "sold with an ingredient in it", and it exists because
-the shop used to ask `kind !== "crate"` — one hardcoded name deciding what
-arrives holding a tomato, which stopped being a question about crates the moment
-a second appliance held one.
+`feeds` is **seconds between items drawn and pushed on**, and it is `travel`'s
+twin: one column for a machine that moves what it is given, one for a machine
+that fetches.
 
-It reuses everything the belt established: `dir` for which way it faces,
-`progress` for the countdown, and the same `outlet` rule — so a full belt stops
-a hopper dead, and an infinite crate cannot flood a kitchen. It mints only once
-it knows there is room, because a blocked hopper that made a tomato and threw it
-away would burn an id sixty times a second, and ids are what two clients agree
-about things by.
+### It holds nothing
 
-Two things about it are decisions rather than plumbing:
+A hopper **draws from the appliance behind it** — opposite its `dir` — and puts
+what it finds on the tile ahead. So a line reads crate → hopper → belt → oven,
+and `dir` is the flow *through* a machine rather than a property of its front.
 
-**It is an upgrade of a crate**, not a kind of its own. That is what keeps it
-out of the shop's [scarcity guarantee](the-shop.md) — a kitchen owning no
-hoppers is missing nothing, and the one slot reserved for what a room actually
-needs must not spend every morning showing it a luxury. Saying so cost one line
-in `validate.ts`: "the same job" was *sharing a station*, and neither a crate
-nor a hopper has one, so it is now "shares a station, or both dispense".
+It was briefly the other thing: a crate that emptied itself, sold with an
+ingredient in it, priced at $75 as an upgrade of the crate it replaced. Drawing
+from a crate instead is better on three counts, and none of them is realism:
+
+- **The arrangement is the machine.** A hopper you buy is worth nothing until
+  you have stood it between a crate and something that takes items, so what you
+  are buying is a *decision about floor space* — four tiles in a row — rather
+  than a better crate. Floor is the scarce resource in this kitchen, and every
+  other automation cost is already paid in it.
+- **One ingredient, one crate.** A self-filling hopper meant a kitchen wanting
+  automated tomatoes *and* hand-picked tomatoes bought the ingredient twice.
+  Now the crate you already walk to is the crate the machine draws from, and
+  pointing a hopper at it is what automates the trip.
+- **It is honest about the taxonomy.** A machine that needs the thing it claims
+  to improve on was never an upgrade of it. Keeping the old relationship would
+  have meant `dispenses: true` on a machine that dispenses nothing at all,
+  purely to satisfy the validator's "does the same job" test.
+
+`inlet` is `outlet` written the other way round, wall rule included, and what
+qualifies is a **source** rather than "whatever is sitting on the thing behind
+it" — see the note on emptying appliances below. Nothing is taken away from the
+crate: a crate is infinite by construction, so drawing from one is minting from
+its spec exactly as a chef's hands do. And because a plate stack does not
+dispense, no machine in this game can create a plate.
+
+Both ends are asked at the **top of the cycle**, never before it, so a hopper
+with nothing behind it and a hopper with nowhere to put anything are the same
+state: holding at `progress` 1, exactly like a full belt. One reading for every
+way a machine can be doing nothing — and minting only once there is room is what
+stops a blocked hopper burning an item id sixty times a second, which matters
+because ids are what two clients agree about things by.
+
+### And two decisions that are not plumbing
+
+**It costs $60, and a crate costs $15.** Automating one feed is still the $75 it
+always was; it is now two purchases, and they can be a week apart.
 
 **It is switched off while the restaurant is shut.** The appliance system runs
 in the morning too, so without this a room spent rearranging its kitchen would
 open the day with a tomato on every surface a hopper happened to face. It is
 also just what a kitchen looks like when the sign says closed.
+
+The shop's `dispenses` column survives all of this with one member again — the
+crate. It is kept rather than reverted to `kind !== "crate"` because it asks
+what a row *is*, which will still be the right question the next time something
+arrives with an ingredient in it. It also earns its keep twice now: it is what a
+hopper looks for behind itself, so "sold full" and "a machine may draw from
+this" are one fact rather than two lists that have to agree.
 
 ## When a machine cannot hand over
 
@@ -208,8 +239,8 @@ refusing to let you.
 - **A speed upgrade.** Both columns exist (`travel`, `feeds`), so a fast belt or
   a quick hopper is one row whenever it is wanted. Neither is wanted until
   anybody has a run long enough to be impatient with.
-- **Anything that empties an appliance onto a belt.** A hopper produces from a
-  `source`; nothing takes a finished dish *out* of an oven. That is deliberately
+- **Anything that empties an appliance onto a belt.** A hopper draws from a
+  *source*; nothing takes a finished dish *out* of an oven. That is deliberately
   not a column: an oven that ejects onto a belt is an oven that can never burn
   anything, and burning is this game's failure state. It would also obsolete the
   [bell oven](the-shop.md#upgrades), which is an upgrade sold on exactly that.
