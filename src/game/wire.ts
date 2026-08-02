@@ -11,6 +11,7 @@ import type {
   Motion,
   Offer,
   PlayerInput,
+  RunRecord,
 } from "../sim/types";
 
 /**
@@ -315,6 +316,16 @@ function parseLayout(value: unknown): Layout | null {
   const weather = str(value.weather, MAX_NAME);
   if (weather === null) return null;
 
+  // The run, and the mark it is playing against. Refused rather than tolerated
+  // when it is malformed, unlike the weather above: a nonsense weather id reads
+  // as a fair day, and a nonsense record is a number printed on the one card
+  // that tells a player whether the last hour was worth anything.
+  const run = int(value.run);
+  const takings = int(value.takings);
+  if (run === null || run < 1 || takings === null || takings < 0) return null;
+  const best = parseRecord(value.best);
+  if (best === undefined) return null;
+
   const appliances = all(raw, (entry) => {
     if (!isRecord(entry)) return null;
     const id = int(entry.id);
@@ -343,7 +354,27 @@ function parseLayout(value: unknown): Layout | null {
     if (topper === undefined || (topper !== null && !isApplianceKind(topper))) return null;
     return { id, kind, x, y, dir, source, offer, taken, topper, card };
   });
-  return appliances === null ? null : { appliances, unlocked, unlockedDay, weather };
+  return appliances === null
+    ? null
+    : { appliances, unlocked, unlockedDay, weather, run, takings, best };
+}
+
+/**
+ * A finished run, as it arrives from a socket.
+ *
+ * `null` for absent — a room nobody has ever finished a run in — and
+ * `undefined` for "present but malformed", which is refused. A record with a
+ * missing half is not a smaller record, it is a card that would print `NaN
+ * days` at the one moment the game is asking somebody to start again.
+ */
+function parseRecord(value: unknown): RunRecord | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) return undefined;
+  const run = int(value.run);
+  const days = int(value.days);
+  const takings = int(value.takings);
+  if (run === null || days === null || takings === null) return undefined;
+  return run < 1 || days < 1 || takings < 0 ? undefined : { run, days, takings };
 }
 
 /**

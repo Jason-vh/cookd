@@ -97,6 +97,9 @@ describe("a file we cannot trust", () => {
     unlocked: ["salad"],
     unlockedDay: 0,
     evicted: false,
+    run: 1,
+    takings: 0,
+    best: null,
   };
 
   test("an unknown appliance kind is rejected at the door", () => {
@@ -194,6 +197,9 @@ describe("migration", () => {
       unlocked: [],
       unlockedDay: 0,
       evicted: false,
+      run: 1,
+      takings: 0,
+      best: null,
     };
     const migrated = migrate(v1);
     expect(migrated?.schema).toBe(SCHEMA);
@@ -221,6 +227,9 @@ describe("migration", () => {
       unlocked: [],
       unlockedDay: 0,
       evicted: false,
+      run: 1,
+      takings: 0,
+      best: null,
     };
     expect(migrate(future)).toBeNull();
     expect(restore(world(), future)).toEqual({ ok: false, reason: "schema" });
@@ -238,6 +247,9 @@ describe("migration", () => {
       unlocked: [],
       unlockedDay: 0,
       evicted: false,
+      run: 1,
+      takings: 0,
+      best: null,
     };
     expect(migrate(orphan)).toBeNull();
   });
@@ -261,6 +273,9 @@ describe("migration", () => {
       unlocked: [],
       unlockedDay: 0,
       evicted: false,
+      run: 1,
+      takings: 0,
+      best: null,
     };
     expect(migrate(v2)?.plates).toBe(4);
   });
@@ -277,6 +292,9 @@ describe("migration", () => {
       unlocked: [],
       unlockedDay: 0,
       evicted: false,
+      run: 1,
+      takings: 0,
+      best: null,
     };
     expect(migrate(v3)?.stall).toEqual([]);
   });
@@ -300,6 +318,9 @@ describe("migration", () => {
       unlocked: [],
       unlockedDay: 0,
       evicted: false,
+      run: 1,
+      takings: 0,
+      best: null,
     };
     const migrated = migrate(v4);
     expect(migrated?.unlocked).toEqual(BACKFILL_RECIPES);
@@ -357,6 +378,77 @@ describe("a run that ended", () => {
     const before = saveSignature(first);
     first.evicted = true;
     expect(saveSignature(first)).not.toBe(before);
+  });
+});
+
+describe("the record a room keeps", () => {
+  test("survives the round trip, run and all", () => {
+    // The one thing in the file that outlives the kitchen described around it.
+    // A record held only in memory would last exactly as long as nobody
+    // deployed.
+    const before = world();
+    before.run = 4;
+    before.takings = 815;
+    before.best = { run: 2, days: 13, takings: 1240 };
+
+    const after = world();
+    expect(restore(after, snapshot(before))).toEqual({ ok: true });
+    expect(after.run).toBe(4);
+    expect(after.takings).toBe(815);
+    expect(after.best).toEqual({ run: 2, days: 13, takings: 1240 });
+  });
+
+  test("is worth writing down on its own", () => {
+    // A record is set by a *reset*, which puts the kitchen back exactly as the
+    // level says — so a room that had never been rearranged would otherwise
+    // look identical to one that had just lost a fortnight.
+    const first = world();
+    const before = saveSignature(first);
+    first.best = { run: 1, days: 9, takings: 300 };
+    expect(saveSignature(first)).not.toBe(before);
+  });
+
+  test("a v7 kitchen is on its first run, because nothing recorded otherwise", () => {
+    // Read the way a real one arrives: off disk, with no `run` key at all.
+    const onDisk = {
+      schema: 7,
+      level: LEVEL.id,
+      appliances: [{ kind: "oven", x: 5, y: 5 }],
+      money: 40,
+      day: 6,
+      plates: 6,
+      stall: [],
+      unlocked: ["salad"],
+      unlockedDay: 0,
+      evicted: false,
+    };
+    const migrated = migrate(parseSave(onDisk)!);
+
+    expect(migrated?.run).toBe(1);
+    expect(migrated?.takings).toBe(0);
+    expect(migrated?.best).toBeNull();
+  });
+
+  test("half a record is a file we do not understand", () => {
+    // Refused rather than dropped to null: a record is somebody's fortnight,
+    // and a card printing `NaN days` at them is worse than one printing none.
+    const base = {
+      schema: SCHEMA,
+      level: LEVEL.id,
+      appliances: [],
+      money: 0,
+      day: 1,
+      plates: 6,
+      stall: [],
+      unlocked: ["salad"],
+      unlockedDay: 0,
+      evicted: false,
+    };
+    for (const best of [{ run: 1, days: 4 }, { run: 0, days: 4, takings: 5 }, "12", 12]) {
+      expect(parseSave({ ...base, best })).toBeNull();
+    }
+    expect(parseSave({ ...base, run: 0 })).toBeNull();
+    expect(parseSave({ ...base, takings: -5 })).toBeNull();
   });
 });
 

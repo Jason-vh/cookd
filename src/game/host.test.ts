@@ -399,6 +399,53 @@ describe("reset", () => {
     expect(host.world.money).toBe(0);
     expect(host.world.day).toBe(1);
   });
+
+  test("is where a run ends, and the room keeps how far it got", () => {
+    // The only thing that outlives a run. Filed here rather than at eviction so
+    // the closed-down card can still ask whether the run beat the mark it was
+    // playing against — see `sim/run.ts`.
+    const host = new Host();
+    host.join("Ann");
+    host.world.day = 12;
+    host.world.takings = 430;
+
+    host.reset("Ann");
+
+    expect(host.world.run).toBe(2);
+    expect(host.world.best).toEqual({ run: 1, days: 11, takings: 430 });
+    // The new run starts on nothing, which is the point of starting again.
+    expect(host.world.takings).toBe(0);
+    expect(host.world.day).toBe(1);
+  });
+
+  test("a worse run does not take the record with it", () => {
+    const host = new Host();
+    host.join("Ann");
+    host.world.best = { run: 1, days: 14, takings: 900 };
+    host.world.run = 2;
+    host.world.day = 4;
+    host.world.takings = 120;
+
+    host.reset("Ann");
+
+    expect(host.world.run).toBe(3);
+    expect(host.world.best).toEqual({ run: 1, days: 14, takings: 900 });
+  });
+
+  test("resetting a kitchen nobody opened leaves the record alone", () => {
+    // Two resets in a row: the second one is a room with no days in it, and it
+    // must not overwrite the first run's mark with nothing.
+    const host = new Host();
+    host.join("Ann");
+    host.world.day = 6;
+    host.reset("Ann");
+    const best = host.world.best;
+
+    host.reset("Ann");
+
+    expect(host.world.best).toEqual(best);
+    expect(host.world.run).toBe(3);
+  });
 });
 
 describe("getting dressed", () => {

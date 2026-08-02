@@ -175,6 +175,12 @@ The white square in front of your chef is what you'll interact with.
    to clear it. Fail that and the kitchen is repossessed, which is the only way
    to lose. See [the rent](docs/the-shop.md#the-rent).
 
+   **The room remembers how far you got.** The closed-down card says how many
+   days the run lasted and what it took, against the best any run in this
+   kitchen ever managed — and *Start again* files it before putting the kitchen
+   back, so the next run has a mark to beat. See [what the run leaves
+   behind](docs/the-shop.md#and-what-the-run-leaves-behind).
+
    **The sign stands against the wall beside the door**, and it is how a day begins
    and ends. Face it, `Grab`, and the restaurant is open — there is no button
    and no menu item for it. Turning it back over mid-service is **last orders**:

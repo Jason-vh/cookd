@@ -252,6 +252,11 @@ export function createWorld(level: LevelDef, playerCount: number, seed = 1): Wor
     lost: 0,
     today: emptyLedger(1),
     evicted: false,
+    // The first life of this kitchen, with nothing taken and nothing to beat.
+    // A record arrives from the save, or from the run that ends before it.
+    run: 1,
+    takings: 0,
+    best: null,
     // One dish, and it is the salad: every core verb, no burn risk, and a day
     // one that paces itself. Everything else is chosen from a card.
     unlocked: [...STARTING_RECIPES],

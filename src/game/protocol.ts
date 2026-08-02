@@ -10,6 +10,7 @@ import type {
   Phase,
   Player,
   PlayerInput,
+  RunRecord,
   World,
 } from "../sim/types";
 
@@ -183,6 +184,23 @@ export type Layout = {
    * would watch customers walk past chairs it believes are free.
    */
   weather: string;
+  /**
+   * Which life of this kitchen this is, what it has taken, and the best one the
+   * room has had.
+   *
+   * Structural by the layout's own test: the run number changes when somebody
+   * resets, the record changes when they do it having beaten one, and the
+   * takings change once a day at closing time. None of that is twenty times a
+   * second.
+   *
+   * Sent rather than derived because no client can work it out: a record is the
+   * one thing in the world that outlives the run being played, and it comes off
+   * the server's disk. A client without it draws a closed-down card with
+   * nothing on it to try again *for*.
+   */
+  run: number;
+  takings: number;
+  best: RunRecord | null;
 };
 
 // --- dynamic half: sent continuously -----------------------------------------
@@ -405,6 +423,9 @@ export function encodeLayout(world: World): Layout {
     unlocked: [...world.unlocked],
     unlockedDay: world.unlockedDay,
     weather: world.weather,
+    run: world.run,
+    takings: world.takings,
+    best: world.best,
   };
 }
 
@@ -512,6 +533,9 @@ export function applyLayout(world: World, layout: Layout): void {
   world.unlocked = [...layout.unlocked];
   world.unlockedDay = layout.unlockedDay;
   world.weather = layout.weather;
+  world.run = layout.run;
+  world.takings = layout.takings;
+  world.best = layout.best;
   for (const saved of layout.appliances) {
     // Bounds-checked like a save is. `restore` has always done this and the
     // wire path never did, which is an odd place to be more trusting: a save is

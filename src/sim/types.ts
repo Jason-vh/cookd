@@ -453,6 +453,23 @@ export type Ledger = {
   rent: number;
 };
 
+/**
+ * A finished run, as the next one is told about it.
+ *
+ * Days first and takings second, because days survived is what the game is
+ * actually asking of a kitchen and money is how well it did it. Both are
+ * needed: two runs that reached day twelve are not the same run, and a tie
+ * broken by nothing would mean the record could never be improved on without
+ * surviving a whole extra day.
+ */
+export type RunRecord = {
+  /** Which run set it. */
+  run: number;
+  /** Days actually played, so a room nobody opened has none. */
+  days: number;
+  takings: number;
+};
+
 export type Phase = "service" | "build";
 
 export type EffectCue =
@@ -616,6 +633,35 @@ export type World = {
    * a player does on purpose rather than something a rule does to them.
    */
   evicted: boolean;
+
+  /**
+   * Which life of this kitchen this is, counting from one.
+   *
+   * A room outlives its runs: the layout is reset, the till goes back to
+   * nothing and the menu goes back to salad, but the *place* is the same place
+   * and people come back to it through the same link. So a run has a number,
+   * and the number is what lets a record say which one set it.
+   */
+  run: number;
+  /**
+   * Everything this run has taken, earnings and tips together.
+   *
+   * Not derivable from `money`, which is what is *left* after the landlord and
+   * the shop have had theirs — a room that spent every penny on a good kitchen
+   * and a room that never bought anything can end the week on the same balance,
+   * and only one of them has been busy. See `sim/run.ts`.
+   */
+  takings: number;
+  /**
+   * The best run this kitchen has had, or nothing if this is the first.
+   *
+   * The whole of the meta layer, and deliberately one line of it: without it a
+   * lost run leaves nothing behind but a fresh kitchen, which is the reason the
+   * rent never quite finished being a lose condition. Filed when a run *ends*
+   * — see `sim/run.ts` — so a run in progress is always something to compare
+   * against a mark rather than something that has already set one.
+   */
+  best: RunRecord | null;
 
   /**
    * The recipes this room has bought, oldest first.

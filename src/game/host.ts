@@ -4,6 +4,7 @@ import { setUnlocked } from "../sim/cards";
 import { restockStall } from "../sim/shop";
 import { DT, step } from "../sim/step";
 import { restartDay } from "../sim/day";
+import { fileRun } from "../sim/run";
 import type { Inputs, PlayerInput, World } from "../sim/types";
 import {
   addPlayer,
@@ -382,7 +383,15 @@ export class Host {
     const unlockedDay = this.world.unlockedDay;
     const paused = this.world.pausedBy;
     const pausedName = this.world.pausedName;
+    // This is where a run ends, whatever ended it — the landlord or somebody's
+    // decision to start over — so it is where the days it lasted go on the
+    // wall. The room keeps them: a kitchen outlives its runs, and the mark it
+    // leaves is the only thing that does. See `sim/run.ts`.
+    const run = this.world.run + 1;
+    const best = fileRun(this.world);
     this.world = createWorld(this.level, 0);
+    this.world.run = run;
+    this.world.best = best;
     // A fresh world already starts on the salad, which is where a new run
     // belongs.
     if (!evicted) setUnlocked(this.world, unlocked, unlockedDay);
@@ -414,5 +423,6 @@ export class Host {
       this.acks.set(id, this.acks.get(id) ?? 0);
     }
     if (by) log(this.world, `${by} reset the kitchen`);
+    if (best) log(this.world, `Run ${run} — the mark is ${best.days} days, $${best.takings}`);
   }
 }

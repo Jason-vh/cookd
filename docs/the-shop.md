@@ -544,6 +544,44 @@ pizza in a kitchen with no oven and no takings to buy one with.
 It is **saved** (schema 6). A repossessed kitchen that comes back from disk able
 to open again is not a lose condition, it is a loading screen.
 
+### And what the run leaves behind
+
+Ending was all eviction gave the game for a while. The closed-down card said the
+kitchen was gone, the pause menu said *Start again*, and starting again put back
+a kitchen identical to the one the first run began in — so the twelve days in
+between left **nothing behind at all**, and "again" was a button rather than a
+reason.
+
+What it leaves behind now is one line: **how far this room has ever got.** Days
+survived, the money that run took, and which run it was. The closed-down card is
+where it is read, because that is the one moment a player is deciding whether
+there is going to be a next one.
+
+Three things about it are decisions rather than details, and
+[`sim/run.ts`](../src/sim/run.ts) is where they are argued:
+
+- **A run ends when somebody resets**, not when the landlord wins. Eviction is
+  inert, so nothing has actually restarted until a player says so — and filing
+  the record there is what lets the card ask an *honest* question. At the moment
+  it is read, the record is still the mark the run was playing against, so
+  "did we beat it?" is a comparison rather than a flag somebody has to remember
+  to set. It also means a reset from a living kitchen counts: a room wiped on
+  day nine got nine days out of that kitchen, whatever the reason it was wiped.
+- **Days are the score, and money only breaks the tie.** Days survived is what
+  the rent is asking of a kitchen. The tiebreak is `takings` rather than the
+  till, because what is *left* at the end is what nobody spent — a room that put
+  every penny into a good kitchen should not read as poorer than one that bought
+  nothing.
+- **The mark is quoted at the end, not every morning.** A record on the morning
+  card every day is a target to fall short of, and this game already has a
+  landlord for that. The one exception is the evening you overtake it, which is
+  a line in the log: a moment worth marking is not the same as a number worth
+  displaying.
+
+It is saved (schema 8) and it rides the layout on the wire, because it is the
+one fact about a room that no client can derive: it outlives the run being
+played, and it comes off the server's disk.
+
 ## Demand follows seats
 
 Arrivals used to follow the day and nothing else, which made a table free money:

@@ -38,6 +38,9 @@ function layoutWith(kind: string, x: number, y: number) {
     unlocked: ["salad"],
     unlockedDay: 0,
     weather: "fair",
+    run: 1,
+    takings: 0,
+    best: null,
   };
 }
 
@@ -308,6 +311,21 @@ describe("server messages", () => {
     const parsed = parseServerMessage({ t: "layout", layout });
     expect(parsed?.t).toBe("layout");
     expect(parsed?.t === "layout" && parsed.layout.unlocked).toEqual(["salad", "fries"]);
+  });
+
+  test("the record travels, and a broken one is refused", () => {
+    // A client cannot work this out for itself — it comes off the server's disk
+    // — so the closed-down card is only ever as good as this message.
+    const base = layoutWith("oven", 1, 1);
+    const best = { run: 2, days: 13, takings: 900 };
+    const parsed = parseServerMessage({ t: "layout", layout: { ...base, run: 3, best } });
+    expect(parsed?.t === "layout" && parsed.layout.best).toEqual(best);
+
+    for (const broken of [{ run: 1, days: 4 }, { days: 4, takings: 5 }, "12"]) {
+      expect(parseServerMessage({ t: "layout", layout: { ...base, best: broken } })).toBeNull();
+    }
+    expect(parseServerMessage({ t: "layout", layout: { ...base, run: 0 } })).toBeNull();
+    expect(parseServerMessage({ t: "layout", layout: { ...base, takings: -1 } })).toBeNull();
   });
 
   test("a malformed menu is rejected: it is what customers order from", () => {

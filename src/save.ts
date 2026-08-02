@@ -6,7 +6,7 @@ import { setUnlocked } from "./sim/cards";
 import { MAX_PLATES, platesInWorld, stockPlates } from "./sim/plates";
 import { restockStall, stallSlots } from "./sim/shop";
 import { setWeather } from "./sim/weather";
-import type { ApplianceKind, ItemSpec, Vec2, World } from "./sim/types";
+import type { ApplianceKind, ItemSpec, RunRecord, Vec2, World } from "./sim/types";
 import { emptyLedger, nearestFreeTile, spawnAppliance, touchLayout } from "./sim/world";
 
 /**
@@ -32,7 +32,7 @@ import { emptyLedger, nearestFreeTile, spawnAppliance, touchLayout } from "./sim
  * schema bump was therefore indistinguishable from "everyone loses their
  * build", and nothing said so.
  */
-export const SCHEMA = 7;
+export const SCHEMA = 8;
 
 export type SavedAppliance = {
   kind: ApplianceKind;
@@ -135,6 +135,24 @@ export type Save = {
    * resetting is a decision they make rather than one made for them.
    */
   evicted: boolean;
+  /**
+   * Which life of this kitchen is being played, and what it has taken so far.
+   *
+   * Saved for the reason the day is: a run is the thing being resumed, and one
+   * that came back from disk as run one with nothing taken would make a server
+   * restart into a way of quietly wiping the room's history.
+   */
+  run: number;
+  takings: number;
+  /**
+   * The best run this room has ever had, or nothing.
+   *
+   * The only field here that outlives a reset, and therefore the only one worth
+   * keeping at all: everything else in this file is one run's kitchen, and a
+   * record that lived in memory would last exactly as long as nobody deployed.
+   * See [`sim/run.ts`](./sim/run.ts).
+   */
+  best: RunRecord | null;
 };
 
 /**
@@ -157,7 +175,8 @@ export function saveSignature(world: World): string {
   }
   const stall = takenSlots(world).join(",");
   const menu = world.unlocked.join(",");
-  return `${layout}|${world.money}|${world.day}|${platesInWorld(world)}|${stall}|${menu}|${world.unlockedDay}|${world.evicted}`;
+  const best = world.best ? `${world.best.run}:${world.best.days}:${world.best.takings}` : "";
+  return `${layout}|${world.money}|${world.day}|${platesInWorld(world)}|${stall}|${menu}|${world.unlockedDay}|${world.evicted}|${world.run}|${world.takings}|${best}`;
 }
 
 /**
@@ -222,6 +241,9 @@ export function snapshot(world: World, level: LevelDef = LEVEL): Save {
     unlocked: [...world.unlocked],
     unlockedDay: world.unlockedDay,
     evicted: world.evicted,
+    run: world.run,
+    takings: world.takings,
+    best: world.best,
   };
 }
 
@@ -356,6 +378,16 @@ export function parseSave(value: unknown): Save | null {
   if (value.evicted !== undefined && typeof value.evicted !== "boolean") return null;
   const evicted = value.evicted === true;
 
+  // Absent before schema 8, when a run left nothing behind. Counted from one:
+  // a room has always been on *some* run, even before it could say which.
+  const run = value.run === undefined ? 1 : finite(value.run);
+  const takings = value.takings === undefined ? 0 : finite(value.takings);
+  if (run === null || run < 1 || takings === null || takings < 0) return null;
+  // `undefined` here is "present but malformed", which is a file we do not
+  // understand: a record is somebody's week, and half of one is not a record.
+  const best = parseRecord(value.best);
+  if (best === undefined) return null;
+
   const appliances: SavedAppliance[] = [];
   for (const entry of value.appliances) {
     if (!isRecord(entry)) return null;
@@ -400,6 +432,9 @@ export function parseSave(value: unknown): Save | null {
     unlocked,
     unlockedDay: Math.floor(unlockedDay),
     evicted,
+    run: Math.floor(run),
+    takings: Math.floor(takings),
+    best,
   };
 }
 
@@ -432,6 +467,18 @@ function parseSpec(value: unknown): ItemSpec | null | undefined {
     processes.push(process);
   }
   return { base: value.base, processes };
+}
+
+/** `null` for absent, `undefined` for "present but malformed". */
+function parseRecord(value: unknown): RunRecord | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) return undefined;
+  const run = finite(value.run);
+  const days = finite(value.days);
+  const takings = finite(value.takings);
+  if (run === null || days === null || takings === null) return undefined;
+  if (run < 1 || days < 1 || takings < 0) return undefined;
+  return { run: Math.floor(run), days: Math.floor(days), takings: Math.floor(takings) };
 }
 
 // --- migration -----------------------------------------------------------------
@@ -507,6 +554,16 @@ const MIGRATIONS: Record<number, (save: Save) => Save | null> = {
         : entry,
     ),
   }),
+  // v7 predates runs having numbers, so every one of those kitchens is on its
+  // first as far as anybody can tell — a reset before this existed left no
+  // trace of itself, so claiming otherwise would be inventing history.
+  //
+  // `takings: 0` is a small lie about a room mid-run, and the honest
+  // alternatives are worse: there is no record of what a v7 kitchen took, and
+  // guessing from the till would credit a room for money it *saved* rather than
+  // money it made. It costs one run's score on one room, once, and the day
+  // that room resets it starts counting properly.
+  7: (save) => ({ ...save, schema: 8, run: 1, takings: 0, best: null }),
 };
 
 export function migrate(save: Save): Save | null {
@@ -596,6 +653,9 @@ export function restore(world: World, save: Save, level: LevelDef = LEVEL): Rest
   world.money = migrated.money;
   world.day = migrated.day;
   world.evicted = migrated.evicted;
+  world.run = migrated.run;
+  world.takings = migrated.takings;
+  world.best = migrated.best;
   // Not saved, because it is a function of the seed and the day and both are
   // back: a room that came off disk into a different sky from the one it went
   // to bed under would be a room where restarting the server changes the

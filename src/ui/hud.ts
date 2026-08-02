@@ -1,6 +1,7 @@
 import { rentFor } from "../data/economy";
 import { RECIPE_BY_ID } from "../data/recipes";
 import { isLastOrders } from "../sim/queries";
+import { beatsRecord, daysPlayed } from "../sim/run";
 import { weatherOf } from "../sim/weather";
 import type { Ledger, World } from "../sim/types";
 
@@ -278,6 +279,13 @@ export class Hud {
       this.setBanner("open", "The rent went unpaid twice, and the kitchen is repossessed");
       // Nothing left to forecast: the kitchen is not opening again.
       this.setBanner("weather", "");
+      // What the run is worth, which is the only thing on this card that is
+      // about *next time*. Without it a lost run leaves nothing behind but a
+      // fresh kitchen, and "again" is a button rather than a reason.
+      this.setBanner("record", runNotice(world));
+      this.bannerCard
+        .querySelector('[data-banner="record"]')
+        ?.classList.toggle("beaten", beatsRecord(world));
       this.setBanner("note", "Start again from the pause menu");
       this.bannerCard.querySelector('[data-banner="note"]')?.classList.remove("urgent");
       if (hasReport) this.setReport(closed, world.money);
@@ -300,6 +308,10 @@ export class Hud {
     // A debt is the same line doing a different job: it is the last warning
     // before the run ends, so it stops being a footnote and turns red.
     this.setBanner("note", rentNotice(world));
+    // The record belongs to the end of a run, not to every morning of one: a
+    // mark quoted daily is a target to fall short of, and the game already has
+    // a landlord for that.
+    this.setBanner("record", "");
     this.bannerCard
       .querySelector('[data-banner="note"]')
       ?.classList.toggle("urgent", world.money < 0);
@@ -376,6 +388,13 @@ export class Hud {
     open.dataset.banner = "open";
     open.className = "banner-open";
 
+    // The run's own line, under the instruction and above the footer: what this
+    // kitchen has been worth, and what there is to beat. Only the closed-down
+    // card fills it in, and like the footer it is hidden by `:empty`.
+    const record = document.createElement("p");
+    record.className = "banner-note banner-record";
+    record.dataset.banner = "record";
+
     // The card's footer, and the only thing under the instruction: what tonight
     // will cost, what is still owed, or how to start a new run. Empty when
     // there is none of that to say, and hidden by `:empty` rather than by a
@@ -389,7 +408,7 @@ export class Hud {
     const note = document.createElement("p");
     note.className = "banner-note";
     note.dataset.banner = "note";
-    this.bannerCard.replaceChildren(report, title, weather, open, note);
+    this.bannerCard.replaceChildren(report, title, weather, open, record, note);
   }
 
   private setBanner(key: string, value: string): void {
@@ -438,6 +457,26 @@ function row(key: string, label: string, tone?: "in" | "out" | "total"): HTMLEle
   value.dataset.banner = key;
   line.append(term, value);
   return line;
+}
+
+/**
+ * What this run was worth, on the card that ends it.
+ *
+ * Three sentences for three situations, and the difference between them is the
+ * whole point of keeping a record: a first run sets the mark, a good one takes
+ * it, and an ordinary one is told what is still standing. The days come first
+ * in all three because days are the score — see `sim/run.ts`.
+ */
+function runNotice(world: World): string {
+  const days = daysPlayed(world);
+  const run = `${days} ${days === 1 ? "day" : "days"}, $${world.takings} taken`;
+  if (beatsRecord(world)) {
+    return world.best === null
+      ? `${run} \u2014 the mark to beat in this kitchen`
+      : `${run} \u2014 a record, past run ${world.best.run}'s ${world.best.days}`;
+  }
+  const best = world.best!;
+  return `${run} \u2014 the best here is still ${best.days} days, $${best.takings}`;
 }
 
 /**

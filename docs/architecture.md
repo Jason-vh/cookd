@@ -28,6 +28,7 @@ src/
     shop.ts               the stall's stock: rolled from the seed and the day, not from play
     cards.ts              the menu: what a room has unlocked, and what a card costs to add to it
     day.ts                opening, closing and restarting a day, and what closing up clears
+    run.ts                one life of a kitchen: how far it got, and the mark it leaves on the room
     pathing.ts            BFS over steps somebody could take: routes and reachability
     walls.ts              walls, which live on the seams between tiles
     lane.ts               the drive-through: where the hatch is, and where the nth car stops

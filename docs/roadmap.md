@@ -84,10 +84,20 @@ Near term:
   twenty lines in `endDay`, a flag on the world and a schema bump — because the
   hard part was never the rule, it was deciding what losing is allowed to *do*
   to a kitchen somebody built. It does nothing: the room stands, and reset is
-  the only way out, taken on purpose. What is left of the idea is the half a
-  run-based game would want next — a **score to beat** on the closed-down card,
-  and somewhere to keep it. Right now a lost run leaves nothing behind but a
-  fresh kitchen.
+  the only way out, taken on purpose.
+
+  **And a run now leaves something behind**: the room keeps how far it has ever
+  got — days survived, and the takings that went with them — read on the
+  closed-down card, where a player is deciding whether there is a next one. See
+  [what the run leaves behind](the-shop.md#and-what-the-run-leaves-behind). It
+  cost three fields, a schema bump and a line on one card, because the only
+  genuinely new idea in it was *when* a run ends: at the reset rather than at
+  the eviction, which is what lets the card compare a run against the mark it
+  was playing against instead of against itself.
+
+  What is left is where that record ought to be **visible from** — the join
+  screen knows a room code and nothing about it, so the only place a kitchen's
+  history exists is inside the kitchen.
 
 - **Automation has started**, with a [conveyor](automation.md): a belt carries
   what is put on it one tile and hands it to whatever is at the far end, which
@@ -176,9 +186,18 @@ Bigger:
   room keeps its kitchen for ever and it is saved, so today a generated building
   is a one-time coin flip whose only visible effect is that some rooms got a
   worse restaurant than others. Randomisation pays rent when you get a *new*
-  kitchen each run, which is the half that is missing. The generator was still
-  worth doing first: it is where the second template, and any notion of a
-  kitchen being *good* rather than merely legal, has to be worked out.
+  kitchen each run, which is the half that is missing — and a run is now a thing
+  with a number and a record, so there is something for a reroll to be *per*.
+
+  The open question is one the README already answers the other way: a surprise
+  kitchen is built from the room code, so `/#PIZZA` is one particular building
+  for everybody who opens that link. Rerolling from `(code, run)` would make it
+  one particular building *per run*, which is a promise being narrowed rather
+  than a switch being flipped, and it should be decided out loud.
+
+  The generator was still worth doing first: it is where the second template,
+  and any notion of a kitchen being *good* rather than merely legal, has to be
+  worked out.
 
 ## The build phase
 

@@ -1,5 +1,6 @@
 import { rentFor } from "../data/economy";
 import { platesInWorld, stockPlates } from "./plates";
+import { daysPlayed, passedRecord } from "./run";
 import { kitchenWarnings } from "./queries";
 import { restockStall } from "./shop";
 import { setWeather } from "./weather";
@@ -104,9 +105,19 @@ export function endDay(world: World): void {
   world.dayTime = 0;
   clearService(world);
   log(world, `Day ${world.day} closed`);
+  // What came in, before the landlord takes his. A run is scored on what the
+  // kitchen *took*, not on what was left over after it went shopping — see
+  // `sim/run.ts`.
+  world.takings += world.today.earned + world.today.tips;
   chargeRent(world);
 
   world.day++;
+  // The evening the room overtakes its own best run, said once and in the log,
+  // where the day's other news is. A kitchen that has never been beaten has
+  // nothing to say here, and a repossessed one has run out of days to say it in.
+  if (!world.evicted && passedRecord(world)) {
+    log(world, `${daysPlayed(world)} days — the best this kitchen has ever done`);
+  }
   // The morning's delivery, recipe card and all, rolled from the seed and the
   // day it now is. An unbought card leaves with the pallets, like every other
   // thing nobody carried in: there is another one tomorrow.

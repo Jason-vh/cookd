@@ -37,6 +37,9 @@ function save(day: number): Save {
     unlocked: ["salad"],
     unlockedDay: 0,
     evicted: false,
+    run: 1,
+    takings: 0,
+    best: null,
   };
 }
 
