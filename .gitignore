@@ -4,3 +4,4 @@ dist/
 *.log
 saves/
 .pi-subagents/
+scratch*.ts
