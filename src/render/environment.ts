@@ -7,6 +7,7 @@ import type { Rect, Vec2 } from "../sim/types";
 import { PALETTE } from "./palette";
 import { box, cylinder, mesh, roundedBox, sphere, tonedMesh } from "./primitives";
 import { mergeStatic } from "./merge";
+import { PAVED, type Wet } from "./wet";
 
 /**
  * Everything outside the kitchen walls that stands still: the ground, the patio
@@ -51,8 +52,15 @@ export type EnvironmentBounds = {
   lane?: { entry: Vec2; exit: Vec2 } | null;
 };
 
-/** The scenery, baked. The caller owns the batches, and so has to dispose them. */
-export function createEnvironment(biome: Biome, bounds: EnvironmentBounds): THREE.Mesh[] {
+/**
+ * The scenery, baked. The caller owns the batches, and so has to dispose them.
+ *
+ * `wet` is handed in rather than made here because the rain outlives the
+ * kitchen: the ground is rebuilt when somebody opens a different restaurant,
+ * and how wet the day is belongs to the day. Everything registered with it gets
+ * a material of its own — see [`wet.ts`](wet.ts).
+ */
+export function createEnvironment(biome: Biome, bounds: EnvironmentBounds, wet: Wet): THREE.Mesh[] {
   const cx = bounds.width / 2;
   const cz = bounds.height / 2;
   const groundY = -biome.patio.lift;
@@ -60,10 +68,10 @@ export function createEnvironment(biome: Biome, bounds: EnvironmentBounds): THRE
   // Everything here is scenery: built into a scratch group, then
   // collapsed into a handful of draw calls before it reaches the scene.
   const scenery = new THREE.Group();
-  addGround(scenery, biome, cx, cz, groundY);
-  addPatio(scenery, biome, bounds, groundY);
-  if (biome.path) addPath(scenery, biome, bounds, groundY);
-  if (bounds.lane) addLane(scenery, bounds.lane);
+  addGround(scenery, biome, wet, cx, cz, groundY);
+  addPatio(scenery, biome, bounds, wet, groundY);
+  if (biome.path) addPath(scenery, biome, bounds, wet, groundY);
+  if (bounds.lane) addLane(scenery, bounds.lane, wet);
   addScatter(scenery, biome, bounds, groundY);
   return mergeStatic(scenery);
 }
@@ -73,17 +81,23 @@ export function createEnvironment(biome: Biome, bounds: EnvironmentBounds): THRE
 function addGround(
   scene: THREE.Object3D,
   biome: Biome,
+  wet: Wet,
   cx: number,
   cz: number,
   groundY: number,
 ): void {
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(180, 180),
-    new THREE.MeshStandardMaterial({
-      map: groundTexture(biome),
-      roughness: 0.95,
-      metalness: 0,
-    }),
+    // Its own material already, because of the generated texture on it — so the
+    // rain only has to be told how this ground takes water.
+    wet.claim(
+      new THREE.MeshStandardMaterial({
+        map: groundTexture(biome),
+        roughness: 0.95,
+        metalness: 0,
+      }),
+      biome.soak,
+    ),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(cx, groundY, cz);
@@ -105,6 +119,7 @@ function addPatio(
   scene: THREE.Object3D,
   biome: Biome,
   bounds: EnvironmentBounds,
+  wet: Wet,
   groundY: number,
 ): void {
   const over = biome.patio.overhang;
@@ -117,14 +132,19 @@ function addPatio(
     const cz = area.y + area.height / 2;
     const drop = index * 0.004;
 
-    const slab = mesh(roundedBox(w, thickness, d, 0.14), biome.patio.edge, "stone");
+    const slab = wet.mesh(roundedBox(w, thickness, d, 0.14), biome.patio.edge, "stone", PAVED);
     slab.position.set(cx, groundY + thickness / 2 - 0.3 - drop, cz);
     scene.add(slab);
 
     // A trim course just under the lip reads as coping stones and stops the
     // paving from looking like one extruded block. Buried where two slabs meet,
     // which is why a junction does not grow a kerb across the middle of it.
-    const trim = mesh(roundedBox(w + 0.12, 0.1, d + 0.12, 0.04), biome.patio.trim, "stone");
+    const trim = wet.mesh(
+      roundedBox(w + 0.12, 0.1, d + 0.12, 0.04),
+      biome.patio.trim,
+      "stone",
+      PAVED,
+    );
     trim.position.set(cx, -0.06 - drop, cz);
     scene.add(trim);
   });
@@ -141,12 +161,13 @@ function addPath(
   scene: THREE.Object3D,
   biome: Biome,
   bounds: EnvironmentBounds,
+  wet: Wet,
   groundY: number,
 ): void {
   const path = biome.path!;
   const random = mulberry32(0x9a7d);
   for (let i = 0; i < path.count; i++) {
-    const slab = mesh(roundedBox(0.9, 0.09, 0.8, 0.05), path.color, "stone");
+    const slab = wet.mesh(roundedBox(0.9, 0.09, 0.8, 0.05), path.color, "stone", PAVED);
     slab.position.set(
       bounds.approach.x - 0.9 - i * 1.25,
       groundY + 0.05,
@@ -170,7 +191,7 @@ function addPath(
  * renderer where a surface is deliberately not the ground: tarmac laid *level*
  * with the paving z-fights with it from the far camera corner.
  */
-function addLane(scene: THREE.Object3D, lane: { entry: Vec2; exit: Vec2 }): void {
+function addLane(scene: THREE.Object3D, lane: { entry: Vec2; exit: Vec2 }, wet: Wet): void {
   const along = lane.entry.y === lane.exit.y ? "x" : "y";
   const length = Math.abs(along === "x" ? lane.exit.x - lane.entry.x : lane.exit.y - lane.entry.y);
   const mid = {
@@ -180,7 +201,7 @@ function addLane(scene: THREE.Object3D, lane: { entry: Vec2; exit: Vec2 }): void
 
   const w = along === "x" ? length + 1 : 1.05;
   const d = along === "x" ? 1.05 : length + 1;
-  const tarmac = mesh(box(w, 0.03, d), PALETTE.tarmac, "stone");
+  const tarmac = wet.mesh(box(w, 0.03, d), PALETTE.tarmac, "stone", PAVED);
   tarmac.position.set(mid.x, 0.02, mid.y);
   scene.add(tarmac);
 
@@ -188,10 +209,11 @@ function addLane(scene: THREE.Object3D, lane: { entry: Vec2; exit: Vec2 }): void
   // lane still reads as somewhere a car stops rather than a motorway.
   for (let i = 0; i < length; i += 2) {
     const at = i + 1;
-    const dash = mesh(
+    const dash = wet.mesh(
       box(along === "x" ? 0.5 : 0.07, 0.02, along === "x" ? 0.07 : 0.5),
       PALETTE.tarmacLine,
       "stone",
+      PAVED,
     );
     dash.position.set(
       along === "x" ? Math.min(lane.entry.x, lane.exit.x) + at + 0.5 : mid.x,

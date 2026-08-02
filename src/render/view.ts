@@ -24,6 +24,7 @@ import { PALETTE } from "./palette";
 import { PeopleViews } from "./people-views";
 import { Popups } from "./popups";
 import { Rain } from "./rain";
+import { Wet } from "./wet";
 import { OrderViews } from "./order-views";
 import { Particles } from "./particles";
 import { timed } from "./profile";
@@ -63,6 +64,15 @@ export class View {
    * dry* changes with the level.
    */
   private readonly rain: Rain;
+  /**
+   * And the weather, landed: the ground darkens and shines while it rains.
+   *
+   * Also the renderer's rather than the kitchen's, and for a second reason on
+   * top of the rain's — how wet the day is should not reset because somebody
+   * opened a different restaurant. What it is holding does belong to the level,
+   * so it is emptied and refilled with the scenery.
+   */
+  private readonly wet = new Wet();
 
   private entities: Entities;
 
@@ -144,15 +154,20 @@ export class View {
 
   /** The parts of the scene a level owns: its scenery, its floor and its walls. */
   private build(world: World, biome: Biome): void {
+    this.wet.clear();
     const scenery = timed("environment", () =>
-      createEnvironment(biome, {
-        width: world.width,
-        height: world.height,
-        room: world.room,
-        paving: world.paving,
-        approach: approachTile(world),
-        lane: world.lane,
-      }),
+      createEnvironment(
+        biome,
+        {
+          width: world.width,
+          height: world.height,
+          room: world.room,
+          paving: world.paving,
+          approach: approachTile(world),
+          lane: world.lane,
+        },
+        this.wet,
+      ),
     );
     this.baked.push(...scenery);
     this.scene.add(...scenery);
@@ -311,6 +326,9 @@ export class View {
     // After the camera, because the field is wrapped around the ground in shot
     // — the same corners the shadow box is aimed with.
     this.rain.update(this.rig.footprint, weatherOf(world).rain, dt, time);
+    // The same number the drops are drawn from, so a drizzle leaves the paving
+    // damp and a downpour leaves it shining. It soaks in faster than it dries.
+    this.wet.update(weatherOf(world).rain, dt);
 
     if (this.post) this.post.render();
     else this.renderer.render(this.scene, this.camera);

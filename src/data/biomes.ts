@@ -73,12 +73,31 @@ export type SkyState = {
  */
 export type DaylightKey = SkyState & { at: number };
 
+/**
+ * What rain does to a surface, applied by `render/wet.ts`.
+ *
+ * Two numbers because wet ground is two things at once, and they are not the
+ * same thing in different amounts: **`darken`** is water soaking in, which
+ * every surface does, and **`gloss`** is water sitting on top, which only the
+ * hard flat ones do. Wet sand goes much darker and hardly gleams at all; a
+ * paving slab goes a little darker and turns into a mirror for the sky. A
+ * single "wetness" dial for both is either a shiny meadow or dry pavement,
+ * which is why this is a pair and why it is content rather than a constant in
+ * the renderer.
+ *
+ * Both are fractions taken away at full downpour: `darken` off the colour,
+ * `gloss` off the roughness.
+ */
+export type Soak = { darken: number; gloss: number };
+
 export type Biome = {
   id: string;
   name: string;
   /** The day, in keyframes, from opening to closing. See `DaylightKey`. */
   daylight: DaylightKey[];
   ground: { base: number; patch: number; accent: number };
+  /** How that ground takes rain. Paving is the renderer's `PAVED`, everywhere. */
+  soak: Soak;
   /** The raised platform the kitchen sits on. */
   patio: { edge: number; trim: number; lift: number; overhang: number };
   /** Paving slabs leading away from the serving side. */
@@ -134,6 +153,9 @@ export const PARK: Biome = {
     },
   ],
   ground: { base: 0x8d9a66, patch: 0x84915e, accent: 0x99a672 },
+  // Grass, which drinks: it goes a shade deeper in the rain and does not shine,
+  // because what you would be shining is a lawn.
+  soak: { darken: 0.16, gloss: 0.1 },
   patio: { edge: 0x9a8c76, trim: 0x847860, lift: 0.36, overhang: 0.7 },
   path: { color: 0xc0b4a0, count: 7 },
   foliage: [0x6f8f52, 0x7d9a5c, 0x628247, 0x88a468],
@@ -211,6 +233,10 @@ export const BEACH: Biome = {
     },
   ],
   ground: { base: 0xe0cfa4, patch: 0xd6c395, accent: 0xeadcb8 },
+  // The biggest darkening in the game, and barely any sheen. Wet sand is the
+  // surface everyone has actually seen change colour — the tide line is this
+  // number — and the bleached beach is where there is most brightness to lose.
+  soak: { darken: 0.3, gloss: 0.24 },
   patio: { edge: 0xc9b489, trim: 0xa8946c, lift: 0.36, overhang: 0.7 },
   path: { color: 0xd8c9a2, count: 7 },
   foliage: [0x5f8f5a, 0x6f9d5e, 0x82a866],
@@ -284,6 +310,9 @@ export const ROADSIDE: Biome = {
     },
   ],
   ground: { base: 0x9c9268, patch: 0x8d8560, accent: 0xa89c74 },
+  // Dust and scrub on packed dirt: between the two, and the one place a wet day
+  // is an improvement.
+  soak: { darken: 0.22, gloss: 0.15 },
   patio: { edge: 0x8e8a84, trim: 0x74716c, lift: 0.3, overhang: 0.55 },
   path: null,
   foliage: [0x7f8a52, 0x8d955f, 0x6f7a48],

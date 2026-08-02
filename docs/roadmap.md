@@ -50,10 +50,14 @@ Near term:
   **And it rains**, outside the walls only, so the rule is a thing you can see
   rather than a sentence on a card. That turned out *not* to need the particle
   system it was filed under: a drop has no state anybody asks about, so the
-  whole field is one instanced mesh and a `fract()` in a vertex shader. What is
-  left is the ground — wet paving, puddles, a ripple where a drop lands — and it
-  is held up by the fact that "the ground" here is grass, sand, tarmac and
-  paving, and only some of those shine.
+  whole field is one instanced mesh and a `fract()` in a vertex shader. **And
+  the ground takes it**: paving darkens and shines under rain, sand darkens
+  further and gleams less, grass does neither very much. The objection that had
+  kept it unbuilt — that only some ground shines — turned out to be the shape of
+  the feature rather than an argument against it, so how a surface takes water
+  is two numbers per biome and the sheen is the sky it is already reflecting.
+  What is left is **puddles**, which need to know where water would pool, and
+  that is a fact about the ground nothing in the game holds.
 - **Verify the gamepad mapping** on real hardware, add per-player join/leave UI
   and rumble on burn/serve.
 - **Multiplayer polish:** there is still no spectator mode and no proper

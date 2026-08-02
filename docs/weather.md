@@ -252,13 +252,83 @@ than overriding the *drawing*, so the terrace shuts when the picture says it has
 — a debug flag that let the sky and the rules disagree would be worse than none,
 given that what the rain is for is showing where the rule falls.
 
+## And the ground takes it
+
+Rain that leaves nothing behind is rain in front of the picture rather than on
+it. So the ground under it **darkens and shines** while it falls, and dries out
+afterwards — and the reason this is a section rather than a line is that it was
+filed under *deliberately not built* for months, with a good reason:
+
+> "the ground" is grass, sand, tarmac and paving depending on where you are
+> standing, and only some of those shine.
+
+That is still true. What changed is that it stopped being an objection to the
+feature and became the **shape** of it: how a surface takes water is content,
+not a constant in the renderer.
+
+### Two numbers, because wet is two things
+
+[`Soak`](../src/data/biomes.ts) is `darken` and `gloss`, and they are not the
+same thing in different amounts:
+
+- **`darken`** is water soaking *in*. Everything does it, and it is most of
+  what the eye actually reads as wet.
+- **`gloss`** is water sitting *on top*, taken off the surface's roughness. Only
+  the hard flat things do it.
+
+Wet sand goes much darker than anything else in the game and hardly gleams at
+all — the tide line is that number. A paving slab goes a little darker and turns
+into a mirror for the sky. A lawn does neither very much, because a shiny lawn
+is a putting green. One dial for all four gives you a glossy meadow, which is
+exactly what the old bullet was predicting.
+
+So a biome owns the soak of *its* ground beside the colour of it, and the
+renderer owns one shared `PAVED` for everything laid on top — slabs, the path,
+the drive-through's tarmac — because a slab is a slab wherever it is laid.
+
+### Nothing here is water
+
+No reflection pass, no second render, no normal map. A wet surface is a darker,
+less rough one, and the *sheen* is the biome's own sky arriving through the
+environment map the lighting already builds. Which is why a rainy day gleams
+grey: the thing being reflected is the weather.
+
+[`render/wet.ts`](../src/render/wet.ts) is therefore a registry rather than an
+effect. It hands out materials with one job — being **owned**. Materials in
+`primitives.ts` are shared by colour and finish, which is what keeps the kitchen
+down to a handful of draw calls and is also what would make darkening the patio
+darken every other object that ever asked for the same greige. One copy per
+colour and finish, so the merge still batches the paving into a single draw.
+
+### It soaks faster than it dries
+
+The wetness follows `Weather.rain`, the same number the drops are drawn from —
+so a drizzle leaves the paving damp and a downpour leaves it shining, with no
+second opinion about how wet the day is.
+
+It is eased in over a couple of seconds and out over the best part of a minute,
+and the asymmetry is the point: rain stops at a **day boundary**, and paving
+that was bone dry the moment it did would say the last day never happened. The
+morning after a wet day should look like the morning after a wet day.
+
+The ease also settles: within a fraction of a percent it snaps onto the number
+it was heading for, so a kitchen that has seen rain goes back to being
+byte-identical to one that has not, rather than carrying a wetness of 0.0006 for
+the rest of the week.
+
+### What stays dry
+
+The **kitchen floor**, which is the whole point — the rule the rain is drawing
+is "indoors is dry", and a gleaming kitchen would contradict the drops that are
+carefully not falling on it. And the **props**: a wet bush is topiary, and
+nobody was ever going to read a shiny tree as weather.
+
 ## Deliberately not built
 
-- **Wet ground.** A darker, shinier floor under rain is one material property and
-  would be lovely. What stops it is that "the ground" is grass, sand, tarmac and
-  paving depending on where you are standing, and only some of those shine.
-- **Puddles and ripples.** The same problem one step further on: a ripple is a
-  ring on a flat wet surface, and the park is mostly lawn.
+- **Puddles and ripples.** A step further than wet ground and a different
+  problem: a ripple is a ring on a flat wet *surface*, and the park is mostly
+  lawn. Water that pools also has to pool *somewhere*, which is a fact about the
+  shape of the ground that nothing in the game currently knows.
 - **Rain on the customers.** Umbrellas coming up the path would be lovely, and
   they are a wardrobe change rather than a weather one — see `data/chefs.ts` for
   the shape that would take.

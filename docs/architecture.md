@@ -80,6 +80,7 @@ src/
   render/                 mirrors the simulation; never writes to it
     view.ts               composition root: renderer, lighting, camera, kitchen shell
     rain.ts               the weather, falling: one instanced field, and the building it spares
+    wet.ts                the weather, landed: the ground it darkens, and the little of it that shines
     particles.ts          steam off a working appliance, smoke off a burning one
     appliance-views.ts    appliance meshes, dials, moving parts, ghosts, stranded rings
     people-views.ts       chef and customer rigs, walk cycle, working and eating poses
