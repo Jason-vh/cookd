@@ -271,6 +271,43 @@ describe("frames rebuild the world faithfully", () => {
     expect(idle.every((a) => a.item === null && a.progress === 0)).toBe(true);
   });
 
+  test("a second layout does not empty the kitchen until the next frame", () => {
+    // Layouts arrive the instant somebody moves an oven; frames arrive twenty
+    // times a second. Rebuilding the appliances empty meant everything standing
+    // on one — the plates on the stack most visibly — blinked out for the ticks
+    // in between. Turning a belt is a layout change you can repeat as fast as
+    // you can press a key, which turned that blink into a strobe.
+    const host = new Host();
+    const counter = [...host.world.appliances.values()].find((a) => a.kind === "counter")!;
+    counter.item = { id: 42, base: "tomato", processes: [], contents: [] };
+    counter.tip = 3;
+
+    const client = new Host().world;
+    applyLayout(client, encodeLayout(host.world));
+    applyFrame(client, encodeFrame(host.world, host.acks));
+    applyLayout(client, encodeLayout(host.world));
+
+    expect(client.appliances.get(counter.id)?.item?.base).toBe("tomato");
+    expect(client.appliances.get(counter.id)?.tip).toBe(3);
+  });
+
+  test("but a kitchen that was renumbered under us keeps nothing", () => {
+    // A reset builds a new kitchen with the same ids in it, so id 4 may be a
+    // counter where it was a fryer — and what was cooking in the fryer is not
+    // standing on the counter.
+    const host = new Host();
+    const fryer = [...host.world.appliances.values()].find((a) => a.kind !== "counter")!;
+    fryer.item = { id: 42, base: "tomato", processes: [], contents: [] };
+
+    const client = new Host().world;
+    applyLayout(client, encodeLayout(host.world));
+    applyFrame(client, encodeFrame(host.world, host.acks));
+    fryer.kind = "counter";
+    applyLayout(client, encodeLayout(host.world));
+
+    expect(client.appliances.get(fryer.id)?.item).toBeNull();
+  });
+
   test("a held appliance leaves its tile walkable on the client", () => {
     const host = new Host();
     const id = host.join("Ann");

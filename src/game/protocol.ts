@@ -526,8 +526,20 @@ export function encodeFrame(world: World, acks: Map<number, number>): Frame {
  * Wholesale rather than diffed: appliances change only in the build phase, a
  * kitchen holds a few dozen, and "make it identical to this list" is the one
  * approach that cannot drift.
+ *
+ * What a layout does **not** describe is what is standing on anything: an item,
+ * a dial, a tip are all the frame's business, and frames come twenty times a
+ * second while this arrives whenever somebody moves an oven. Rebuilding the
+ * appliances empty therefore blanked the whole kitchen until the next frame
+ * caught up — a handful of ticks in which the plates on the stack, and
+ * everything on every counter, simply were not there. One layout change was a
+ * blink nobody noticed; the turn key made it a strobe.
  */
 export function applyLayout(world: World, layout: Layout): void {
+  // What the frame owns, kept across the rebuild. Keyed by id and checked
+  // against the kind, because a reset renumbers the kitchen and id 4 may be a
+  // counter where it was a fryer.
+  const before = new Map(world.appliances);
   world.appliances.clear();
   world.applianceAt.fill(0);
   world.unlocked = [...layout.unlocked];
@@ -541,15 +553,17 @@ export function applyLayout(world: World, layout: Layout): void {
     // wire path never did, which is an odd place to be more trusting: a save is
     // a file on our own disk and a layout is whatever came out of a socket.
     if (saved.x < 0 || saved.y < 0 || saved.x >= world.width || saved.y >= world.height) continue;
+    const carried = before.get(saved.id);
+    const same = carried?.kind === saved.kind ? carried : null;
     world.appliances.set(saved.id, {
       id: saved.id,
       kind: saved.kind,
       tile: { x: saved.x, y: saved.y },
-      item: null,
-      progress: 0,
-      overcook: 0,
+      item: same?.item ?? null,
+      progress: same?.progress ?? 0,
+      overcook: same?.overcook ?? 0,
       justFinished: false,
-      motion: null,
+      motion: same?.motion ?? null,
       heldBy: null,
       dir: { x: saved.dir.x, y: saved.dir.y },
       source: saved.source,
@@ -557,7 +571,7 @@ export function applyLayout(world: World, layout: Layout): void {
       taken: saved.taken,
       topper: saved.topper,
       card: saved.card,
-      tip: 0,
+      tip: same?.tip ?? 0,
     });
     world.applianceAt[saved.y * world.width + saved.x] = saved.id;
   }
