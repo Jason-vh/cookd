@@ -73,6 +73,7 @@ function play(control: MenuController, partial: Partial<PlayerInput>): Inputs {
     move: { x: 0, y: 0 },
     grab: false,
     use: false,
+    rotate: false,
     start: false,
     menu: false,
     ...partial,
@@ -112,6 +113,7 @@ describe("opening and closing", () => {
       move: { x: 0, y: 0 },
       grab: false,
       use: false,
+      rotate: false,
       start: false,
       menu: false,
     });

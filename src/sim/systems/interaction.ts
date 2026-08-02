@@ -1,4 +1,4 @@
-import { applianceDef } from "../../data/appliances";
+import { applianceDef, pushes } from "../../data/appliances";
 import { COMBINE_INDEX, pairKey } from "../../data/recipes";
 import { isBurnt, isDirty, isPlate, makeItem, specKey } from "../items";
 import {
@@ -43,6 +43,7 @@ export function interactionSystem(world: World, inputs: Inputs): void {
 
     if (world.phase === "build") {
       if (grabPressed) buildGrab(world, player);
+      else if (input.rotate && !player.prev.rotate) buildRotate(world, player);
       player.workingOn = null;
       continue;
     }
@@ -518,6 +519,37 @@ function buildGrab(world: World, player: Player): void {
   world.applianceAt[idx] = 0;
   touchLayout(world);
   player.carriedAppliance = appliance.id;
+}
+
+/**
+ * Turn the machine you are facing a quarter turn clockwise.
+ *
+ * A belt is still *laid* by walking the route dropping them — see
+ * `Appliance.dir` — and this is for the one that came out wrong: turning the
+ * last belt of a run used to mean picking the run's end up and standing
+ * somewhere else to put it back, which is a lot of walking to change a compass
+ * point. Four presses return it to where it started, so it is as reversible as
+ * the pick-up-and-drop it sits beside.
+ *
+ * Build phase only, and never a held appliance: `dir` is decided in the morning
+ * and a held one already turns with the chef.
+ */
+function buildRotate(world: World, player: Player): void {
+  const tile = reachedTile(world, player);
+  if (!tile || !inBounds(world, tile.x, tile.y)) return;
+  const appliance = applianceAtTile(world, tile.x, tile.y);
+  if (!appliance) return;
+  if (!pushes(appliance.kind)) {
+    log(world, `${applianceDef(appliance.kind).label} does not point anywhere`);
+    return;
+  }
+  // Clockwise in world space, which is clockwise on screen too: the camera only
+  // ever turns by whole quarters, and turns commute. `|| 0` because negating a
+  // zero gives `-0`, which JSON has no way to write — without it a belt turned
+  // north would come back from the wire pointing at a subtly different number.
+  const { x, y } = appliance.dir;
+  appliance.dir = { x: -y || 0, y: x };
+  touchLayout(world);
 }
 
 // --- fittings ----------------------------------------------------------------

@@ -303,6 +303,8 @@ export type PlayerInput = {
   grab: boolean;
   /** Hold-to-work (chopping, mixing). */
   use: boolean;
+  /** Turn the appliance in front of you a quarter turn. Build phase only. */
+  rotate: boolean;
   /** Confirm — opens the next day from the build phase. */
   start: boolean;
   /** Pause / options — handled by the shell, not the simulation. */

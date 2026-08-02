@@ -207,14 +207,19 @@ export function parseInput(value: unknown): PlayerInput | null {
   const y = num(value.move.y);
   const grab = bool(value.grab);
   const use = bool(value.use);
+  // Absent means a client one deploy behind, which had no turn key: that is a
+  // button nobody pressed, not a message we do not understand. Present and not
+  // a boolean is still a lie, and still fails the lot.
+  const rotate = value.rotate === undefined ? false : bool(value.rotate);
   const start = bool(value.start);
   const menu = bool(value.menu);
   if (x === null || y === null) return null;
-  if (grab === null || use === null || start === null || menu === null) return null;
+  if (grab === null || use === null || rotate === null) return null;
+  if (start === null || menu === null) return null;
 
   const magnitude = Math.hypot(x, y);
   const move = magnitude > 1 ? { x: x / magnitude, y: y / magnitude } : { x, y };
-  return { move, grab, use, start, menu };
+  return { move, grab, use, rotate, start, menu };
 }
 
 /**

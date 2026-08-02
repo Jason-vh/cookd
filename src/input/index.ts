@@ -69,8 +69,19 @@ function compile(bindings: KeyBindings): Compiled {
 // cannot conflict.
 // The shoulders turn the kitchen, which is the one control that is about the
 // *view* rather than about the chef — so it sits where a camera control sits on
-// every other pad.
-const BUTTON = { grab: 0, use: 2, start: 3, menu: 9, back: 1, turnL: 4, turnR: 5 } as const;
+// every other pad. The right trigger turns the *machine* you are facing: next
+// to the view controls because it is also a turn, and one shelf down because it
+// happens to the kitchen rather than to the camera.
+const BUTTON = {
+  grab: 0,
+  use: 2,
+  rotate: 7,
+  start: 3,
+  menu: 9,
+  back: 1,
+  turnL: 4,
+  turnR: 5,
+} as const;
 const STICK_DEADZONE = 0.22;
 
 export class InputManager {
@@ -418,6 +429,7 @@ export class InputManager {
     if (down(scheme.right)) input.move.x += 1;
     if (down(scheme.grab)) input.grab = true;
     if (down(scheme.use)) input.use = true;
+    if (down(scheme.rotate)) input.rotate = true;
     if (down(scheme.start)) input.start = true;
     if (down(scheme.menu)) input.menu = true;
   }
@@ -439,6 +451,7 @@ export class InputManager {
     input.move.y += y;
     if (pad.buttons[BUTTON.grab]?.pressed) input.grab = true;
     if (pad.buttons[BUTTON.use]?.pressed || pad.buttons[BUTTON.back]?.pressed) input.use = true;
+    if (pad.buttons[BUTTON.rotate]?.pressed) input.rotate = true;
     if (pad.buttons[BUTTON.start]?.pressed) input.start = true;
     if (pad.buttons[BUTTON.menu]?.pressed) input.menu = true;
   }

@@ -48,11 +48,28 @@ appliance.dir = cardinal(player.facing);
 ```
 
 So laying a run is walking the route dropping belts, and each one points along
-it. Rotating one is picking it up and putting it down again — which is a move
-the build phase already has, and it is reversible, which a rotate button on a
-held ghost would also have had to be. While a belt is held, the ghost turns with
-the chef, so *which way would this run* is answered at the same moment and in
-the same place as *where would this go*.
+it. While a belt is held, the ghost turns with the chef, so *which way would
+this run* is answered at the same moment and in the same place as *where would
+this go*.
+
+That was for a long time the *only* way to point one, on the grounds that
+rotating is picking it up and putting it down again — a move the build phase
+already has. It is right for laying a run and wrong for fixing one: turning the
+last belt of a finished run meant lifting its end and finding somewhere else to
+stand, which is a walk around a machine to change a compass point. So there is
+now a **turn key** as well (`R`, or `R2`), which turns the machine you are
+facing a quarter turn clockwise:
+
+```ts
+appliance.dir = { x: -y || 0, y: x };
+```
+
+It is still not a new *rule*: four presses come back to where they started, so
+it is exactly as reversible as the drop it sits beside, and it refuses anything
+`pushes()` says has no direction rather than being a button that does nothing
+for most of the kitchen. Mornings only, like every other change to the layout —
+a run rewiring itself under a plate already travelling it is not a thing service
+should be able to do.
 
 The alternative was inferring direction from the neighbours — a belt beside a
 belt joins the line. It is cleverer and it is worse: two belts placed facing

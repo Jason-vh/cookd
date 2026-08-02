@@ -119,6 +119,7 @@ function latch(world: World, inputs: Inputs): void {
     if (!input) continue;
     player.prev.grab = input.grab;
     player.prev.use = input.use;
+    player.prev.rotate = input.rotate;
     player.prev.start = input.start;
     player.prev.menu = input.menu;
   }

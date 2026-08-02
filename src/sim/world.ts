@@ -30,7 +30,14 @@ export const PLAYER_SPEED = 4.2;
 export const CUSTOMER_SPEED = 2.4;
 
 export function emptyInput(): PlayerInput {
-  return { move: { x: 0, y: 0 }, grab: false, use: false, start: false, menu: false };
+  return {
+    move: { x: 0, y: 0 },
+    grab: false,
+    use: false,
+    rotate: false,
+    start: false,
+    menu: false,
+  };
 }
 
 /**
@@ -46,6 +53,7 @@ export function isIdleInput(input: PlayerInput): boolean {
     input.move.y === 0 &&
     !input.grab &&
     !input.use &&
+    !input.rotate &&
     !input.start &&
     !input.menu
   );

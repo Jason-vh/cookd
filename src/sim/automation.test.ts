@@ -59,6 +59,12 @@ function layBelts(world: World, at: Vec2, dir: Vec2, count: number): Appliance[]
   return belts;
 }
 
+/** One press of the turn key, and the release that arms the next one. */
+function turn(world: World, id: number): void {
+  step(world, { [id]: { ...emptyInput(), rotate: true } }, DT);
+  step(world, { [id]: emptyInput() }, DT);
+}
+
 function run(world: World, seconds: number): void {
   for (let t = 0; t < seconds; t += DT) step(world, { 0: emptyInput() }, DT);
 }
@@ -434,6 +440,55 @@ describe("which way a belt runs", () => {
 
     expect(belt.heldBy).toBeNull();
     expect(belt.dir).toEqual({ x: 0, y: -1 });
+  });
+
+  test("and changed afterwards by the chef standing in front of it", () => {
+    const world = makeWorld();
+    world.phase = "build";
+    const player = world.players[0]!;
+    const [belt] = layBelts(world, ROW, EAST, 1);
+
+    // Standing west of it, looking east, at the belt it runs into.
+    player.pos = { x: ROW.x - 0.5, y: ROW.y + 0.5 };
+    player.facing = { x: 1, y: 0 };
+    const version = world.layoutVersion;
+    turn(world, player.id);
+
+    expect(belt!.dir).toEqual({ x: 0, y: 1 });
+    // Everyone else has to be told: `dir` rides the layout, not the frame.
+    expect(world.layoutVersion).toBeGreaterThan(version);
+
+    // Four turns is where it started, which is what makes it as reversible as
+    // picking the belt up and putting it back down.
+    for (let i = 0; i < 3; i++) turn(world, player.id);
+    expect(belt!.dir).toEqual(EAST);
+  });
+
+  test("but a counter has no way round, and says so", () => {
+    const world = makeWorld();
+    world.phase = "build";
+    const player = world.players[0]!;
+    put(world, "counter", ROW);
+
+    player.pos = { x: ROW.x - 0.5, y: ROW.y + 0.5 };
+    player.facing = { x: 1, y: 0 };
+    turn(world, player.id);
+
+    expect(world.events.at(-1)?.text).toContain("does not point anywhere");
+  });
+
+  test("and service is not the time to be turning it", () => {
+    // `dir` is decided in the morning: a belt that turned round mid-rush would
+    // be a run rewiring itself under a plate already travelling it.
+    const world = makeWorld();
+    const player = world.players[0]!;
+    const [belt] = layBelts(world, ROW, EAST, 1);
+
+    player.pos = { x: ROW.x - 0.5, y: ROW.y + 0.5 };
+    player.facing = { x: 1, y: 0 };
+    turn(world, player.id);
+
+    expect(belt!.dir).toEqual(EAST);
   });
 
   test("survives a save, and a save that claims a silly one is refused", () => {

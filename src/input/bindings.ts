@@ -18,6 +18,7 @@ export const PLAYER_ACTIONS = [
   "right",
   "grab",
   "use",
+  "rotate",
   "start",
   "menu",
 ] as const;
@@ -66,6 +67,7 @@ export function byPlayerAction<T>(value: (action: PlayerAction) => T): Record<Pl
     right: value("right"),
     grab: value("grab"),
     use: value("use"),
+    rotate: value("rotate"),
     start: value("start"),
     menu: value("menu"),
   };
@@ -88,6 +90,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   right: "Move right",
   grab: "Grab / place / serve / open up",
   use: "Hold to prep",
+  rotate: "Turn the machine you are facing",
   // It opened the day until the sign by the door took that over. What is left
   // is the job it always also had: saying yes to a menu, and putting down the
   // end-of-day report.
@@ -120,6 +123,7 @@ const DEFAULTS: KeyBindings = {
       right: ["KeyD"],
       grab: ["Space", "KeyE"],
       use: ["KeyF", "ShiftLeft"],
+      rotate: ["KeyR"],
       start: ["Enter"],
       menu: ["Escape"],
     },
@@ -130,6 +134,7 @@ const DEFAULTS: KeyBindings = {
       right: ["ArrowRight"],
       grab: ["Comma", "Numpad0"],
       use: ["Period", "NumpadDecimal"],
+      rotate: ["Slash"],
       start: ["Enter"],
       menu: ["Escape"],
     },

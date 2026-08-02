@@ -17,6 +17,7 @@ const INPUT = {
   move: { x: 0, y: 0 },
   grab: false,
   use: false,
+  rotate: false,
   start: false,
   menu: false,
 };
@@ -85,6 +86,16 @@ describe("input is parsed, not trusted", () => {
     const parsed = parseInput({ ...INPUT, move: { x: 3, y: 4 } });
     expect(parsed).not.toBeNull();
     expect(Math.hypot(parsed!.move.x, parsed!.move.y)).toBeCloseTo(1, 6);
+  });
+
+  test("a client one deploy behind is a player, not an attacker", () => {
+    // The turn key arrived after this protocol did. A client that has never
+    // heard of it sends no `rotate` at all, and that is a button nobody
+    // pressed — dropping the packet would have been a chef who stops moving.
+    const { rotate: _, ...older } = INPUT;
+    expect(parseInput(older)).toEqual(INPUT);
+    // Present and not a boolean is still a message we do not understand.
+    expect(parseInput({ ...INPUT, rotate: "yes" })).toBeNull();
   });
 
   test("an honest input survives unchanged", () => {

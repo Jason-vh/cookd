@@ -41,6 +41,7 @@ const PAD_LABELS: Record<string, string> = {
   right: "Stick \u2192",
   grab: "A",
   use: "X / B",
+  rotate: "R2",
   start: "Y",
   menu: "Start",
   addPlayer: "Any button",

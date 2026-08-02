@@ -212,5 +212,12 @@ function blank(inputs: Inputs): Inputs {
 
 function idle(from: PlayerInput): PlayerInput {
   void from;
-  return { move: { x: 0, y: 0 }, grab: false, use: false, start: false, menu: false };
+  return {
+    move: { x: 0, y: 0 },
+    grab: false,
+    use: false,
+    rotate: false,
+    start: false,
+    menu: false,
+  };
 }

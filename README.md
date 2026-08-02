@@ -74,6 +74,7 @@ installs the hooks.
 | Move | Left stick / D-pad | `W A S D` | Arrow keys |
 | Grab / place / deliver / bus / **open up** | `A` (south) | `Space` or `E` | `,` |
 | Use (hold to prep) | `X` (west) or `B` | `F` or `Left Shift` | `.` |
+| Turn the machine you're facing (mornings) | `R2` | `R` | `/` |
 | Confirm a menu, put down the report | `Y` (north) | `Enter` | `Enter` |
 | Turn the kitchen | `L1` / `R1` | `[` / `]` | `[` / `]` |
 | Pause menu (stops the kitchen) | `Start` | `Esc` | `Esc` |

@@ -110,7 +110,12 @@ type Queued = { seq: number; input: PlayerInput };
  * kitchen carries on without them, so it is not news for anybody else.
  */
 function edge(now: PlayerInput, prev: PlayerInput): boolean {
-  return (now.grab && !prev.grab) || (now.use && !prev.use) || (now.start && !prev.start);
+  return (
+    (now.grab && !prev.grab) ||
+    (now.use && !prev.use) ||
+    (now.rotate && !prev.rotate) ||
+    (now.start && !prev.start)
+  );
 }
 
 function fold(skipped: PlayerInput, onto: PlayerInput): PlayerInput {
@@ -118,6 +123,7 @@ function fold(skipped: PlayerInput, onto: PlayerInput): PlayerInput {
     move: onto.move,
     grab: onto.grab || skipped.grab,
     use: onto.use || skipped.use,
+    rotate: onto.rotate || skipped.rotate,
     start: onto.start || skipped.start,
     menu: onto.menu || skipped.menu,
   };
