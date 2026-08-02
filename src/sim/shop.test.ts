@@ -468,6 +468,32 @@ describe("the stock is the same shop for everybody", () => {
     }
   });
 
+  test("and the whole delivery arrives, on the kitchens whose paving is two tiles deep", () => {
+    // The test above lets a bare square pass, on the grounds that a square with
+    // nothing on it strands nothing. True, and it is still a delivery the
+    // kitchen did not get — so this is the other half: every square lands
+    // holding something.
+    //
+    // It is the *sealing* rule that this holds to account. Asking only whether
+    // the squares placed so far were reachable let an early one wall off an arm
+    // of paving nobody had landed on yet, which cost the squares still to come
+    // everywhere to stand: on the beach shack, whose delivery band is two tiles
+    // wide with the door at the middle of it, one morning in five arrived short
+    // and some arrived three short.
+    for (const level of Object.values(LEVELS)) {
+      for (let seed = 1; seed <= 12; seed++) {
+        const world = createWorld(level, 0, seed);
+        for (let day = 2; day <= 12; day++) {
+          world.day = day;
+          restockStall(world);
+          for (const slot of stallSlots(world)) {
+            expect(slot.offer).not.toBeNull();
+          }
+        }
+      }
+    }
+  });
+
   test("a new morning lands the delivery somewhere else, and never on the way in", () => {
     // A delivery that appeared on the same squares every day would be squares
     // the game had reserved, which is the shop-as-furniture problem coming back

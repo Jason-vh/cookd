@@ -258,6 +258,17 @@ function landDelivery(world: World, slots: Appliance[], random: () => number): S
     world.applianceAt[tileIndex(world, slot.tile.x, slot.tile.y)] = 0;
   }
 
+  // The paving as it is before anything lands on it, which is what every
+  // placement below is held against. Taken once, and taken *here*, because a
+  // band can have a pocket in it that nothing this morning did — and a rule
+  // that demanded what was never true would refuse every spot.
+  const wasReachable = reachableFrom(world, world.door);
+  const open = new Set(
+    spots
+      .map((spot) => tileIndex(world, spot.x, spot.y))
+      .filter((index) => wasReachable.has(index)),
+  );
+
   // Partial Fisher-Yates: one draw per square, and the draws happen whether or
   // not they are used, so the stream advances by the same amount every morning.
   //
@@ -282,6 +293,15 @@ function landDelivery(world: World, slots: Appliance[], random: () => number): S
   // cannot pick a bad spot beats a rule that notices and re-rolls — the same
   // reasoning as "never on the way in" above — and it keeps the stream advancing
   // by one per square, which is what two clients agreeing depends on.
+  //
+  // And the question is asked of the **whole band**, not of the squares standing
+  // in it. Asking only about the delivery so far let the second crate wall off
+  // an arm of the paving nobody had landed on yet: legal at the time, since
+  // there was nothing behind it to strand, and the squares still to come then
+  // had nowhere left to go. On a kitchen whose paving is two tiles deep that is
+  // not a rare morning — it was one morning in five on the beach — and it is the
+  // whole delivery lost, not one square of it. So: a square may not cut off
+  // paving it is not standing on.
   const stranded = new Set<number>();
   for (const [index, slot] of slots.entries()) {
     const range = spots.length - index;
@@ -290,7 +310,7 @@ function landDelivery(world: World, slots: Appliance[], random: () => number): S
     let safe = false;
     for (let step = 0; step < range; step++) {
       const candidate = index + ((drawn - index + step) % range);
-      if (keepsReachable(world, slots, index, spots[candidate]!)) {
+      if (keepsReachable(world, slots, index, spots[candidate]!, open)) {
         pick = candidate;
         safe = true;
         break;
@@ -299,8 +319,11 @@ function landDelivery(world: World, slots: Appliance[], random: () => number): S
     // Nowhere left that keeps everything walkable-up-to. It still lands, so the
     // grid and the level agree about how many squares there are — but it lands
     // **empty**, and an empty square in a pocket nobody can reach costs nobody
-    // anything. About one morning in a hundred and fifty, on the tightest
-    // kitchens, and the alternative is stranding goods somebody paid for.
+    // anything. The alternative is stranding goods somebody could have bought.
+    //
+    // Kept as a floor rather than as an expectation: no shipped or generated
+    // kitchen reaches it any more, and a level that packed a delivery tighter
+    // than its paving could hold would arrive short here rather than broken.
     if (!safe) stranded.add(slot.id);
     // A whole swap, not half of one. The original only wrote the hole, which
     // was harmless while nothing read the prefix back.
@@ -326,7 +349,12 @@ function landDelivery(world: World, slots: Appliance[], random: () => number): S
 }
 
 /**
- * Would putting a square here leave every square placed so far walkable-up-to?
+ * Would putting a square here leave the band as open as it found it?
+ *
+ * Two things, and the second is the one that matters: every square placed so
+ * far is still walkable-up-to, and every tile of the delivery band that was
+ * reachable this morning still is — unless the delivery is standing on it.
+ * A tile nobody can walk to is a spot the squares still to come cannot use.
  *
  * Writes the candidate onto the grid, asks, and takes it back off — the
  * cheapest way to ask a question about a layout that does not exist yet, and
@@ -337,7 +365,13 @@ function landDelivery(world: World, slots: Appliance[], random: () => number): S
  * opened yet. One fill per candidate tried, a handful of candidates per square,
  * once a morning.
  */
-function keepsReachable(world: World, slots: Appliance[], placed: number, spot: Vec2): boolean {
+function keepsReachable(
+  world: World,
+  slots: Appliance[],
+  placed: number,
+  spot: Vec2,
+  open: Set<number>,
+): boolean {
   const index = tileIndex(world, spot.x, spot.y);
   world.applianceAt[index] = slots[placed]!.id;
   const reachable = reachableFrom(world, world.door);
@@ -345,6 +379,13 @@ function keepsReachable(world: World, slots: Appliance[], placed: number, spot: 
   for (let i = 0; ok && i < placed; i++) {
     const other = slots[i]!.tile;
     ok = seatsAround(world, other).some((tile) => reachable.has(tileIndex(world, tile.x, tile.y)));
+  }
+  // Occupied or walked-to. Nothing but the delivery stands on these tiles —
+  // anything else was filtered out of the candidates — so a full cell here is a
+  // square already landed, and an empty one has to stay reachable.
+  for (const tile of open) {
+    if (!ok) break;
+    ok = world.applianceAt[tile] !== 0 || reachable.has(tile);
   }
   world.applianceAt[index] = 0;
   return ok;
@@ -420,10 +461,10 @@ function rollFrom(pool: ApplianceKind[], random: () => number, sources: string[]
  * kitchen can never be sold a crate of something its menu has no use for — no
  * cheese until a dish takes cheese, and tomatoes from the first morning.
  *
- * Asked of the `dispenses` column rather than of the kind by name. The name was
- * right until the hopper, which is also sold holding an ingredient — and a
- * hopper that arrived empty would be a $75 machine that hands out nothing, with
- * nowhere in the game to put an ingredient into it.
+ * Asked of the `dispenses` column rather than of the kind by name, which is a
+ * question about what a row *is*. A hopper was briefly the second row to answer
+ * yes and no longer holds anything at all — it draws from the crate behind it —
+ * so the column is back to one member and still the right question to ask.
  */
 function withSource(kind: ApplianceKind, random: () => number, sources: string[]): Offer {
   if (!applianceDef(kind).dispenses) return { kind, source: null };
