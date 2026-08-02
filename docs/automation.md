@@ -57,8 +57,9 @@ rotating is picking it up and putting it down again — a move the build phase
 already has. It is right for laying a run and wrong for fixing one: turning the
 last belt of a finished run meant lifting its end and finding somewhere else to
 stand, which is a walk around a machine to change a compass point. So there is
-now a **turn key** as well (`R`, or `R2`), which turns the machine you are
-facing a quarter turn clockwise:
+now a **turn key** as well (`R`, or `X` on a pad — the same button as prep,
+which cannot collide with it because prep is a service verb and turning is a
+morning one), which turns the machine you are facing a quarter turn clockwise:
 
 ```ts
 appliance.dir = { x: -y || 0, y: x };

@@ -69,13 +69,16 @@ function compile(bindings: KeyBindings): Compiled {
 // cannot conflict.
 // The shoulders turn the kitchen, which is the one control that is about the
 // *view* rather than about the chef — so it sits where a camera control sits on
-// every other pad. The right trigger turns the *machine* you are facing: next
-// to the view controls because it is also a turn, and one shelf down because it
-// happens to the kitchen rather than to the camera.
+// every other pad.
+// Turning a machine is `X`, which is also `use` — and they cannot collide,
+// because prep is a service verb and turning is a morning one. It is the same
+// bargain `back` already makes with `use`: one button, two contexts that never
+// overlap. A trigger of its own was the alternative, and it put the one build
+// control nowhere near the others.
 const BUTTON = {
   grab: 0,
   use: 2,
-  rotate: 7,
+  rotate: 2,
   start: 3,
   menu: 9,
   back: 1,

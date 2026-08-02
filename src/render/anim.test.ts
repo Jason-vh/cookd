@@ -9,6 +9,7 @@ import {
   ease,
   isChefMotion,
   lerp,
+  shortestTurn,
   TAU,
   workPhase,
 } from "./anim";
@@ -158,6 +159,31 @@ describe("easing", () => {
       const step = ease(9, dt);
       expect(step).toBeGreaterThan(0);
       expect(step).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe("turning the short way round", () => {
+  test("a quarter turn is a quarter turn whichever way the numbers went", () => {
+    // North to west: three quarters of a turn between the raw angles, one
+    // quarter between the directions. A belt that swung the long way round
+    // three times out of four is what this is for.
+    expect(shortestTurn(TAU * 0.75)).toBeCloseTo(-TAU * 0.25, 9);
+    expect(shortestTurn(-TAU * 0.75)).toBeCloseTo(TAU * 0.25, 9);
+    expect(shortestTurn(TAU * 0.25)).toBeCloseTo(TAU * 0.25, 9);
+    expect(shortestTurn(0)).toBe(0);
+  });
+
+  test("and an angle wound round several times is still that angle", () => {
+    // The eased value chases a target forever, so it may sit anywhere on the
+    // real line by the time somebody turns the belt again.
+    expect(shortestTurn(TAU * 3 + 0.4)).toBeCloseTo(0.4, 9);
+    expect(shortestTurn(-TAU * 3 - 0.4)).toBeCloseTo(-0.4, 9);
+  });
+
+  test("never asks for more than half a turn", () => {
+    for (let delta = -20; delta < 20; delta += 0.37) {
+      expect(Math.abs(shortestTurn(delta))).toBeLessThanOrEqual(Math.PI + 1e-9);
     }
   });
 });

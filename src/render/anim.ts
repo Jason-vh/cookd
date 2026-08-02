@@ -41,6 +41,19 @@ export function ease(rate: number, dt: number): number {
   return 1 - Math.exp(-rate * dt);
 }
 
+/**
+ * The same angle, expressed as the short way round: -π..π.
+ *
+ * Easing towards an angle without this is easing towards a *number*, and the
+ * two disagree exactly where it shows: a belt turned from north to west has
+ * three quarters of a turn between the raw values and a quarter between the
+ * directions, so it would swing the long way round three times out of four.
+ */
+export function shortestTurn(delta: number): number {
+  const wrapped = (((delta + Math.PI) % TAU) + TAU) % TAU;
+  return wrapped - Math.PI;
+}
+
 /** Cycles per second for each action. */
 export const WORK_RATE: Record<Motion, number> = {
   chop: 3.8,

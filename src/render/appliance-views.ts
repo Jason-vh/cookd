@@ -8,7 +8,7 @@ import { deliveryLabel, missingFor } from "../sim/cards";
 import { isBurnt } from "../sim/items";
 import { canPlace, reachedTile, targetTile, unreachableTables } from "../sim/queries";
 import { hasDelivery, offerLabel, offerPrice } from "../sim/shop";
-import { chopLift, ease, workPhase } from "./anim";
+import { chopLift, ease, shortestTurn, workPhase } from "./anim";
 import { setGlow } from "./glow";
 import { Dial } from "./dial";
 import { disposeSubtree } from "./dispose";
@@ -337,6 +337,12 @@ export class ApplianceViews {
     // play its opening turn as a welcome to somebody who has arrived late.
     const signFace = signFaceOf(world);
     if (parts.boardFaces && signFace === "open") paintSign(parts.boardFaces, signFace);
+    // Facing the right way from its very first frame: everything after this is
+    // eased, and easing from zero would spin every belt in a kitchen as it
+    // loads. See `aim`.
+    if (pushes(appliance.kind)) {
+      parts.root.rotation.y = Math.atan2(appliance.dir.x, appliance.dir.y);
+    }
     const dial = new Dial(this.camera);
     dial.object.position.y = applianceDef(appliance.kind).height + 0.72;
     parts.root.add(dial.object);
@@ -627,9 +633,8 @@ export class ApplianceViews {
       state.alpha = Math.min(1, state.alpha + dt * 6);
       // A held belt points wherever the chef is looking, so the ghost answers
       // "which way would this run" at the same time as it answers "where would
-      // it go". Turning it after it is put down would be the one thing about a
-      // placement you could not see before making it.
-      this.aim(appliance, visual, cardinal(held.facing));
+      // it go" — rather than only after it has been put down and turned.
+      this.aim(appliance, visual, cardinal(held.facing), dt);
 
       const settle = state.alpha * state.alpha;
       // Valid: sinks onto the tile. Invalid: hangs above it with a slow bob,
@@ -650,7 +655,7 @@ export class ApplianceViews {
     }
     state.pop = Math.max(0, state.pop - dt * 4);
     const pop = state.pop * state.pop;
-    this.aim(appliance, visual, appliance.dir);
+    this.aim(appliance, visual, appliance.dir, dt);
     visual.root.position.set(appliance.tile.x + 0.5, 0, appliance.tile.y + 0.5);
     visual.root.scale.set(1 + 0.13 * pop, 1 - 0.18 * pop, 1 + 0.13 * pop);
   }
@@ -662,10 +667,24 @@ export class ApplianceViews {
    * square to the room, and a sign turns itself to face inward a moment later
    * (`syncSign`). Both are built pointing along local +z, so this is the same
    * `atan2` the sign uses.
+   *
+   * **Swung rather than snapped**, and by the short way round: a belt that is
+   * turned should be *seen* to turn, or a quarter turn is indistinguishable
+   * from the belt being replaced by a different one. It is the same easing the
+   * ghost slides between tiles with, so a held belt turning with its chef and a
+   * standing one being turned by one are the same motion. A newly built visual
+   * snaps — see `create` — because a kitchen appearing has nothing to swing
+   * from.
    */
-  private aim(appliance: Appliance, visual: Visual, dir: { x: number; y: number }): void {
+  private aim(
+    appliance: Appliance,
+    visual: Visual,
+    dir: { x: number; y: number },
+    dt: number,
+  ): void {
     if (!pushes(appliance.kind)) return;
-    visual.root.rotation.y = Math.atan2(dir.x, dir.y);
+    const target = Math.atan2(dir.x, dir.y);
+    visual.root.rotation.y += shortestTurn(target - visual.root.rotation.y) * ease(13, dt);
   }
 
   /**
